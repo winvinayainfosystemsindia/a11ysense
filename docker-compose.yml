@@ -1,0 +1,68 @@
+services:
+  gateway:
+    build: ./backend/services/gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - APP_NAME=gateway
+
+  crawler:
+    build: ./backend/services/crawler
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - APP_NAME=crawler
+
+  analyzer:
+    build: ./backend/services/analyzer
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - APP_NAME=analyzer
+
+  agent:
+    build: ./backend/services/agent
+    volumes:
+      - ./backend:/app/backend
+      - ./axe_library:/app/axe_library
+    environment:
+      - APP_NAME=agent
+
+  llm:
+    build: ./backend/services/llm
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - APP_NAME=llm
+
+  reporting:
+    build: ./backend/services/reporting
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - APP_NAME=reporting
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NODE_ENV=development
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: a11ysense
+    ports:
+      - "5432:5432"

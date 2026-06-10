@@ -1,0 +1,26 @@
+name: DEV Build and Deploy
+
+on:
+  push:
+    branches: [ dev ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploying to DEV
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p /var/www/a11ysense-ai/dev
+            cd /var/www/a11ysense-ai/dev
+            git fetch --all
+            git checkout dev
+            git reset --hard origin/dev
+            chmod +x deploy/*.sh
+            ./deploy/backend-deploy.sh dev
+            ./deploy/frontend-deploy.sh dev

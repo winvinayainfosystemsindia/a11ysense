@@ -1,0 +1,26 @@
+name: QA Build and Deploy
+
+on:
+  push:
+    branches: [ qa ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploying to QA
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p /var/www/a11ysense-ai/qa
+            cd /var/www/a11ysense-ai/qa
+            git fetch --all
+            git checkout qa
+            git reset --hard origin/qa
+            chmod +x deploy/*.sh
+            ./deploy/backend-deploy.sh qa
+            ./deploy/frontend-deploy.sh qa

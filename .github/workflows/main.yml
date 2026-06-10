@@ -1,0 +1,26 @@
+name: MAIN Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploying to MAIN
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p /var/www/a11ysense-ai/main
+            cd /var/www/a11ysense-ai/main
+            git fetch --all
+            git checkout main
+            git reset --hard origin/main
+            chmod +x deploy/*.sh
+            ./deploy/backend-deploy.sh main
+            ./deploy/frontend-deploy.sh main

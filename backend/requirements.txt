@@ -1,0 +1,46 @@
+# =============================================================================
+# A11ySense AI — Unified Backend Requirements
+# Centrally manages all dependencies for all backend microservices.
+# =============================================================================
+
+# --- Web Framework & Server ---
+fastapi==0.115.8
+uvicorn==0.34.0
+pydantic==2.10.6
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+httpx==0.28.1
+
+# --- Telemetry & Metrics Monitoring ---
+prometheus-client==0.20.0
+prometheus-fastapi-instrumentator==7.0.0
+
+# --- Database & Migrations ---
+sqlalchemy==2.0.27
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# --- Authentication & Encryption ---
+pyjwt==2.8.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.3.0
+cryptography==42.0.5
+
+# --- Browser Automation & Auditing ---
+playwright==1.41.2
+axe-core-python==0.1.0
+
+# --- LLM Provider SDKs ---
+groq==0.4.2
+anthropic==0.18.1
+google-generativeai==0.3.2
+
+# --- Redis Client ---
+redis==5.0.1
+
+# --- Utilities & Parsing ---
+jinja2==3.1.3
+allure-python-commons==2.13.2
+markdown==3.6
+beautifulsoup4==4.12.3
+openpyxl==3.1.2
