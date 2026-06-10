@@ -9,12 +9,12 @@ import { useNavigate } from '@tanstack/react-router';
 
 import { useAppDispatch, useAppSelector } from '../../store';
 import { fetchDashboardStats } from '../../store/slices/dashboardSlice';
+import { fetchSystemMetrics } from '../../store/slices/metricsSlice';
 import {
   DashboardStats,
   CriticalIssuesChart,
   AgentActivityConsole,
   RecentAuditsTable,
-  SystemMetricsPanel,
   WelcomeHeader
 } from '../../components/dashboard';
 import { StartAuditDialog } from '../../components/audit/StartAuditDialog';
@@ -33,7 +33,10 @@ const Dashboard: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      await dispatch(fetchDashboardStats()).unwrap();
+      await Promise.all([
+        dispatch(fetchDashboardStats()).unwrap(),
+        dispatch(fetchSystemMetrics()).unwrap()
+      ]);
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -66,9 +69,6 @@ const Dashboard: React.FC = () => {
         ) : (
           <Stack component="div" spacing={4} sx={{ width: '100%' }}>
             <DashboardStats stats={stats} />
-
-            {/* Add the SystemMetricsPanel here */}
-            <SystemMetricsPanel />
 
             <Grid container spacing={3}>
               <Grid size={{ xs: 12, md: 7 }}>

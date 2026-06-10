@@ -5,20 +5,47 @@ import WarningIcon from '@mui/icons-material/Warning';
 import DescriptionIcon from '@mui/icons-material/Description';
 import LayersIcon from '@mui/icons-material/Layers';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import StorageIcon from '@mui/icons-material/Storage';
+import SpeedIcon from '@mui/icons-material/Speed';
 import { StatCard } from '../common/stats';
 import type { DashboardStats as StatsType } from '../../model/dashboard.model';
+import { useAppSelector } from '../../store';
+import type { PrometheusMetric } from '../../model/metrics.model';
 
 interface DashboardStatsProps {
   stats: StatsType | null;
 }
 
 export const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
+  const { metrics } = useAppSelector((state) => state.metrics);
 
   const score = Math.round(stats?.average_score || 0);
   const totalScans = stats?.total_audits ?? 0;
   const critical = stats?.violations_by_impact?.critical || 0;
   const totalViolations = stats?.total_violations ?? 0;
   const activeAgents = stats?.active_audits_count ?? 0;
+
+  // Compute System Diagnostics metrics
+  const responseBytesTotal = metrics
+    .filter((m: PrometheusMetric) => m.name === 'http_response_size_bytes_sum')
+    .reduce((sum: number, m: PrometheusMetric) => sum + m.value, 0);
+
+  const requestBytesTotal = metrics
+    .filter((m: PrometheusMetric) => m.name === 'http_request_size_bytes_sum')
+    .reduce((sum: number, m: PrometheusMetric) => sum + m.value, 0);
+  
+  const requestsTotal = metrics
+    .filter((m: PrometheusMetric) => m.name === 'http_requests_total')
+    .reduce((sum: number, m: PrometheusMetric) => sum + m.value, 0);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0 || isNaN(bytes)) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    if (i >= sizes.length) return bytes + ' B';
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   return (
     <Grid container spacing={3}>
@@ -80,11 +107,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
         </Card>
       </Grid>
 
-      {/* Right Side: 2x2 cards layout */}
+      {/* Right Side: Cards grid (Row 1: 4 cards, Row 2: 3 cards) */}
       <Grid size={{ xs: 12, md: 8 }}>
-        <Grid container spacing={3} sx={{ height: '100%' }}>
-          {/* Total Scans Card */}
-          <Grid size={{ xs: 12, sm: 6 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+        <Grid container spacing={3} sx={{ height: '100%', alignContent: 'stretch' }}>
+          
+          {/* ──── ROW 1: General Accessibility Stats (4 Cards) ──── */}
+          
+          {/* Total Scans */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: 'flex', flexDirection: 'column' }}>
             <StatCard
               title="Total Scans"
               value={totalScans}
@@ -93,18 +123,8 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
             />
           </Grid>
 
-          {/* Critical Issues Card */}
-          <Grid size={{ xs: 12, sm: 6 }} sx={{ display: 'flex', flexDirection: 'column' }}>
-            <StatCard
-              title="Critical Issues"
-              value={critical}
-              icon={<WarningIcon />}
-              color="error.main"
-            />
-          </Grid>
-
-          {/* Total Violations Card */}
-          <Grid size={{ xs: 12, sm: 6 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Total Violations */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: 'flex', flexDirection: 'column' }}>
             <StatCard
               title="Total Violations"
               value={totalViolations}
@@ -113,8 +133,18 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
             />
           </Grid>
 
-          {/* Active Agents Card */}
-          <Grid size={{ xs: 12, sm: 6 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+          {/* Critical Issues */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+            <StatCard
+              title="Critical Issues"
+              value={critical}
+              icon={<WarningIcon />}
+              color="error.main"
+            />
+          </Grid>
+
+          {/* Active Agents */}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: 'flex', flexDirection: 'column' }}>
             <StatCard
               title="Active Agents"
               value={activeAgents}
@@ -130,6 +160,39 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
               </IconButton>
             </StatCard>
           </Grid>
+
+          {/* ──── ROW 2: System Diagnostics (3 Cards) ──── */}
+
+          {/* Response Payload Size */}
+          <Grid size={{ xs: 12, sm: 4, md: 4 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+            <StatCard
+              title="Response Payload Size"
+              value={formatBytes(responseBytesTotal)}
+              icon={<StorageIcon />}
+              color="primary.main"
+            />
+          </Grid>
+
+          {/* Request Payload Size */}
+          <Grid size={{ xs: 12, sm: 4, md: 4 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+            <StatCard
+              title="Request Payload Size"
+              value={formatBytes(requestBytesTotal)}
+              icon={<StorageIcon />}
+              color="success.main"
+            />
+          </Grid>
+
+          {/* Total API Requests */}
+          <Grid size={{ xs: 12, sm: 4, md: 4 }} sx={{ display: 'flex', flexDirection: 'column' }}>
+            <StatCard
+              title="Total API Requests"
+              value={requestsTotal.toLocaleString()}
+              icon={<SpeedIcon />}
+              color="secondary.main"
+            />
+          </Grid>
+
         </Grid>
       </Grid>
     </Grid>
