@@ -27,6 +27,13 @@ echo "========================================================="
 echo "  A11ySense AI — Backend Dependency Installer"
 echo "========================================================="
 echo ""
+# Verify and Install OpenClaw CLI if missing
+if ! command -v openclaw &> /dev/null; then
+    echo "[INFO] OpenClaw CLI not found. Installing OpenClaw..."
+    curl -fsSL https://openclaw.ai/install.sh | bash
+else
+    echo "[INFO] OpenClaw CLI is already installed."
+fi
 
 if [ ! -f "$MASTER_REQUIREMENTS" ]; then
     echo "[ERROR] Master requirements not found: $MASTER_REQUIREMENTS"

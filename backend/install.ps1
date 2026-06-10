@@ -47,6 +47,16 @@ Write-Host "=========================================================" -Foregrou
 Write-Host "  A11ySense AI — Backend Dependency Installer" -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
 Write-Host ""
+# Verify OpenClaw CLI is available
+if (-not (Get-Command "openclaw" -ErrorAction SilentlyContinue)) {
+    Write-Host "[WARNING] OpenClaw CLI not found in your PATH." -ForegroundColor Yellow
+    Write-Host "          If you are on Linux, macOS, WSL, or Git Bash, run:" -ForegroundColor Yellow
+    Write-Host "          curl -fsSL https://openclaw.ai/install.sh | bash" -ForegroundColor Yellow
+    Write-Host ""
+} else {
+    Write-Host "[INFO] OpenClaw CLI is already installed." -ForegroundColor Green
+    Write-Host ""
+}
 
 # Verify requirements file exists
 if (-Not (Test-Path $MasterRequirements)) {
