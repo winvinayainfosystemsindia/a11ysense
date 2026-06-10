@@ -33,6 +33,7 @@ export interface DataTableProps<T> extends DataTableHeaderProps {
 	// Selection support
 	numSelected?: number;
 	onSelectAllClick?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+	hidePagination?: boolean;
 }
 
 const DataTable = <T,>({
@@ -60,7 +61,8 @@ const DataTable = <T,>({
 	emptyMessage = 'No records found',
 	renderRow,
 	numSelected,
-	onSelectAllClick
+	onSelectAllClick,
+	hidePagination = false
 }: DataTableProps<T>) => {
 	const theme = useTheme();
 	const visibleColumns = columns.filter(col => !col.hidden);
@@ -124,14 +126,16 @@ const DataTable = <T,>({
 				</Table>
 			</TableContainer>
 
-			<CustomTablePagination
-				count={totalCount}
-				page={page}
-				rowsPerPage={rowsPerPage}
-				onPageChange={onPageChange}
-				onRowsPerPageChange={(e) => onRowsPerPageChange(parseInt(e.target.value, 10))}
-				onRowsPerPageSelectChange={onRowsPerPageChange}
-			/>
+			{!hidePagination && (
+				<CustomTablePagination
+					count={totalCount}
+					page={page}
+					rowsPerPage={rowsPerPage}
+					onPageChange={onPageChange}
+					onRowsPerPageChange={(e) => onRowsPerPageChange(parseInt(e.target.value, 10))}
+					onRowsPerPageSelectChange={onRowsPerPageChange}
+				/>
+			)}
 		</Paper>
 	);
 };

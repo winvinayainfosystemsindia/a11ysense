@@ -1,10 +1,11 @@
-import React from 'react';
-import { Box, TableRow, TableCell, IconButton, Typography, Tooltip } from '@mui/material';
+import { Box, TableRow, TableCell, IconButton, Typography, Tooltip, Button } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import LaunchIcon from '@mui/icons-material/Launch';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { StatusBadge } from '../common/badge';
 import { DataTable, type ColumnDefinition } from '../common/table';
 import type { DashboardStats as StatsType } from '../../model/dashboard.model';
@@ -13,6 +14,7 @@ import { auditService } from '../../service/auditService';
 
 interface RecentAuditsTableProps {
   stats: StatsType | null;
+  loading?: boolean;
   onRefresh?: () => void;
 }
 
@@ -30,8 +32,8 @@ const getProjectNameFromUrl = (urlStr: string): string => {
   }
 };
 
-export const RecentAuditsTable: React.FC<RecentAuditsTableProps> = ({ stats, onRefresh }) => {
-  const recentAudits = stats?.recent_audits || [];
+export const RecentAuditsTable: React.FC<RecentAuditsTableProps> = ({ stats, loading = false, onRefresh }) => {
+  const recentAudits = (stats?.recent_audits || []).slice(0, 5);
   const navigate = useNavigate();
   const { orgId } = useParams({ strict: false }) as any;
 
@@ -194,7 +196,7 @@ export const RecentAuditsTable: React.FC<RecentAuditsTableProps> = ({ stats, onR
     <Box>
       <DataTable
         searchTerm=""
-        loading={false}
+        loading={loading}
         totalCount={recentAudits.length}
         page={0}
         rowsPerPage={5}
@@ -203,10 +205,44 @@ export const RecentAuditsTable: React.FC<RecentAuditsTableProps> = ({ stats, onR
         columns={columns}
         data={recentAudits}
         renderRow={renderRow}
+        hidePagination={true}
         headerActions={
-          <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: '800', fontFamily: 'Outfit' }}>
-            Recent Audits
-          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            width: '100%',
+            flexWrap: 'wrap',
+            gap: 2
+          }}>
+            <Box>
+              <Typography variant="h6" sx={{ color: '#16191f', fontWeight: '800', fontFamily: 'Outfit', fontSize: '1rem', lineHeight: 1.2 }}>
+                Recent Audits
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#545b64', fontWeight: '500', display: 'block', mt: 0.5 }}>
+                Displaying only the last 5 audit scans.
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => navigate({ to: `/org/${orgId}/audits` })}
+              endIcon={<ArrowForwardIcon fontSize="small" />}
+              sx={{ 
+                textTransform: 'none', 
+                fontWeight: '700', 
+                borderRadius: '8px',
+                borderColor: 'divider',
+                color: 'primary.main',
+                '&:hover': {
+                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.04),
+                  borderColor: 'primary.main'
+                }
+              }}
+            >
+              View Full History
+            </Button>
+          </Box>
         }
       />
     </Box>

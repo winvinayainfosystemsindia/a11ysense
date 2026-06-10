@@ -109,7 +109,7 @@ const Dashboard: React.FC = () => {
                 </Grid>
               </Grid>
 
-              <RecentAuditsTable stats={stats} onRefresh={loadData} />
+              <RecentAuditsTable stats={stats} loading={loading} onRefresh={loadData} />
             </Stack>
           </>
         )}
