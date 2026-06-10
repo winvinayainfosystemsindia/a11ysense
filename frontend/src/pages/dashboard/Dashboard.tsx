@@ -10,12 +10,12 @@ import { useNavigate } from '@tanstack/react-router';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { fetchDashboardStats } from '../../store/slices/dashboardSlice';
 import {
-  DashboardHeader,
   DashboardStats,
   CriticalIssuesChart,
   AgentActivityConsole,
   RecentAuditsTable,
-  SystemMetricsPanel
+  SystemMetricsPanel,
+  WelcomeHeader
 } from '../../components/dashboard';
 import { StartAuditDialog } from '../../components/audit/StartAuditDialog';
 
@@ -51,7 +51,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box sx={{ pb: 4 }}>
-      <DashboardHeader
+      <WelcomeHeader
         orgName={orgName}
         timeRange={timeRange}
         onTimeRangeChange={setTimeRange}
