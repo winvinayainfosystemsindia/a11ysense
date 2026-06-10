@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   CircularProgress,
+  LinearProgress,
   Stack,
   Grid
 } from '@mui/material';
@@ -52,6 +53,8 @@ const Dashboard: React.FC = () => {
     loadData(timeRange);
   }, [navigate, timeRange]);
 
+  const isFirstLoad = loading && !stats;
+
   return (
     <Box sx={{ pb: 4 }}>
       <WelcomeHeader
@@ -61,31 +64,54 @@ const Dashboard: React.FC = () => {
         onSync={() => loadData(timeRange)}
       />
 
-      <Box sx={{ mt: 4 }}>
-        {loading ? (
+      <Box sx={{ mt: 4, position: 'relative' }}>
+        {isFirstLoad ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
             <CircularProgress size={50} color="primary" />
           </Box>
         ) : (
-          <Stack component="div" spacing={4} sx={{ width: '100%' }}>
-            <DashboardStats stats={stats} />
+          <>
+            {loading && (
+              <LinearProgress
+                sx={{
+                  position: 'absolute',
+                  top: -8,
+                  left: 0,
+                  right: 0,
+                  borderRadius: 1,
+                  height: 3
+                }}
+              />
+            )}
+            <Stack
+              component="div"
+              spacing={4}
+              sx={{
+                width: '100%',
+                opacity: loading ? 0.7 : 1,
+                transition: 'opacity 0.15s ease-in-out',
+                pointerEvents: loading ? 'none' : 'auto'
+              }}
+            >
+              <DashboardStats stats={stats} />
 
-            <Grid container spacing={3}>
-              <Grid size={{ xs: 12, md: 7 }}>
-                <CriticalIssuesChart stats={stats} />
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 7 }}>
+                  <CriticalIssuesChart stats={stats} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 5 }}>
+                  <AgentActivityConsole
+                    stats={stats}
+                    onNavigateToAudit={() => {
+                      setAuditDialogOpen(true);
+                    }}
+                  />
+                </Grid>
               </Grid>
-              <Grid size={{ xs: 12, md: 5 }}>
-                <AgentActivityConsole
-                  stats={stats}
-                  onNavigateToAudit={() => {
-                    setAuditDialogOpen(true);
-                  }}
-                />
-              </Grid>
-            </Grid>
 
-            <RecentAuditsTable stats={stats} onRefresh={loadData} />
-          </Stack>
+              <RecentAuditsTable stats={stats} onRefresh={loadData} />
+            </Stack>
+          </>
         )}
       </Box>
       <StartAuditDialog open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
