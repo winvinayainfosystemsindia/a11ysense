@@ -1,39 +1,13 @@
-import uuid
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from common.database import get_db
 from common.database.models import User, Organization, CreditTransaction
 from common.auth.deps import get_current_user, require_role
 from common.billing.billing_manager import billing_manager
+from app.schemas.billing import TransactionSchema, BillingStatusResponse, TopupRequest
 
 router = APIRouter(prefix="/api/billing", tags=["Billing & Subscriptions"])
-
-
-# ── Response Schemas ───────────────────────────────────────────────────────
-
-class TransactionSchema(BaseModel):
-    id: str
-    amount: int
-    transaction_type: str
-    description: Optional[str]
-    reference_id: Optional[str]
-    timestamp: str
-
-
-class BillingStatusResponse(BaseModel):
-    plan_tier: str
-    credit_balance: int
-    billing_status: str
-    pay_as_you_go_enabled: bool
-    transactions: list[TransactionSchema]
-
-
-class TopupRequest(BaseModel):
-    package_name: str  # "starter" | "growth" | "enterprise"
-    amount_usd: float
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────

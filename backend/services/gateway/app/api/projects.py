@@ -2,34 +2,16 @@
 Projects Router — GET /api/projects, POST /api/projects
 """
 from typing import List
-from datetime import datetime
-from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from common.database import get_db
 from common.database.models import User, Project
 from common.auth.deps import get_current_user, require_role
+from app.schemas.projects import ProjectCreate, ProjectResponse
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
-
-
-# ── Request / Response schemas ─────────────────────────────────────────────
-
-class ProjectCreate(BaseModel):
-    name: str
-
-
-class ProjectResponse(BaseModel):
-    id: UUID
-    name: str
-    organization_id: UUID
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────

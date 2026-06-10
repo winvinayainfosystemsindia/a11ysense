@@ -1,11 +1,9 @@
 """
 Auth Router — /auth/register, /auth/login, /auth/me
 """
-from typing import Optional
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 import jwt
@@ -22,53 +20,17 @@ from common.auth.jwt_utils import (
     JWT_ALGORITHM
 )
 from common.auth.deps import get_current_user
+from app.schemas.auth import (
+    RegisterRequest,
+    LoginRequest,
+    TokenResponse,
+    UserProfile,
+    VerifyTokenRequest,
+    VerifyTokenResponse,
+    RefreshTokenRequest
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-
-# ── Request / Response schemas ─────────────────────────────────────────────
-
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=6)
-    organization_name: Optional[str] = None
-    role: Optional[str] = "Viewer"
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    role: str
-    email: str
-    organization_id: str
-    organization_name: str
-
-
-class UserProfile(BaseModel):
-    id: str
-    email: str
-    role: str
-    organization_id: str
-    organization_name: str
-
-
-class VerifyTokenRequest(BaseModel):
-    token: str
-
-
-class VerifyTokenResponse(BaseModel):
-    valid: bool
-    user: Optional[UserProfile] = None
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
 
 
 
