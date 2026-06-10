@@ -24,6 +24,7 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import KeyIcon from '@mui/icons-material/Key';
 import ChecklistIcon from '@mui/icons-material/Checklist';
+import PeopleIcon from '@mui/icons-material/People';
 import { useAppDispatch } from '../../../store';
 import { logoutUser } from '../../../store/slices/authSlice';
 
@@ -74,6 +75,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
 
   const orgId = localStorage.getItem('org_id') || 'default';
 
+  const showUserManagement = role.toLowerCase() === 'admin' || role.toLowerCase() === 'superadmin';
+
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: `/org/${orgId}/dashboard` },
     { text: 'Audits', icon: <ChecklistIcon />, path: `/org/${orgId}/audits` },
@@ -81,6 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
     { text: 'Reports', icon: <DescriptionIcon />, path: '/maintenance' },
     { text: 'Billing', icon: <PaymentIcon />, path: `/org/${orgId}/billing` },
     { text: 'Credits', icon: <AccountBalanceWalletIcon />, path: `/org/${orgId}/credits` },
+    ...(showUserManagement ? [{ text: 'Users', icon: <PeopleIcon />, path: `/org/${orgId}/users` }] : []),
     { text: 'API Keys', icon: <KeyIcon />, path: `/org/${orgId}/api-keys` },
     { text: 'Settings', icon: <SettingsIcon />, path: '/maintenance' },
   ];

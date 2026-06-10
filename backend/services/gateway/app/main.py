@@ -34,6 +34,7 @@ from app.api import (
     admin_router,
     proxy_router,
     billing_router,
+    users_router,
 )
 
 # ── Versioning ─────────────────────────────────────────────────────────────
@@ -127,3 +128,4 @@ app.include_router(dashboard_router, prefix=API_PREFIX)  # /v1/api/dashboard/sta
 app.include_router(admin_router,     prefix=API_PREFIX)  # /v1/admin/errors  /v1/api/admin/errors/stats
 app.include_router(proxy_router,     prefix=API_PREFIX)  # /v1/start_audit  /v1/task/{id}/*
 app.include_router(billing_router,   prefix=API_PREFIX)  # /v1/api/billing/*
+app.include_router(users_router,     prefix=API_PREFIX)  # /v1/api/users

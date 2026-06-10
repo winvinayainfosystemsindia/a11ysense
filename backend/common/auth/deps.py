@@ -86,7 +86,11 @@ def require_role(allowed_roles: list[str]):
         # Normalise list
         normalised_allowed = [r.capitalize() for r in allowed_roles]
         
-        # Admin can do anything
+        # Superadmin bypasses all checks
+        if role == "Superadmin":
+            return current_user
+            
+        # Admin can do anything if Admin is allowed
         if "Admin" in normalised_allowed and role == "Admin":
             return current_user
         
