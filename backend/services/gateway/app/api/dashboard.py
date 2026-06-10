@@ -3,6 +3,7 @@ Dashboard & Trends Router
   GET /api/dashboard/stats  — organization-wide audit statistics
   GET /api/trends           — historical compliance score & violation trend series
 """
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,7 @@ async def list_all_audits(
 
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
+    time_range: str = "all",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -56,12 +58,19 @@ async def get_dashboard_stats(
     violation breakdown by impact level, and the 10 most recent sessions.
     """
     org_id = current_user.organization_id
-    sessions = (
-        db.query(AuditSession)
-        .filter_by(organization_id=org_id)
-        .order_by(AuditSession.created_at.desc())
-        .all()
-    )
+    query = db.query(AuditSession).filter_by(organization_id=org_id)
+
+    if time_range == "24h":
+        since = datetime.utcnow() - timedelta(hours=24)
+        query = query.filter(AuditSession.timestamp >= since)
+    elif time_range == "7d":
+        since = datetime.utcnow() - timedelta(days=7)
+        query = query.filter(AuditSession.timestamp >= since)
+    elif time_range == "30d":
+        since = datetime.utcnow() - timedelta(days=30)
+        query = query.filter(AuditSession.timestamp >= since)
+
+    sessions = query.order_by(AuditSession.created_at.desc()).all()
 
     total_audits = len(sessions)
     completed_audits = [s for s in sessions if s.status == "completed"]
@@ -127,6 +136,7 @@ async def get_dashboard_stats(
 
 @router.get("/trends")
 async def get_historical_trends(
+    time_range: str = "all",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -135,15 +145,22 @@ async def get_historical_trends(
     across all completed audits in the organization, ordered chronologically.
     """
     org_id = current_user.organization_id
-    sessions = (
-        db.query(AuditSession)
-        .filter(
-            AuditSession.organization_id == org_id,
-            AuditSession.status == "completed"
-        )
-        .order_by(AuditSession.timestamp.asc())
-        .all()
+    query = db.query(AuditSession).filter(
+        AuditSession.organization_id == org_id,
+        AuditSession.status == "completed"
     )
+
+    if time_range == "24h":
+        since = datetime.utcnow() - timedelta(hours=24)
+        query = query.filter(AuditSession.timestamp >= since)
+    elif time_range == "7d":
+        since = datetime.utcnow() - timedelta(days=7)
+        query = query.filter(AuditSession.timestamp >= since)
+    elif time_range == "30d":
+        since = datetime.utcnow() - timedelta(days=30)
+        query = query.filter(AuditSession.timestamp >= since)
+
+    sessions = query.order_by(AuditSession.timestamp.asc()).all()
 
     score_trend = []
     violation_trend = []

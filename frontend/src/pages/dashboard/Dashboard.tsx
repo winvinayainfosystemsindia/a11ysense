@@ -30,11 +30,11 @@ const Dashboard: React.FC = () => {
   // Read session profile details
   const orgName = localStorage.getItem('org_name') || 'Enterprise';
 
-  const loadData = async () => {
+  const loadData = async (range: '24h' | '7d' | '30d' = timeRange) => {
     setLoading(true);
     try {
       await Promise.all([
-        dispatch(fetchDashboardStats()).unwrap(),
+        dispatch(fetchDashboardStats(range)).unwrap(),
         dispatch(fetchSystemMetrics()).unwrap()
       ]);
     } catch (err: any) {
@@ -49,8 +49,8 @@ const Dashboard: React.FC = () => {
       navigate({ to: '/auth/signin' });
       return;
     }
-    loadData();
-  }, [navigate]);
+    loadData(timeRange);
+  }, [navigate, timeRange]);
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -58,7 +58,7 @@ const Dashboard: React.FC = () => {
         orgName={orgName}
         timeRange={timeRange}
         onTimeRangeChange={setTimeRange}
-        onSync={loadData}
+        onSync={() => loadData(timeRange)}
       />
 
       <Box sx={{ mt: 4 }}>

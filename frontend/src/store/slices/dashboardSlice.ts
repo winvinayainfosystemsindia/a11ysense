@@ -19,9 +19,9 @@ const initialState: DashboardState = {
 
 export const fetchDashboardStats = createAsyncThunk(
   'dashboard/fetchStats',
-  async (_, { rejectWithValue }) => {
+  async (range: string | undefined, { rejectWithValue }) => {
     try {
-      return await projectService.getDashboardStats();
+      return await projectService.getDashboardStats(range);
     } catch (err: any) {
       return rejectWithValue(err.userMessage || 'Failed to fetch dashboard stats');
     }
@@ -30,9 +30,9 @@ export const fetchDashboardStats = createAsyncThunk(
 
 export const fetchHistoricalTrends = createAsyncThunk(
   'dashboard/fetchTrends',
-  async (_, { rejectWithValue }) => {
+  async (range: string | undefined, { rejectWithValue }) => {
     try {
-      return await projectService.getHistoricalTrends();
+      return await projectService.getHistoricalTrends(range);
     } catch (err: any) {
       return rejectWithValue(err.userMessage || 'Failed to fetch historical trends');
     }

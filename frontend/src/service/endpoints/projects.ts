@@ -51,13 +51,17 @@ export const projectService = {
     await api.delete(`/api/keys/${id}`);
   },
 
-  getDashboardStats: async (): Promise<DashboardStats> => {
-    const response = await api.get<DashboardStats>('/api/dashboard/stats');
+  getDashboardStats: async (range?: string): Promise<DashboardStats> => {
+    const response = await api.get<DashboardStats>('/api/dashboard/stats', {
+      params: range ? { time_range: range } : undefined
+    });
     return response.data;
   },
 
-  getHistoricalTrends: async (): Promise<HistoricalTrends> => {
-    const response = await api.get<HistoricalTrends>('/api/trends');
+  getHistoricalTrends: async (range?: string): Promise<HistoricalTrends> => {
+    const response = await api.get<HistoricalTrends>('/api/trends', {
+      params: range ? { time_range: range } : undefined
+    });
     return response.data;
   },
 
