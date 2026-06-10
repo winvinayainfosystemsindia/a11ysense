@@ -36,7 +36,7 @@ from fastapi import FastAPI, BackgroundTasks, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from common.schemas.audit import AuditRequest, AuditTask
+from app.schemas import AuditRequest, AuditTask
 from app.services.audit_service import audit_service
 from app.services.agent_logic import agent_intelligence
 
@@ -639,7 +639,7 @@ async def orchestrate_agent_audit(
                 analyzer_response.raise_for_status()
                 analyzed_data = analyzer_response.json()
 
-                from common.schemas.audit import Violation
+                from app.schemas import Violation
                 refined_result.violations = [Violation(**v) for v in analyzed_data.get("violations", [])]
                 refined_result.metadata["accessibility_score"] = analyzed_data.get("accessibility_score", 100.0)
                 refined_result.metadata["score_breakdown"] = analyzed_data.get("score_breakdown", {})

@@ -14,7 +14,7 @@ from typing import Optional, List
 
 from common.database.connection import get_session_local
 from common.database.models import AuditProgress
-from common.schemas.audit import AuditTask
+from app.schemas import AuditTask
 
 logger = logging.getLogger(__name__)
 

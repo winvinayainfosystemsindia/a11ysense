@@ -1,5 +1,5 @@
 from app.utils.browser import browser_manager
-from common.schemas.audit import AuditRequest, AuditResult, Violation
+from app.schemas import AuditRequest, AuditResult, Violation
 import json
 import os
 

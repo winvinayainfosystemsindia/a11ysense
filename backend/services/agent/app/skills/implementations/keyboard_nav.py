@@ -1,5 +1,5 @@
 from playwright.async_api import Page
-from common.schemas.audit import Violation
+from app.schemas import Violation
 import logging
 
 logger = logging.getLogger(__name__)

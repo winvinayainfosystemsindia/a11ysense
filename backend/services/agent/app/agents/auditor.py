@@ -2,7 +2,7 @@ import asyncio
 from app.agents.base import BaseAgent
 from app.skills.implementations.scanner import scanner_skill
 from playwright.async_api import Page
-from common.schemas.audit import AuditResult, Violation
+from app.schemas import AuditResult, Violation
 import logging
 from typing import List
 

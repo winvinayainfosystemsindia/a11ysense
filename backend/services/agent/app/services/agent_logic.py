@@ -1,4 +1,4 @@
-from common.schemas.audit import AuditResult, Violation
+from app.schemas import AuditResult, Violation
 from typing import List, Dict, Any
 import os
 import json
