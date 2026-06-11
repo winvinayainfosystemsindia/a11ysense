@@ -1,5 +1,5 @@
 from app.services.allure_manager import AllureManager
-from common.schemas.audit import AuditResult
+from app.schemas.audit import AuditResult
 import os
 
 class ReportService:

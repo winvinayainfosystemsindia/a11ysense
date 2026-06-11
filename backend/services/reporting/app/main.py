@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
-from common.schemas.audit import AuditResult
+from app.schemas.audit import AuditResult
 from app.services.report_service import report_service
 
 # Event bus reader utility

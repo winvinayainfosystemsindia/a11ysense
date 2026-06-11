@@ -3,7 +3,7 @@ import time
 import json
 import os
 from typing import List, Dict, Any, Tuple
-from common.schemas.audit import AuditResult, Violation
+from app.schemas.audit import AuditResult, Violation
 
 class AllureManager:
     """
