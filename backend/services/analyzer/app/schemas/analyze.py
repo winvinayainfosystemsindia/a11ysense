@@ -1,4 +1,4 @@
-from common.schemas.audit import AuditResult, Violation
+from app.schemas.audit import AuditResult, Violation
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 

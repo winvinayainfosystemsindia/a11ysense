@@ -1,7 +1,7 @@
 import math
 import logging
 from typing import List, Tuple
-from common.schemas.audit import Violation
+from app.schemas.audit import Violation
 from app.schemas.analyze import ScoreBreakdown
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 import pytest
 import json
-from common.schemas.audit import Violation
+from app.schemas.audit import Violation
 from app.schemas.analyze import ScoreBreakdown, TrendBreakdown
 from app.core.heuristics import aggregate_and_deduplicate, is_node_hidden, is_node_decorative_spacer, is_dev_only_element
 from app.core.scoring import calculate_accessibility_score

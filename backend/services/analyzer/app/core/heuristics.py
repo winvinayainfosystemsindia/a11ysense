@@ -1,7 +1,7 @@
 import re
 import logging
 from typing import List, Dict, Any
-from common.schemas.audit import Violation
+from app.schemas.audit import Violation
 
 logger = logging.getLogger(__name__)
 

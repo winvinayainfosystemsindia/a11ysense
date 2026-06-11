@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 import logging
-from common.schemas.audit import AuditResult
+from app.schemas.audit import AuditResult
 from app.schemas.analyze import AnalysisResponse
 from app.core.heuristics import aggregate_and_deduplicate
 from app.core.scoring import calculate_accessibility_score

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 from urllib.parse import urlparse
 
-from common.schemas.audit import Violation
+from app.schemas.audit import Violation
 from app.schemas.analyze import TrendBreakdown
 
 logger = logging.getLogger(__name__)
