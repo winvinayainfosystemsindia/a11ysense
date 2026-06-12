@@ -50,18 +50,54 @@ class LoginService:
 
                 # Navigate to login URL
                 logger.info(f"Navigating to login page: {config.login_url}")
-                await page.goto(config.login_url, wait_until="networkidle")
+                await page.goto(config.login_url, wait_until="domcontentloaded")
 
                 # Fill username
                 username_sel = config.username_field or "[name=username]"
                 logger.info(f"Filling username field '{username_sel}'")
-                await page.wait_for_selector(username_sel, state="visible", timeout=5000)
+                try:
+                    await page.wait_for_selector(username_sel, state="visible", timeout=3000)
+                except Exception:
+                    if username_sel == "[name=username]":
+                        fallbacks = ["[name=email]", "input[type=email]", "#email", "#username", "input[autocomplete=email]", "input[autocomplete=username]"]
+                        resolved = False
+                        for fb in fallbacks:
+                            try:
+                                logger.info(f"Default username field not found. Trying fallback selector '{fb}'")
+                                await page.wait_for_selector(fb, state="visible", timeout=1500)
+                                username_sel = fb
+                                resolved = True
+                                break
+                            except Exception:
+                                continue
+                        if not resolved:
+                            raise TimeoutError(f"Username selector '{username_sel}' and fallbacks not found.")
+                    else:
+                        raise
                 await page.fill(username_sel, config.username or "")
 
                 # Fill password
                 password_sel = config.password_field or "[name=password]"
                 logger.info(f"Filling password field '{password_sel}'")
-                await page.wait_for_selector(password_sel, state="visible", timeout=5000)
+                try:
+                    await page.wait_for_selector(password_sel, state="visible", timeout=3000)
+                except Exception:
+                    if password_sel == "[name=password]":
+                        fallbacks = ["input[type=password]", "#password", "input[autocomplete=current-password]"]
+                        resolved = False
+                        for fb in fallbacks:
+                            try:
+                                logger.info(f"Default password field not found. Trying fallback selector '{fb}'")
+                                await page.wait_for_selector(fb, state="visible", timeout=1500)
+                                password_sel = fb
+                                resolved = True
+                                break
+                            except Exception:
+                                continue
+                        if not resolved:
+                            raise TimeoutError(f"Password selector '{password_sel}' and fallbacks not found.")
+                    else:
+                        raise
                 await page.fill(password_sel, config.password or "")
 
                 # Fill extra fields if any
@@ -73,6 +109,36 @@ class LoginService:
                         except Exception as ef:
                             logger.warning(f"Could not fill extra field '{selector}': {ef}")
 
+                # Auto-check any checkboxes on the page (e.g., "I agree to terms", "Remember me") to satisfy form requirements
+                try:
+                    checkboxes = await page.query_selector_all("input[type=checkbox]")
+                    for cb in checkboxes:
+                        is_checked = await cb.is_checked()
+                        if not is_checked:
+                            logger.info("Found unchecked checkbox, checking it to satisfy form requirements...")
+                            # 1. Try checking the input directly
+                            await cb.check(force=True)
+                            
+                            # 2. Check if the submit button has become enabled
+                            await asyncio.sleep(0.5)
+                            is_disabled = await page.evaluate("() => { const btn = document.querySelector('button[type=submit]'); return btn ? btn.disabled : false; }")
+                            if is_disabled:
+                                logger.info("Submit button still disabled after direct check. Attempting to click checkbox parent elements...")
+                                parent = await cb.evaluate_handle("el => el.parentElement")
+                                if parent:
+                                    await parent.as_element().click(force=True)
+                                    await asyncio.sleep(0.5)
+                                
+                                # Check again and try closest label
+                                is_disabled = await page.evaluate("() => { const btn = document.querySelector('button[type=submit]'); return btn ? btn.disabled : false; }")
+                                if is_disabled:
+                                    label = await cb.evaluate_handle("el => el.closest('label')")
+                                    if label:
+                                        await label.as_element().click(force=True)
+                                        await asyncio.sleep(0.5)
+                except Exception as cbe:
+                    logger.warning(f"Failed to check checkbox: {cbe}")
+
                 # Check for CAPTCHA/MFA
                 content = await page.content()
                 if "captcha" in content.lower() or "recaptcha" in content.lower():
@@ -83,13 +149,39 @@ class LoginService:
                 # Submit form
                 submit_sel = config.submit_selector or "button[type=submit]"
                 logger.info(f"Clicking submit button '{submit_sel}'")
-                await page.click(submit_sel)
-
-                # Wait for navigation/network idle to complete login redirect chain
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=10000)
+                    await page.wait_for_selector(submit_sel, state="visible", timeout=3000)
                 except Exception:
-                    logger.warning("Timeout waiting for network idle after form submit, continuing...")
+                    if submit_sel == "button[type=submit]":
+                        fallbacks = ["button:has-text('Sign In')", "button:has-text('Login')", "button:has-text('Log In')", "input[type=submit]", "button", "a:has-text('Login')", "a:has-text('Sign In')"]
+                        resolved = False
+                        for fb in fallbacks:
+                            try:
+                                logger.info(f"Default submit selector not found. Trying fallback selector '{fb}'")
+                                await page.wait_for_selector(fb, state="visible", timeout=1500)
+                                submit_sel = fb
+                                resolved = True
+                                break
+                            except Exception:
+                                continue
+                        if not resolved:
+                            raise TimeoutError(f"Submit selector '{submit_sel}' and fallbacks not found.")
+                    else:
+                        raise
+                
+                # Wait for URL to change from the login URL, or wait for navigation/load state
+                login_url_before = page.url
+                await page.click(submit_sel)
+                
+                try:
+                    # Wait up to 8 seconds for the URL to change to something else
+                    await page.wait_for_function(f"() => window.location.href !== '{login_url_before}'", timeout=8000)
+                except Exception:
+                    # If it didn't change, wait for network idle to make sure any lazy loads finish
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=2000)
+                    except Exception:
+                        pass
 
                 # Post-login URL verification
                 current_url = page.url
@@ -117,13 +209,56 @@ class LoginService:
                 pw_cookies = await context.cookies()
                 extracted_cookies = {c["name"]: c["value"] for c in pw_cookies}
 
+                # Extract localStorage and sessionStorage items to search for Bearer/JWT tokens
+                try:
+                    storage_state = await page.evaluate("""() => {
+                        const data = {};
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const k = localStorage.key(i);
+                            data[k] = localStorage.getItem(k);
+                        }
+                        for (let i = 0; i < sessionStorage.length; i++) {
+                            const k = sessionStorage.key(i);
+                            data[k] = sessionStorage.getItem(k);
+                        }
+                        return data;
+                    }""")
+                    
+                    # Search for JWT or other auth tokens in storage
+                    auth_token = None
+                    for key, val in storage_state.items():
+                        if not val or not isinstance(val, str):
+                            continue
+                        
+                        # Remove quotes if stringified JSON
+                        clean_val = val.strip()
+                        if clean_val.startswith('"') and clean_val.endswith('"'):
+                            clean_val = clean_val[1:-1]
+                            
+                        # Check for JWT token pattern (starts with eyJ)
+                        if clean_val.startswith("eyJ") and len(clean_val) > 50:
+                            logger.info(f"Detected JWT token in storage key '{key}'")
+                            auth_token = clean_val
+                            break
+                        # Check for generic token keys if value looks like a token
+                        if any(k in key.lower() for k in ["token", "jwt", "access_token", "accesstoken", "id_token"]) and len(clean_val) > 10:
+                            logger.info(f"Detected potential auth token in storage key '{key}'")
+                            auth_token = clean_val
+                            break
+                            
+                    if auth_token:
+                        headers["Authorization"] = f"Bearer {auth_token}"
+                except Exception as se:
+                    logger.warning(f"Failed to check local/session storage for tokens: {se}")
+
                 await browser.close()
                 await pw.stop()
 
-                if not extracted_cookies:
-                    return False, {}, {}, "Login succeeded but no cookies were generated by the application."
+                # Success if either cookies were set or auth headers were extracted
+                if not extracted_cookies and not headers:
+                    return False, {}, {}, "Login succeeded but no cookies or local/session storage auth tokens were generated by the application."
 
-                return True, extracted_cookies, {}, None
+                return True, extracted_cookies, headers, None
 
             except Exception as e:
                 logger.exception("Error performing Playwright form login")

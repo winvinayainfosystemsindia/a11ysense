@@ -55,9 +55,6 @@ class CredentialService:
 
     def list_credentials(self, project_id: UUID, current_user: User, db: Session) -> List[CredentialResponse]:
         # Enforce project org ownership check
-        from app.repository.project_repo import project_repo
-        proj = db.query(project_repo.list_projects(db, current_user.organization_id).__class__).filter_by(id=project_id, organization_id=current_user.organization_id).first()
-        # Since project_repo.list_projects returns list[Project], let's check ownership directly:
         from common.database.models import Project
         proj = db.query(Project).filter_by(id=project_id, organization_id=current_user.organization_id).first()
         if not proj:
@@ -147,6 +144,8 @@ class CredentialService:
                         pass
                     raise HTTPException(status_code=response.status_code, detail=detail)
                 return response.json()
+            except HTTPException as he:
+                raise he
             except httpx.HTTPStatusError as hse:
                 raise HTTPException(status_code=hse.response.status_code, detail=hse.response.text)
             except Exception as e:
