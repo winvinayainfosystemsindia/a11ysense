@@ -2,14 +2,14 @@
 Projects Router — GET /api/projects, POST /api/projects
 """
 from typing import List
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from common.database import get_db
-from common.database.models import User, Project
+from common.database.models import User
 from common.auth.deps import get_current_user, require_role
 from app.schemas.projects import ProjectCreate, ProjectResponse
+from app.services.project_service import project_service
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -22,13 +22,7 @@ async def list_projects(
     db: Session = Depends(get_db)
 ):
     """List all projects belonging to the current user's organization."""
-    projects = (
-        db.query(Project)
-        .filter_by(organization_id=current_user.organization_id)
-        .order_by(Project.created_at.desc())
-        .all()
-    )
-    return projects
+    return project_service.list_projects(current_user, db)
 
 
 @router.post("", response_model=ProjectResponse)
@@ -38,11 +32,4 @@ async def create_project(
     db: Session = Depends(get_db)
 ):
     """Create a new project under the current user's organization. Requires Auditor or Admin role."""
-    new_project = Project(
-        name=req.name,
-        organization_id=current_user.organization_id
-    )
-    db.add(new_project)
-    db.commit()
-    db.refresh(new_project)
-    return new_project
+    return project_service.create_project(req, current_user, db)
