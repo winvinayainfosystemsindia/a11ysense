@@ -12,9 +12,11 @@ import {
   Alert
 } from '@mui/material';
 import { Button } from '../common/button';
-import { useAppDispatch } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { initiateAudit, clearAuditTask } from '../../store/slices/auditSlice';
 import { fetchDashboardStats } from '../../store/slices/dashboardSlice';
+import { fetchProjects } from '../../store/slices/projectSlice';
+import { credentialService } from '../../service/credentialService';
 
 interface StartAuditDialogProps {
   open: boolean;
@@ -26,10 +28,39 @@ export const StartAuditDialog: React.FC<StartAuditDialogProps> = ({ open, onClos
   const [url, setUrl] = useState('');
   const [depth, setDepth] = useState(2);
   const [loading, setLoading] = useState(false);
+  const [credentialsList, setCredentialsList] = useState<any[]>([]);
+  const [credentialsId, setCredentialsId] = useState<string>('');
   
   const dispatch = useAppDispatch();
   const userRole = localStorage.getItem('user_role') || 'Viewer';
   const isViewer = userRole.toLowerCase() === 'viewer';
+
+  const projects = useAppSelector((state) => state.project.projects);
+
+  React.useEffect(() => {
+    if (open) {
+      if (projects.length === 0) {
+        dispatch(fetchProjects());
+      }
+    }
+  }, [open, projects, dispatch]);
+
+  React.useEffect(() => {
+    const loadCreds = async () => {
+      const activeProjId = projects[0]?.id;
+      if (activeProjId) {
+        try {
+          const creds = await credentialService.getCredentials(activeProjId);
+          setCredentialsList(creds);
+        } catch (err) {
+          console.error("Failed to load credentials for dialog selection:", err);
+        }
+      }
+    };
+    if (open && projects.length > 0) {
+      loadCreds();
+    }
+  }, [open, projects]);
 
   const handleStartAudit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +70,11 @@ export const StartAuditDialog: React.FC<StartAuditDialogProps> = ({ open, onClos
     dispatch(clearAuditTask());
 
     try {
-      await dispatch(initiateAudit({ request: { url, depth } })).unwrap();
+      const reqPayload: any = { url, depth };
+      if (credentialsId) {
+        reqPayload.credentials_id = credentialsId;
+      }
+      await dispatch(initiateAudit({ request: reqPayload })).unwrap();
       // On success, refresh the dashboard to show the new audit in the table
       await dispatch(fetchDashboardStats());
       
@@ -61,6 +96,7 @@ export const StartAuditDialog: React.FC<StartAuditDialogProps> = ({ open, onClos
     if (!loading) {
       setUrl('');
       setDepth(2);
+      setCredentialsId('');
       onClose();
     }
   };
@@ -107,6 +143,23 @@ export const StartAuditDialog: React.FC<StartAuditDialogProps> = ({ open, onClos
               <MenuItem value={3}>3 Levels</MenuItem>
               <MenuItem value={4}>4 Levels</MenuItem>
               <MenuItem value={5}>5 Levels</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              fullWidth
+              label="Authentication Credentials"
+              value={credentialsId}
+              onChange={(e) => setCredentialsId(e.target.value)}
+              disabled={isViewer || loading}
+              helperText="Optional login configurations for scanning protected sections"
+            >
+              <MenuItem value=""><em>None (Anonymous Scan)</em></MenuItem>
+              {credentialsList.map((c) => (
+                <MenuItem key={c.id} value={c.id}>
+                  {c.label} ({c.auth_type.toUpperCase()} - {c.login_url})
+                </MenuItem>
+              ))}
             </TextField>
           </Stack>
         </DialogContent>

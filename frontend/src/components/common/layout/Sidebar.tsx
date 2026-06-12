@@ -25,6 +25,7 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import KeyIcon from '@mui/icons-material/Key';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import PeopleIcon from '@mui/icons-material/People';
+import LockIcon from '@mui/icons-material/Lock';
 import { useAppDispatch } from '../../../store';
 import { logoutUser } from '../../../store/slices/authSlice';
 
@@ -85,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
     { text: 'Billing', icon: <PaymentIcon />, path: `/org/${orgId}/billing` },
     { text: 'Credits', icon: <AccountBalanceWalletIcon />, path: `/org/${orgId}/credits` },
     ...(showUserManagement ? [{ text: 'Users', icon: <PeopleIcon />, path: `/org/${orgId}/users` }] : []),
+    { text: 'Credentials', icon: <LockIcon />, path: `/org/${orgId}/credentials` },
     { text: 'API Keys', icon: <KeyIcon />, path: `/org/${orgId}/api-keys` },
     { text: 'Settings', icon: <SettingsIcon />, path: '/maintenance' },
   ];

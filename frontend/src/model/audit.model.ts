@@ -2,6 +2,7 @@ export interface AuditRequest {
   url: string;
   depth?: number;
   audit_type?: 'standard' | 'comprehensive';
+  credentials_id?: string;
 }
 
 export interface AuditTask {

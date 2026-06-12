@@ -18,6 +18,7 @@ import ApiKeysPage from '../pages/api-keys/ApiKeysPage';
 import BillingPage from '../pages/billing/BillingPage';
 import CreditsPage from '../pages/credits/CreditsPage';
 import UserManagementPage from '../pages/users/UserManagementPage';
+import CredentialsPage from '../pages/credentials/CredentialsPage';
 
 // Create a root route with a custom 404 fallback component
 const rootRoute = createRootRoute({
@@ -161,6 +162,12 @@ const usersRoute = createRoute({
   component: UserManagementPage,
 });
 
+const credentialsRoute = createRoute({
+  getParentRoute: () => tenantLayout,
+  path: '/credentials',
+  component: CredentialsPage,
+});
+
 // Splat catch-all route for any other unmatched URL paths
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -175,7 +182,7 @@ const routeTree = rootRoute.addChildren([
   maintenanceRoute,
   publicLayout.addChildren([loginRoute, registerRoute]),
   protectedLayout.addChildren([
-    tenantLayout.addChildren([dashboardRoute, agentsRoute, auditsRoute, auditDetailsRoute, billingRoute, creditsRoute, apiKeysRoute, usersRoute])
+    tenantLayout.addChildren([dashboardRoute, agentsRoute, auditsRoute, auditDetailsRoute, billingRoute, creditsRoute, apiKeysRoute, usersRoute, credentialsRoute])
   ]),
   notFoundRoute
 ]);
