@@ -222,6 +222,9 @@ class WebCrawler:
         return False
 
     async def crawl(self) -> CrawlResponse:
+        if self.request.credential_config:
+            return await self.crawl_with_playwright()
+            
         start_time = time.time()
         
         headers = {
@@ -267,6 +270,13 @@ class WebCrawler:
             # Seed start URL
             normalized_start = normalize_url(self.start_url)
             queue.append((normalized_start, 1))
+            
+            # Seed landed URL if different from start URL (e.g. redirected to dashboard after login)
+            if hasattr(self.request, "landed_url") and self.request.landed_url:
+                normalized_landed = normalize_url(self.request.landed_url)
+                if normalized_landed != normalized_start:
+                    logger.info(f"Seeding post-login landed URL: {normalized_landed}")
+                    queue.append((normalized_landed, 1))
             
             # Seed sitemap URLs
             for s_url in sitemap_urls_found:
@@ -327,7 +337,7 @@ class WebCrawler:
                         import hashlib
                         import json
                         
-                        success, login_cookies, login_headers, error_detail = await login_service.perform_login(self.request.credential_config)
+                        success, login_cookies, login_headers, error_detail, landed_url = await login_service.perform_login(self.request.credential_config)
                         if success:
                             # Update client state
                             client.cookies.update(login_cookies)
@@ -339,7 +349,8 @@ class WebCrawler:
                             cache_key = f"crawler:auth:{cred_hash}"
                             session_data = {
                                 "cookies": login_cookies,
-                                "headers": login_headers
+                                "headers": login_headers,
+                                "landed_url": landed_url
                             }
                             auth_repo.save_session_state(cache_key, json.dumps(session_data))
                             
@@ -386,6 +397,323 @@ class WebCrawler:
                 except Exception as exc:
                     self.failed_urls[normalized_url] = f"Internal Exception: {str(exc)}"
                     
+        duration = time.time() - start_time
+        return CrawlResponse(
+            start_url=self.start_url,
+            pages_discovered=list(self.pages_discovered),
+            ignored_urls=list(self.ignored_urls),
+            failed_urls=self.failed_urls,
+            sitemaps_found=self.sitemaps_found,
+            duration_seconds=round(duration, 2)
+        )
+
+    async def crawl_with_playwright(self) -> CrawlResponse:
+        start_time = time.time()
+        from playwright.async_api import async_playwright
+        from app.services.login_service import login_service
+        
+        # Determine robots.txt restrictions first (using a standard httpx client helper)
+        robots_parser = None
+        if self.request.respect_robots_txt:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    robots_parser = await RobotsParser.fetch_and_parse(client, self.start_url)
+                    self.sitemaps_found = robots_parser.sitemaps
+                    if robots_parser.crawl_delay is not None and self.default_delay == 0.5:
+                        self.default_delay = robots_parser.crawl_delay
+            except Exception as e:
+                logger.warning(f"Failed to fetch robots.txt for Playwright crawl: {e}")
+
+        pw = None
+        browser = None
+        try:
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            
+            config = self.request.credential_config
+
+            # For form auth, start with a clean context so the login page loads
+            # without pre-existing auth headers/cookies. Pre-injecting a cached
+            # Authorization: Bearer token causes the server to skip the login page
+            # and redirect straight to the dashboard, making the form-fill steps
+            # timeout looking for fields that don't exist.
+            is_form_auth = config.auth_type == "form"
+
+            context_args = {
+                "viewport": {'width': 1280, 'height': 800},
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            }
+            if self.request.headers and not is_form_auth:
+                context_args["extra_http_headers"] = self.request.headers
+
+            context = await browser.new_context(**context_args)
+
+            # Inject pre-existing cookies only for non-form auth types
+            if self.request.cookies and not is_form_auth:
+                parsed_url = urllib.parse.urlparse(self.start_url)
+                domain = parsed_url.netloc
+                pw_cookies = []
+                for k, v in self.request.cookies.items():
+                    pw_cookies.append({
+                        "name": k,
+                        "value": v,
+                        "domain": domain,
+                        "path": "/"
+                    })
+                await context.add_cookies(pw_cookies)
+
+            page = await context.new_page()
+            page.set_default_timeout(60000)
+            
+            # Perform login steps if config is form auth
+            landed_url = self.start_url
+            
+            if config.auth_type == "form":
+                logger.info("Performing Playwright form login for crawl...")
+                success, cookies_ext, headers_ext, error_detail, landed = await login_service.perform_login_steps(
+                    config, page, context
+                )
+                if not success:
+                    logger.error(f"Playwright crawl login failed: {error_detail}")
+                    await browser.close()
+                    await pw.stop()
+                    raise Exception(f"Login failed: {error_detail}")
+                if landed:
+                    landed_url = landed
+                # Inject JWT/Bearer tokens extracted from localStorage into all subsequent page requests
+                if headers_ext:
+                    await context.set_extra_http_headers(headers_ext)
+            elif config.auth_type == "cookie":
+                # Direct cookie injection
+                pw_cookies = []
+                parsed_url = urllib.parse.urlparse(self.start_url)
+                domain = parsed_url.netloc
+                
+                cookie_dict = {}
+                if config.extra_fields:
+                    cookie_dict.update(config.extra_fields)
+                elif config.username and config.password:
+                    cookie_dict[config.username] = config.password
+                    
+                for k, v in cookie_dict.items():
+                    pw_cookies.append({
+                        "name": k,
+                        "value": v,
+                        "domain": domain,
+                        "path": "/"
+                    })
+                if pw_cookies:
+                    await context.add_cookies(pw_cookies)
+            elif config.auth_type == "bearer_token":
+                # Token header injection
+                token = config.password or config.username
+                if token:
+                    await context.set_extra_http_headers({"Authorization": f"Bearer {token}"})
+
+            queue = deque()
+            
+            # Seed start URL
+            normalized_start = normalize_url(self.start_url)
+            queue.append((normalized_start, 1))
+            
+            # Seed landed URL
+            if landed_url:
+                normalized_landed = normalize_url(landed_url)
+                if normalized_landed != normalized_start:
+                    logger.info(f"Seeding post-login landed URL: {normalized_landed}")
+                    queue.append((normalized_landed, 1))
+                    
+            while queue and len(self.pages_discovered) < self.max_pages:
+                if self.strategy == "bfs":
+                    current_url, depth = queue.popleft()
+                else:
+                    current_url, depth = queue.pop()
+                    
+                normalized_url = normalize_url(current_url)
+                if normalized_url in self.visited_urls:
+                    continue
+                    
+                self.visited_urls.add(normalized_url)
+                
+                # Check domain
+                if not self.is_same_domain(normalized_url):
+                    self.ignored_urls.add(normalized_url)
+                    continue
+                    
+                # Check robots
+                if robots_parser and not robots_parser.can_fetch(normalized_url):
+                    self.ignored_urls.add(normalized_url)
+                    continue
+                    
+                # Check exclusions
+                if self.is_excluded(normalized_url):
+                    self.ignored_urls.add(normalized_url)
+                    continue
+                    
+                # Check extension
+                if self.is_non_html(normalized_url):
+                    self.ignored_urls.add(normalized_url)
+                    continue
+                    
+                # Delay
+                now = time.time()
+                elapsed = now - self.last_request_time
+                if elapsed < self.default_delay:
+                    await asyncio.sleep(self.default_delay - elapsed)
+                self.last_request_time = time.time()
+                
+                try:
+                    logger.info(f"[Playwright Crawl] Navigating to: {normalized_url} at depth {depth}")
+                    response = await page.goto(normalized_url, wait_until="domcontentloaded")
+
+                    # Wait for React SPA to render navigation content.
+                    # Many SPAs have two-stage loading: first API call (auth check) fires
+                    # networkidle early, then a second wave (dashboard/page data) renders
+                    # the actual nav items. We wait for networkidle then watch for li/nav
+                    # elements to appear, which is the reliable signal that content is ready.
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
+                    try:
+                        await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=8000)
+                        # React fills text content progressively; give it a moment to finish
+                        await page.wait_for_timeout(3000)
+                    except Exception:
+                        await page.wait_for_timeout(5000)
+
+                    status = response.status if response else 200
+                    if status >= 400:
+                        self.failed_urls[normalized_url] = f"Status Code: {status}"
+                        continue
+                        
+                    current_page_url = page.url
+                    normalized_current = normalize_url(current_page_url)
+
+                    if not self.is_same_domain(normalized_current):
+                        self.ignored_urls.add(normalized_current)
+                        continue
+
+                    # If a redirect happened, mark the final URL as visited so the
+                    # queue doesn't re-process it as a separate entry (e.g. root → /dashboard).
+                    if normalized_current != normalized_url:
+                        self.visited_urls.add(normalized_current)
+
+                    self.pages_discovered.add(normalized_current)
+                    
+                    if depth < self.max_depth:
+                        # Extract all links
+                        links = await page.evaluate("""() => {
+                            const anchors = Array.from(document.querySelectorAll('a[href]'));
+                            return anchors.map(a => a.href);
+                        }""")
+                        for href in links:
+                            href = href.strip()
+                            if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
+                                continue
+                            normalized_resolved = normalize_url(href)
+                            if normalized_resolved not in self.visited_urls:
+                                queue.append((normalized_resolved, depth + 1))
+                                
+                        # Dynamic sidebar menu click route discovery (for SPAs).
+                        # Uses textContent (not innerText) so items hidden via CSS
+                        # (e.g. collapsed MUI mini-drawer) are still captured.
+                        # Clicks via JS dispatchEvent so hidden elements are reachable.
+                        try:
+                            menu_items = await page.evaluate("""() => {
+                                const items = [];
+                                const seenTexts = new Set();
+                                const seenEls = new WeakSet();
+                                const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                    '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                    'nav button, aside button, [role="navigation"] [role="button"]';
+                                const elts = document.querySelectorAll(targetSel);
+                                for (const el of elts) {
+                                    if (seenEls.has(el)) continue;
+                                    seenEls.add(el);
+                                    // textContent works even when CSS hides the text
+                                    const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                    if (text && text.length > 1 && text.length < 60 && !seenTexts.has(text)) {
+                                        seenTexts.add(text);
+                                        items.push({ text: text });
+                                    }
+                                }
+                                return items;
+                            }""")
+
+                            logger.info(f"[Playwright Crawl] Nav items on {normalized_current}: {[m['text'] for m in menu_items]}")
+
+                            for item in menu_items:
+                                try:
+                                    # Click via JS so it works even when text is CSS-hidden
+                                    clicked = await page.evaluate("""(targetText) => {
+                                        const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                            '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                            'nav button, aside button, [role="navigation"] [role="button"]';
+                                        const elts = document.querySelectorAll(targetSel);
+                                        for (const el of elts) {
+                                            const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                            if (t === targetText) {
+                                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                                return true;
+                                            }
+                                        }
+                                        return false;
+                                    }""", item['text'])
+
+                                    if not clicked:
+                                        continue
+
+                                    logger.info(f"[Playwright Crawl] Clicking menu item '{item['text']}' to discover route...")
+                                    await page.wait_for_timeout(2000)  # Wait for SPA route transition
+
+                                    new_url = page.url
+                                    norm_new = normalize_url(new_url)
+                                    if norm_new != normalized_current and self.is_same_domain(norm_new) and not self.is_excluded(norm_new):
+                                        logger.info(f"[Playwright Crawl] Discovered route: {norm_new} from '{item['text']}'")
+                                        if norm_new not in self.visited_urls:
+                                            queue.append((norm_new, depth + 1))
+
+                                    # Navigate back to the page being analysed.
+                                    if normalize_url(page.url) != normalized_current:
+                                        await page.goto(normalized_current, wait_until="domcontentloaded")
+                                        try:
+                                            await page.wait_for_load_state("networkidle", timeout=10000)
+                                        except Exception:
+                                            pass
+                                        try:
+                                            await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=8000)
+                                            await page.wait_for_timeout(3000)
+                                        except Exception:
+                                            await page.wait_for_timeout(5000)
+                                except Exception as click_err:
+                                    logger.debug(f"Failed clicking menu item '{item['text']}': {click_err}")
+                        except Exception as menu_err:
+                            logger.debug(f"Error scanning dynamic menu items: {menu_err}")
+                                
+                except Exception as exc:
+                    logger.error(f"[Playwright Crawl] Failed on {normalized_url}: {exc}")
+                    self.failed_urls[normalized_url] = str(exc)
+                    
+            await browser.close()
+            await pw.stop()
+            
+        except Exception as outer_exc:
+            logger.exception("Error in Playwright crawl flow")
+            try:
+                if browser:
+                    await browser.close()
+                if pw:
+                    await pw.stop()
+            except Exception:
+                pass
+            raise outer_exc
+
+        # Ensure the start URL and the login URL are in discovered pages
+        self.pages_discovered.add(normalize_url(self.start_url))
+        if self.request.credential_config and self.request.credential_config.login_url:
+            self.pages_discovered.add(normalize_url(self.request.credential_config.login_url))
+
         duration = time.time() - start_time
         return CrawlResponse(
             start_url=self.start_url,

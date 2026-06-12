@@ -17,15 +17,19 @@ class BrowserManager:
             await self.pw.stop()
 
     @contextlib.asynccontextmanager
-    async def get_page(self):
+    async def get_page(self, storage_state: dict = None):
         if not self.browser:
             await self.start()
         
-        context = await self.browser.new_context(
-            bypass_csp=True,
-            viewport={'width': 1280, 'height': 800},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-        )
+        kwargs = {
+            "bypass_csp": True,
+            "viewport": {'width': 1280, 'height': 800},
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        }
+        if storage_state:
+            kwargs["storage_state"] = storage_state
+
+        context = await self.browser.new_context(**kwargs)
         page = await context.new_page()
         page.set_default_timeout(60000)
         try:

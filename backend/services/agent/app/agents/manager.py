@@ -63,7 +63,9 @@ class ManagerAgent(BaseAgent):
                         }
                         if request.credential_config:
                             payload["credential_config"] = request.credential_config.model_dump(mode="json")
-                        response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=60.0)
+                        # Authenticated Playwright crawls can take several minutes; allow up to 5 minutes
+                        crawl_timeout = 300.0 if request.credential_config else 60.0
+                        response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=crawl_timeout)
                         response.raise_for_status()
                         crawl_data = response.json()
                         discovered_urls = crawl_data.get("pages_discovered", [str(request.url)])
@@ -82,6 +84,26 @@ class ManagerAgent(BaseAgent):
                 pages_total=len(discovered_urls),
                 pages_discovered=discovered_urls,
             )
+
+        # 2.5 Retrieve storage_state if credentials are set
+        storage_state = None
+        if request.credential_config:
+            from common.config import get_service_url
+            crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
+            logger.info("Retrieving active login session state from crawler service for audit...")
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{crawler_service_url}/login",
+                        json=request.credential_config.model_dump(mode="json"),
+                        timeout=30.0
+                    )
+                    response.raise_for_status()
+                    login_data = response.json()
+                    storage_state = login_data.get("storage_state")
+                    logger.info("Successfully retrieved storage state from login session.")
+            except Exception as e:
+                logger.error(f"Failed to perform login for audit context: {e}")
 
         # 3. Execution — iterative multi-page scanning
         all_violations = []
@@ -109,7 +131,17 @@ class ManagerAgent(BaseAgent):
 
             logger.info(f"Auditing page {idx + 1}/{len(discovered_urls)}: {target_url}")
             try:
-                async with browser_manager.get_page() as page:
+                # Use guest context (no auth) for the login page, and authenticated context for other pages
+                is_login_page = False
+                if request.credential_config:
+                    target_clean = target_url.strip().lower().rstrip("/")
+                    login_clean = request.credential_config.login_url.strip().lower().rstrip("/")
+                    if target_clean == login_clean:
+                        is_login_page = True
+                        
+                current_storage_state = None if is_login_page else storage_state
+                
+                async with browser_manager.get_page(storage_state=current_storage_state) as page:
                     # Navigate
                     await browser_skill.navigate(page, target_url)
                     current_title = await page.title()

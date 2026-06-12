@@ -28,7 +28,7 @@ async def test_login(config: PageCredentialConfig) -> dict:
     """
     try:
         from app.services.login_service import login_service
-        success, cookies, headers, error_detail = await login_service.perform_login(config)
+        success, cookies, headers, error_detail, landed_url = await login_service.perform_login(config)
         if not success:
             raise HTTPException(status_code=400, detail=error_detail or "Login failed.")
         return {
@@ -42,6 +42,31 @@ async def test_login(config: PageCredentialConfig) -> dict:
     except Exception as e:
         logger.exception("Error executing test login")
         raise HTTPException(status_code=500, detail=f"Login test failed: {str(e)}")
+
+
+@router.post("/login")
+async def get_login_session(config: PageCredentialConfig) -> dict:
+    """
+    Performs login and returns full storage state and active tokens.
+    """
+    try:
+        from app.services.login_service import login_service
+        success, cookies, headers, error_detail, landed_url, storage_state = await login_service.perform_login_with_state(config)
+        if not success:
+            raise HTTPException(status_code=400, detail=error_detail or "Login failed.")
+        return {
+            "status": "success",
+            "cookies": cookies,
+            "headers": headers,
+            "landed_url": landed_url,
+            "storage_state": storage_state
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.exception("Error executing login session capture")
+        raise HTTPException(status_code=500, detail=f"Login session capture failed: {str(e)}")
+
 
 
 @router.get("/health")

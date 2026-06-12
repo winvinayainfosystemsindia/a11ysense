@@ -15,49 +15,57 @@ class CrawlerService:
     async def execute_crawl(self, request: CrawlRequest) -> CrawlResponse:
         """Execute a single crawl job synchronously/asynchronously."""
         if request.credential_config:
-            from app.repository.auth_repo import auth_repo
-            from app.services.login_service import login_service
-            import json
-            import hashlib
+            auth_type = request.credential_config.auth_type
 
-            # Generate a unique cache key for these credentials
-            cred_str = f"{request.credential_config.auth_type}:{request.credential_config.login_url}:{request.credential_config.username}"
-            cred_hash = hashlib.sha256(cred_str.encode()).hexdigest()
-            cache_key = f"crawler:auth:{cred_hash}"
-            
-            cached_session = auth_repo.load_session_state(cache_key)
-            login_cookies = {}
-            login_headers = {}
-            if cached_session:
-                try:
-                    session_data = json.loads(cached_session)
-                    login_cookies = session_data.get("cookies", {})
-                    login_headers = session_data.get("headers", {})
-                    logger.info("Found cached active authentication session in Redis.")
-                except Exception as e:
-                    logger.warning(f"Failed to parse cached session: {e}")
-                    cached_session = None
+            # Form-based auth: crawl_with_playwright() manages its own login browser
+            # directly using the same page context it will crawl with. Running a
+            # separate login browser here is redundant and injects stale auth headers
+            # that cause the login page to redirect before the form can be filled.
+            if auth_type != "form":
+                from app.repository.auth_repo import auth_repo
+                from app.services.login_service import login_service
+                import json
+                import hashlib
 
-            if not cached_session:
-                success, login_cookies, login_headers, error_detail = await login_service.perform_login(request.credential_config)
-                if not success:
-                    raise Exception(f"Login failed: {error_detail}")
-                
-                # Cache the session state
-                session_data = {
-                    "cookies": login_cookies,
-                    "headers": login_headers
-                }
-                auth_repo.save_session_state(cache_key, json.dumps(session_data))
-                logger.info("Saved new authenticated session to Redis.")
+                cred_str = f"{auth_type}:{request.credential_config.login_url}:{request.credential_config.username}"
+                cred_hash = hashlib.sha256(cred_str.encode()).hexdigest()
+                cache_key = f"crawler:auth:{cred_hash}"
 
-            # Inject cookies and headers
-            if not request.cookies:
-                request.cookies = {}
-            request.cookies.update(login_cookies)
-            if not request.headers:
-                request.headers = {}
-            request.headers.update(login_headers)
+                cached_session = auth_repo.load_session_state(cache_key)
+                login_cookies = {}
+                login_headers = {}
+                landed_url = None
+                if cached_session:
+                    try:
+                        session_data = json.loads(cached_session)
+                        login_cookies = session_data.get("cookies", {})
+                        login_headers = session_data.get("headers", {})
+                        landed_url = session_data.get("landed_url")
+                        logger.info("Found cached active authentication session in Redis.")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse cached session: {e}")
+                        cached_session = None
+
+                if not cached_session:
+                    success, login_cookies, login_headers, error_detail, landed_url = await login_service.perform_login(request.credential_config)
+                    if not success:
+                        raise Exception(f"Login failed: {error_detail}")
+                    session_data = {
+                        "cookies": login_cookies,
+                        "headers": login_headers,
+                        "landed_url": landed_url
+                    }
+                    auth_repo.save_session_state(cache_key, json.dumps(session_data))
+                    logger.info("Saved new authenticated session to Redis.")
+
+                if not request.cookies:
+                    request.cookies = {}
+                request.cookies.update(login_cookies)
+                if not request.headers:
+                    request.headers = {}
+                request.headers.update(login_headers)
+                if landed_url and not request.landed_url:
+                    request.landed_url = landed_url
 
         crawler = WebCrawler(request)
         return await crawler.crawl()

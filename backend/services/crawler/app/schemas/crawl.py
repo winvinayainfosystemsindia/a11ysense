@@ -13,6 +13,7 @@ class CrawlRequest(BaseModel):
     headers: Dict[str, str] = Field(default_factory=dict, description="Custom request headers to inject")
     strategy: str = Field(default="bfs", pattern="^(bfs|dfs)$", description="Traversal strategy: bfs or dfs")
     credential_config: Optional[PageCredentialConfig] = None
+    landed_url: Optional[str] = None
 
 class CrawlResponse(BaseModel):
     start_url: str
