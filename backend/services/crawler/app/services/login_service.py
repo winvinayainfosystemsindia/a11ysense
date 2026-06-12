@@ -76,12 +76,16 @@ class LoginService:
         # Navigate to login URL
         logger.info(f"Navigating to login page: {config.login_url}")
         await page.goto(config.login_url, wait_until="domcontentloaded")
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
 
         # Fill username
         username_sel = config.username_field or "[name=username]"
         logger.info(f"Filling username field '{username_sel}'")
         try:
-            await page.wait_for_selector(username_sel, state="visible", timeout=3000)
+            await page.wait_for_selector(username_sel, state="visible", timeout=10000)
         except Exception:
             if username_sel == "[name=username]":
                 fallbacks = ["[name=email]", "input[type=email]", "#email", "#username", "input[autocomplete=email]", "input[autocomplete=username]"]
@@ -89,7 +93,7 @@ class LoginService:
                 for fb in fallbacks:
                     try:
                         logger.info(f"Default username field not found. Trying fallback selector '{fb}'")
-                        await page.wait_for_selector(fb, state="visible", timeout=1500)
+                        await page.wait_for_selector(fb, state="visible", timeout=3000)
                         username_sel = fb
                         resolved = True
                         break
@@ -105,7 +109,7 @@ class LoginService:
         password_sel = config.password_field or "[name=password]"
         logger.info(f"Filling password field '{password_sel}'")
         try:
-            await page.wait_for_selector(password_sel, state="visible", timeout=3000)
+            await page.wait_for_selector(password_sel, state="visible", timeout=10000)
         except Exception:
             if password_sel == "[name=password]":
                 fallbacks = ["input[type=password]", "#password", "input[autocomplete=current-password]"]
@@ -113,7 +117,7 @@ class LoginService:
                 for fb in fallbacks:
                     try:
                         logger.info(f"Default password field not found. Trying fallback selector '{fb}'")
-                        await page.wait_for_selector(fb, state="visible", timeout=1500)
+                        await page.wait_for_selector(fb, state="visible", timeout=3000)
                         password_sel = fb
                         resolved = True
                         break
@@ -173,7 +177,7 @@ class LoginService:
         submit_sel = config.submit_selector or "button[type=submit]"
         logger.info(f"Clicking submit button '{submit_sel}'")
         try:
-            await page.wait_for_selector(submit_sel, state="visible", timeout=3000)
+            await page.wait_for_selector(submit_sel, state="visible", timeout=10000)
         except Exception:
             if submit_sel == "button[type=submit]":
                 fallbacks = ["button:has-text('Sign In')", "button:has-text('Login')", "button:has-text('Log In')", "input[type=submit]", "button", "a:has-text('Login')", "a:has-text('Sign In')"]
@@ -181,7 +185,7 @@ class LoginService:
                 for fb in fallbacks:
                     try:
                         logger.info(f"Default submit selector not found. Trying fallback selector '{fb}'")
-                        await page.wait_for_selector(fb, state="visible", timeout=1500)
+                        await page.wait_for_selector(fb, state="visible", timeout=3000)
                         submit_sel = fb
                         resolved = True
                         break

@@ -582,6 +582,29 @@ class WebCrawler:
                     except Exception:
                         await page.wait_for_timeout(5000)
 
+                    # Mid-crawl login detection: if this page is showing a login form, authenticate and continue
+                    if config and config.auth_type == "form":
+                        has_login_form = await page.evaluate(
+                            "() => !!document.querySelector('input[type=password]')"
+                        )
+                        if has_login_form and not self._relogged:
+                            logger.info(f"[Playwright Crawl] Login form detected at {page.url}. Logging in with stored credentials...")
+                            self._relogged = True
+                            ok, _, headers_ext, err, landed = await login_service.perform_login_steps(config, page, context)
+                            if ok:
+                                if headers_ext:
+                                    await context.set_extra_http_headers(headers_ext)
+                                if landed:
+                                    norm_landed = normalize_url(landed)
+                                    self.visited_urls.discard(norm_landed)
+                                    queue.append((norm_landed, depth))
+                                # Re-queue the page we were trying to reach, now authenticated
+                                self.visited_urls.discard(normalized_url)
+                                queue.append((normalized_url, depth))
+                                continue
+                            else:
+                                logger.error(f"Mid-crawl login failed: {err}")
+
                     status = response.status if response else 200
                     if status >= 400:
                         self.failed_urls[normalized_url] = f"Status Code: {status}"

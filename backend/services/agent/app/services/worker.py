@@ -44,6 +44,7 @@ def _run_agent_audit_worker() -> None:
                 url = payload.get("url")
                 pages_discovered = payload.get("pages_discovered", [url])
                 sitemaps_found = payload.get("sitemaps_found", [])
+                credential_config = payload.get("credential_config")
                 error = payload.get("error")
                 
                 if not task_id or not url:
@@ -69,7 +70,8 @@ def _run_agent_audit_worker() -> None:
                     audit_req = AuditRequest(
                         url=url,
                         depth=1,
-                        audit_type="standard"
+                        audit_type="standard",
+                        credential_config=credential_config
                     )
                     
                     if error:

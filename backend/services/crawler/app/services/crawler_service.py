@@ -102,6 +102,7 @@ class CrawlerService:
                     "url": url,
                     "pages_discovered": crawl_res.pages_discovered,
                     "sitemaps_found": crawl_res.sitemaps_found,
+                    "credential_config": payload.get("credential_config"),
                     "error": None
                 }
                 logger.info(
@@ -115,6 +116,7 @@ class CrawlerService:
                     "url": url,
                     "pages_discovered": [url],
                     "sitemaps_found": [],
+                    "credential_config": payload.get("credential_config"),
                     "error": str(crawl_err)
                 }
 

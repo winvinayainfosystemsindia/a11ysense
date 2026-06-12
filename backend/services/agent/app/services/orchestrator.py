@@ -109,7 +109,8 @@ class AuditOrchestrator:
                     }
                     if request.credential_config:
                         payload["credential_config"] = request.credential_config.model_dump(mode="json")
-                    response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=60.0)
+                    crawl_timeout = 300.0 if request.credential_config else 60.0
+                    response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=crawl_timeout)
                     write_debug(f"Crawler response status: {response.status_code}")
                     response.raise_for_status()
                     crawl_data = response.json()

@@ -57,6 +57,18 @@ class ProxyService:
             from app.services.credential_service import credential_service
             config = credential_service.resolve_for_audit(request.credentials_id, org_id, db)
             request.credential_config = config
+        else:
+            # Auto-match: find a stored credential whose url_pattern matches the audit URL
+            import fnmatch
+            from common.database.models import PageCredential
+            from app.services.credential_service import credential_service
+            creds = db.query(PageCredential).filter_by(organization_id=org_id).all()
+            for cred in creds:
+                pattern = cred.url_pattern or ""
+                if pattern and (fnmatch.fnmatch(str(request.url), pattern) or pattern in str(request.url)):
+                    request.credential_config = credential_service.resolve_for_audit(cred.id, org_id, db)
+                    logger.info(f"Auto-attached credential '{cred.label}' matching url_pattern '{pattern}'")
+                    break
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
