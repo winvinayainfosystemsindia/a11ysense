@@ -1,94 +1,40 @@
-import os
-import json
-import hashlib
+"""
+History Utility — Backward-compatible delegation wrappers calling history_repo.
+"""
 import logging
-from datetime import datetime
-from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
-from urllib.parse import urlparse
+from typing import List, Dict, Any, Optional
 
 from app.schemas.audit import Violation
 from app.schemas.analyze import TrendBreakdown
+from app.repository.history_repo import history_repo
 
 logger = logging.getLogger(__name__)
 
-# Absolute Path Setup for local persistence storage
-STORAGE_DIR = Path(__file__).parent.parent.parent.parent.parent / "storage" / "analyzer_history"
-
-def ensure_storage_exists() -> None:
-    """
-    Ensures that the history database directory is created.
-    """
-    try:
-        os.makedirs(STORAGE_DIR, exist_ok=True)
-    except Exception as e:
-        logger.error(f"Failed to create historical storage directory: {str(e)}")
 
 def _get_url_key(url: str) -> str:
-    """
-    Standardizes a URL and maps it to a safe, unique filename key.
-    """
-    parsed = urlparse(url)
-    domain = parsed.netloc or "unknown"
-    # Scrub port and colons
-    domain = domain.split(":")[0]
-    
-    # Hash the full standardized URL path for specific page/scan differentiation
-    url_hash = hashlib.sha256(url.strip().lower().encode("utf-8")).hexdigest()[:16]
-    return f"{domain}_{url_hash}"
+    """Delegates to the history_repo to standardise and hash the URL."""
+    return history_repo.get_url_key(url)
+
 
 def load_previous_audit(url: str) -> Optional[Dict[str, Any]]:
-    """
-    Loads the last persisted summary for the target URL. Returns None on first run.
-    """
-    ensure_storage_exists()
-    key = _get_url_key(url)
-    file_path = STORAGE_DIR / f"{key}.json"
-    
-    if not file_path.exists():
-        logger.info(f"Trend Analysis: No past history file found for {url} (Key={key}). First run.")
-        return None
-        
-    try:
-        with open(file_path, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Trend Analysis: Error reading history file {file_path}: {str(e)}")
-        return None
+    """Delegates loading logic to the history_repo."""
+    return history_repo.load_previous_audit(url)
+
 
 def save_current_audit(url: str, score: float, violations: List[Violation]) -> None:
-    """
-    Persists the current audit details as the new historical baseline for future scans.
-    """
-    ensure_storage_exists()
-    key = _get_url_key(url)
-    file_path = STORAGE_DIR / f"{key}.json"
-    
+    """Saves baseline audit using rule_ids via history_repo."""
     rule_ids = [v.id for v in violations]
-    
-    payload = {
-        "url": url,
-        "score": score,
-        "rule_ids": rule_ids,
-        "timestamp": datetime.utcnow().isoformat()
-    }
-    
-    try:
-        with open(file_path, "w") as f:
-            json.dump(payload, f, indent=4)
-        logger.info(f"Trend Analysis: Successfully persisted current baseline summary to {file_path}")
-    except Exception as e:
-        logger.error(f"Trend Analysis: Failed to write baseline summary to {file_path}: {str(e)}")
+    history_repo.save_current_audit(url, score, rule_ids)
+
 
 def generate_trend_analysis(url: str, current_score: float, current_violations: List[Violation]) -> TrendBreakdown:
     """
-    Compares the current audit metrics against the last recorded run to compile
-    compliance trend statistics.
+    Compares the current audit metrics against the last recorded run.
+    Uses the history_repo to resolve historical summaries.
     """
-    previous = load_previous_audit(url)
+    previous = history_repo.load_previous_audit(url)
     
     if not previous:
-        # First run yields an empty breakdown baseline
         return TrendBreakdown(
             previous_score=None,
             score_difference=None,
