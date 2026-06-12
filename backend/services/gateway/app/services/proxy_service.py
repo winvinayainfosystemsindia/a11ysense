@@ -52,6 +52,12 @@ class ProxyService:
                 detail="Insufficient credits. A minimum of 10 credits is required to initiate an audit scan."
             )
 
+        # 3. Resolve credential configuration if credentials_id is supplied
+        if request.credentials_id:
+            from app.services.credential_service import credential_service
+            config = credential_service.resolve_for_audit(request.credentials_id, org_id, db)
+            request.credential_config = config
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 audit_data = request.model_dump(mode="json")

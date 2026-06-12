@@ -14,6 +14,51 @@ class CrawlerService:
 
     async def execute_crawl(self, request: CrawlRequest) -> CrawlResponse:
         """Execute a single crawl job synchronously/asynchronously."""
+        if request.credential_config:
+            from app.repository.auth_repo import auth_repo
+            from app.services.login_service import login_service
+            import json
+            import hashlib
+
+            # Generate a unique cache key for these credentials
+            cred_str = f"{request.credential_config.auth_type}:{request.credential_config.login_url}:{request.credential_config.username}"
+            cred_hash = hashlib.sha256(cred_str.encode()).hexdigest()
+            cache_key = f"crawler:auth:{cred_hash}"
+            
+            cached_session = auth_repo.load_session_state(cache_key)
+            login_cookies = {}
+            login_headers = {}
+            if cached_session:
+                try:
+                    session_data = json.loads(cached_session)
+                    login_cookies = session_data.get("cookies", {})
+                    login_headers = session_data.get("headers", {})
+                    logger.info("Found cached active authentication session in Redis.")
+                except Exception as e:
+                    logger.warning(f"Failed to parse cached session: {e}")
+                    cached_session = None
+
+            if not cached_session:
+                success, login_cookies, login_headers, error_detail = await login_service.perform_login(request.credential_config)
+                if not success:
+                    raise Exception(f"Login failed: {error_detail}")
+                
+                # Cache the session state
+                session_data = {
+                    "cookies": login_cookies,
+                    "headers": login_headers
+                }
+                auth_repo.save_session_state(cache_key, json.dumps(session_data))
+                logger.info("Saved new authenticated session to Redis.")
+
+            # Inject cookies and headers
+            if not request.cookies:
+                request.cookies = {}
+            request.cookies.update(login_cookies)
+            if not request.headers:
+                request.headers = {}
+            request.headers.update(login_headers)
+
         crawler = WebCrawler(request)
         return await crawler.crawl()
 
@@ -37,7 +82,8 @@ class CrawlerService:
                     url=url,
                     depth=payload.get("depth", 1),
                     max_pages=payload.get("max_pages", 30),
-                    respect_robots_txt=payload.get("respect_robots_txt", True)
+                    respect_robots_txt=payload.get("respect_robots_txt", True),
+                    credential_config=payload.get("credential_config")
                 )
                 
                 # Execute crawl

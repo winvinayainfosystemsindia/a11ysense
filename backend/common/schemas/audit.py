@@ -1,11 +1,26 @@
 from pydantic import BaseModel, HttpUrl, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from uuid import UUID
+
+class PageCredentialConfig(BaseModel):
+    auth_type: str  # "form", "cookie", "bearer_token"
+    login_url: str
+    url_pattern: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+    username_field: Optional[str] = "[name=username]"
+    password_field: Optional[str] = "[name=password]"
+    submit_selector: Optional[str] = "button[type=submit]"
+    post_login_url_pattern: Optional[str] = None
+    extra_fields: Optional[Dict[str, str]] = None
 
 class AuditRequest(BaseModel):
     url: str
     depth: int = Field(default=1, ge=1, le=5)
     audit_type: str = Field(default="standard", pattern="^(standard|comprehensive)$")
+    credentials_id: Optional[UUID] = None
+    credential_config: Optional[PageCredentialConfig] = None
 
 class Violation(BaseModel):
     id: str

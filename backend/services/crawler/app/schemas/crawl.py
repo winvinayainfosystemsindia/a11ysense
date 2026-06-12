@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
+from common.schemas.audit import PageCredentialConfig
 
 class CrawlRequest(BaseModel):
     url: str = Field(..., description="The absolute starting URL for the crawl")
@@ -11,6 +12,7 @@ class CrawlRequest(BaseModel):
     cookies: Dict[str, str] = Field(default_factory=dict, description="Authentication cookies to inject")
     headers: Dict[str, str] = Field(default_factory=dict, description="Custom request headers to inject")
     strategy: str = Field(default="bfs", pattern="^(bfs|dfs)$", description="Traversal strategy: bfs or dfs")
+    credential_config: Optional[PageCredentialConfig] = None
 
 class CrawlResponse(BaseModel):
     start_url: str

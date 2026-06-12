@@ -45,6 +45,7 @@ class Project(Base):
 
     organization = relationship("Organization", back_populates="projects")
     audit_sessions = relationship("AuditSession", back_populates="project", cascade="all, delete-orphan")
+    credentials = relationship("PageCredential", back_populates="project", cascade="all, delete-orphan")
 
 class ApiKey(Base):
     __tablename__ = "api_keys"
@@ -146,4 +147,29 @@ class CreditTransaction(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     organization = relationship("Organization")
+
+
+class PageCredential(Base):
+    __tablename__ = "page_credentials"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    label = Column(String, nullable=False)
+    login_url = Column(String, nullable=False)
+    url_pattern = Column(String, nullable=False)
+    auth_type = Column(String, default="form")  # form, cookie, bearer_token
+    username_field = Column(String, default="[name=username]", nullable=True)
+    password_field = Column(String, default="[name=password]", nullable=True)
+    submit_selector = Column(String, default="button[type=submit]", nullable=True)
+    username_encrypted = Column(Text, nullable=True)
+    password_encrypted = Column(Text, nullable=True)
+    extra_fields_encrypted = Column(Text, nullable=True)  # Fernet encrypted JSON
+    post_login_url_pattern = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project", back_populates="credentials")
+    organization = relationship("Organization")
+
 

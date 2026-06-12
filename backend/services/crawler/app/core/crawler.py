@@ -190,6 +190,7 @@ class WebCrawler:
         self.default_delay = request.crawl_delay
         self.last_request_time = 0.0
         self.exclude_patterns = request.exclude_patterns
+        self._relogged = False
 
     def is_same_domain(self, url: str) -> bool:
         parsed = urllib.parse.urlparse(url)
@@ -318,7 +319,34 @@ class WebCrawler:
                 try:
                     logger.info(f"Crawling URL: {normalized_url} at depth {depth}")
                     response = await client.get(normalized_url)
-                    
+                    if response.status_code in (401, 403) and self.request.credential_config and not self._relogged:
+                        logger.warning(f"Received status {response.status_code} for {normalized_url}. Attempting dynamic re-login...")
+                        self._relogged = True
+                        from app.services.login_service import login_service
+                        from app.repository.auth_repo import auth_repo
+                        import hashlib
+                        import json
+                        
+                        success, login_cookies, login_headers, error_detail = await login_service.perform_login(self.request.credential_config)
+                        if success:
+                            # Update client state
+                            client.cookies.update(login_cookies)
+                            client.headers.update(login_headers)
+                            
+                            # Update Redis cache
+                            cred_str = f"{self.request.credential_config.auth_type}:{self.request.credential_config.login_url}:{self.request.credential_config.username}"
+                            cred_hash = hashlib.sha256(cred_str.encode()).hexdigest()
+                            cache_key = f"crawler:auth:{cred_hash}"
+                            session_data = {
+                                "cookies": login_cookies,
+                                "headers": login_headers
+                            }
+                            auth_repo.save_session_state(cache_key, json.dumps(session_data))
+                            
+                            # Retry the request
+                            logger.info(f"Retrying request to {normalized_url} after successful re-login.")
+                            response = await client.get(normalized_url)
+
                     if response.status_code >= 400:
                         self.failed_urls[normalized_url] = f"Status Code: {response.status_code}"
                         continue

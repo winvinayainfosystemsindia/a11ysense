@@ -61,6 +61,8 @@ class ManagerAgent(BaseAgent):
                             "max_pages": 30,
                             "respect_robots_txt": True
                         }
+                        if request.credential_config:
+                            payload["credential_config"] = request.credential_config.model_dump(mode="json")
                         response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=60.0)
                         response.raise_for_status()
                         crawl_data = response.json()

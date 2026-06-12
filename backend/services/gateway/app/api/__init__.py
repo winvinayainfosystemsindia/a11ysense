@@ -10,6 +10,7 @@ from app.api.admin import router as admin_router
 from app.api.proxy import router as proxy_router
 from app.api.billing import router as billing_router
 from app.api.users import router as users_router
+from app.api.credentials import router as credentials_router
 
 __all__ = [
     "auth_router",
@@ -20,4 +21,5 @@ __all__ = [
     "proxy_router",
     "billing_router",
     "users_router",
+    "credentials_router",
 ]

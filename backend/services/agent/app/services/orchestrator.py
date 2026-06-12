@@ -107,6 +107,8 @@ class AuditOrchestrator:
                         "max_pages": 30,
                         "respect_robots_txt": True
                     }
+                    if request.credential_config:
+                        payload["credential_config"] = request.credential_config.model_dump(mode="json")
                     response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=60.0)
                     write_debug(f"Crawler response status: {response.status_code}")
                     response.raise_for_status()
@@ -394,6 +396,8 @@ class AuditOrchestrator:
             "org_id": org_id,
             "proj_id": proj_id
         }
+        if request.credential_config:
+            task_payload["credential_config"] = request.credential_config.model_dump(mode="json")
 
         if get_redis_client() is not None:
             publish_event("audit:tasks", task_payload)
