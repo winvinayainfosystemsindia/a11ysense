@@ -30,7 +30,8 @@ import {
   TableRow,
   TablePagination,
   Grid,
-  IconButton
+  IconButton,
+  TextField
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LaunchIcon from '@mui/icons-material/Launch';
@@ -45,6 +46,8 @@ import CodeIcon from '@mui/icons-material/Code';
 import BuildIcon from '@mui/icons-material/Build';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import LayersIcon from '@mui/icons-material/Layers';
+import SearchIcon from '@mui/icons-material/Search';
 import { auditService } from '../../service/auditService';
 import type { AuditTaskDetail } from '../../service/auditService';
 
@@ -202,6 +205,11 @@ const AuditDetailsPage: React.FC = () => {
   // AI Fix Application Loading State
   const [isApplyingFix, setIsApplyingFix] = useState(false);
 
+  // URLs Tab State
+  const [urlSearchQuery, setUrlSearchQuery] = useState('');
+  const [urlsPage, setUrlsPage] = useState(0);
+  const [urlsRowsPerPage, setUrlsRowsPerPage] = useState(10);
+
   const isTerminal = (status: string) => {
     const s = status.toLowerCase();
     return s === 'completed' || s === 'failed' || s === 'stopped';
@@ -340,6 +348,13 @@ const AuditDetailsPage: React.FC = () => {
     });
   }, [violations, severityFilter, wcagFilter]);
 
+  // Filtered discovered URLs for URLs tab
+  const filteredDiscoveredUrls = useMemo(() => {
+    const list = taskDetail?.pages_discovered || [];
+    if (!urlSearchQuery) return list;
+    return list.filter(url => url.toLowerCase().includes(urlSearchQuery.toLowerCase()));
+  }, [taskDetail, urlSearchQuery]);
+
   // Set default selected violation
   useEffect(() => {
     if (filteredViolations.length > 0) {
@@ -378,11 +393,6 @@ const AuditDetailsPage: React.FC = () => {
   const accessibilityScore = taskDetail?.summary?.accessibility_score ?? (taskDetail?.status === 'completed' ? calculatedScore : 0);
   const criticalCount = useMemo(() => violations.filter(v => v.severity?.toLowerCase() === 'critical').length, [violations]);
   const moderateCount = useMemo(() => violations.filter(v => v.severity?.toLowerCase() === 'moderate').length, [violations]);
-  const wcagLevel = useMemo(() => {
-    if (violations.length === 0) return 'AAA';
-    const hasA = violations.some(v => v.level === 'A');
-    return hasA ? 'A' : 'AA';
-  }, [violations]);
 
   if (loading) {
     return (
@@ -643,25 +653,27 @@ const AuditDetailsPage: React.FC = () => {
               <Typography variant="caption" color="text.secondary">Improvement recommended</Typography>
             </Card>
 
-            {/* WCAG Badge Card */}
-            <Card variant="outlined" sx={{ p: 3, borderRadius: '16px', borderLeft: `6px solid ${theme.palette.success.main}` }}>
+
+            {/* Crawl Depth Card */}
+            <Card variant="outlined" sx={{ p: 3, borderRadius: '16px', borderLeft: `6px solid ${theme.palette.info.main}` }}>
               <Stack component="div" direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
-                <CheckCircleIcon color="success" />
-                <Typography variant="overline" sx={{ fontWeight: '800', color: 'text.secondary', fontSize: '0.7rem' }}>WCAG Compliance</Typography>
+                <LayersIcon color="info" />
+                <Typography variant="overline" sx={{ fontWeight: '800', color: 'text.secondary', fontSize: '0.7rem' }}>Crawl Depth</Typography>
               </Stack>
-              <Typography variant="h3" sx={{ fontWeight: '800', color: 'success.main', mb: 0.5 }}>
-                {wcagLevel}
+              <Typography variant="h3" sx={{ fontWeight: '800', color: 'info.main', mb: 0.5 }}>
+                {taskDetail.depth ?? 1}
               </Typography>
-              <Typography variant="caption" color="text.secondary">Targeting AAA success</Typography>
+              <Typography variant="caption" color="text.secondary">Maximum crawl limit</Typography>
             </Card>
           </Box>
 
           {/* Navigation Tabs */}
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
             <Tabs value={activeTab} onChange={(_, val) => setActiveTab(val)} color="primary">
-              <Tab label="Interactive Explorer" sx={{ fontWeight: '700' }} />
+              <Tab label="Explorer" sx={{ fontWeight: '700' }} />
+              <Tab label={`Test Case (${testcases.length})`} sx={{ fontWeight: '700' }} />
               <Tab label={`Defects Table (${violations.length})`} sx={{ fontWeight: '700' }} />
-              <Tab label={`All Test Cases (${testcases.length})`} sx={{ fontWeight: '700' }} />
+              <Tab label={`List of URLs (${taskDetail.pages_discovered?.length || 0})`} sx={{ fontWeight: '700' }} />
             </Tabs>
           </Box>
 
@@ -912,8 +924,69 @@ const AuditDetailsPage: React.FC = () => {
             </Grid>
           )}
 
-          {/* Tab 2: Defects Table */}
+          {/* Tab 2: Test Case */}
           {activeTab === 1 && (
+            <Card variant="outlined" sx={{ borderRadius: '16px', overflow: 'hidden' }}>
+              <TableContainer sx={{ maxHeight: 600 }}>
+                <Table stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>TC ID</TableCell>
+                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>TEST NAME</TableCell>
+                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>RULE ID</TableCell>
+                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>STATUS</TableCell>
+                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>PAGE</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {testcases
+                      .slice(testcasesPage * testcasesRowsPerPage, testcasesPage * testcasesRowsPerPage + testcasesRowsPerPage)
+                      .map((tc) => (
+                        <TableRow key={tc.testcase_id} hover>
+                          <TableCell sx={{ fontWeight: '600', fontSize: '0.8rem' }}>{tc.testcase_id}</TableCell>
+                          <TableCell>
+                            <Typography variant="subtitle2" sx={{ fontWeight: '700' }}>{tc.testcase_name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{tc.description}</Typography>
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{tc.rule_id}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={tc.status} 
+                              color={tc.status === 'PASS' ? 'success' : 'error'} 
+                              size="small" 
+                              sx={{ fontWeight: '700', fontSize: '0.7rem' }} 
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{tc.page_title}</TableCell>
+                        </TableRow>
+                      ))}
+                    {testcases.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                          <Typography variant="body1" color="text.secondary">No test checks ran.</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                component="div"
+                count={testcases.length}
+                rowsPerPage={testcasesRowsPerPage}
+                page={testcasesPage}
+                onPageChange={(_, page) => setTestcasesPage(page)}
+                onRowsPerPageChange={(e) => {
+                  setTestcasesRowsPerPage(parseInt(e.target.value, 10));
+                  setTestcasesPage(0);
+                }}
+              />
+            </Card>
+          )}
+
+          {/* Tab 3: Defects Table */}
+          {activeTab === 2 && (
             <Card variant="outlined" sx={{ borderRadius: '16px', overflow: 'hidden' }}>
               <TableContainer sx={{ maxHeight: 600, overflowX: 'auto' }}>
                 <Table stickyHeader>
@@ -1162,64 +1235,133 @@ const AuditDetailsPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Tab 3: All Test Cases Table */}
-          {activeTab === 2 && (
-            <Card variant="outlined" sx={{ borderRadius: '16px', overflow: 'hidden' }}>
-              <TableContainer sx={{ maxHeight: 600 }}>
-                <Table stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>TC ID</TableCell>
-                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>TEST NAME</TableCell>
-                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>RULE ID</TableCell>
-                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>STATUS</TableCell>
-                      <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>PAGE</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {testcases
-                      .slice(testcasesPage * testcasesRowsPerPage, testcasesPage * testcasesRowsPerPage + testcasesRowsPerPage)
-                      .map((tc) => (
-                        <TableRow key={tc.testcase_id} hover>
-                          <TableCell sx={{ fontWeight: '600', fontSize: '0.8rem' }}>{tc.testcase_id}</TableCell>
-                          <TableCell>
-                            <Typography variant="subtitle2" sx={{ fontWeight: '700' }}>{tc.testcase_name}</Typography>
-                            <Typography variant="caption" color="text.secondary">{tc.description}</Typography>
-                          </TableCell>
-                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{tc.rule_id}</TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={tc.status} 
-                              color={tc.status === 'PASS' ? 'success' : 'error'} 
-                              size="small" 
-                              sx={{ fontWeight: '700', fontSize: '0.7rem' }} 
-                            />
-                          </TableCell>
-                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{tc.page_title}</TableCell>
-                        </TableRow>
-                      ))}
-                    {testcases.length === 0 && (
+          {/* Tab 4: List of URLs */}
+          {activeTab === 3 && (
+            <Card variant="outlined" sx={{ p: 4, borderRadius: '16px' }}>
+              <Stack component="div" spacing={3}>
+                <Box>
+                  <Typography variant="h5" sx={{ fontWeight: '800', fontFamily: 'Outfit', mb: 1 }}>
+                    List of Site URLs
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    View the full list of pages discovered and scanned during the audit run.
+                  </Typography>
+                </Box>
+
+                {/* Sub-Metrics Panel */}
+                <Grid container spacing={3} sx={{ bgcolor: '#f8fafc', p: 2, borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: '700', textTransform: 'uppercase' }}>Crawl Depth</Typography>
+                    <Typography variant="h5" sx={{ fontWeight: '800', mt: 0.5 }}>{taskDetail.depth ?? 1}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: '700', textTransform: 'uppercase' }}>URLs Discovered</Typography>
+                    <Typography variant="h5" sx={{ fontWeight: '800', mt: 0.5 }}>{taskDetail.pages_found ?? taskDetail.pages_discovered?.length ?? 0}</Typography>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: '700', textTransform: 'uppercase' }}>URLs Scanned</Typography>
+                    <Typography variant="h5" sx={{ fontWeight: '800', mt: 0.5, color: 'success.main' }}>{taskDetail.pages_completed ?? taskDetail.pages_scanned?.length ?? 0}</Typography>
+                  </Grid>
+                </Grid>
+
+                {/* Search / Filter Input */}
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search discovered URLs..."
+                    variant="outlined"
+                    value={urlSearchQuery}
+                    onChange={(e) => {
+                      setUrlSearchQuery(e.target.value);
+                      setUrlsPage(0);
+                    }}
+                    {...{
+                      InputProps: {
+                        startAdornment: (
+                          <SearchIcon sx={{ color: 'text.secondary', mr: 1, fontSize: '1.2rem' }} />
+                        ),
+                      }
+                    }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '8px',
+                      }
+                    }}
+                  />
+                </Box>
+
+                {/* URLs Table / List */}
+                <TableContainer sx={{ border: '1px solid #e2e8f0', borderRadius: '12px', bgcolor: '#ffffff' }}>
+                  <Table>
+                    <TableHead sx={{ bgcolor: '#f1f5f9' }}>
                       <TableRow>
-                        <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                          <Typography variant="body1" color="text.secondary">No test checks ran.</Typography>
-                        </TableCell>
+                        <TableCell sx={{ fontWeight: '700', color: 'text.secondary', width: '80px' }}>#</TableCell>
+                        <TableCell sx={{ fontWeight: '700', color: 'text.secondary' }}>PAGE URL</TableCell>
+                        <TableCell sx={{ fontWeight: '700', color: 'text.secondary', width: '150px' }}>STATUS</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: '700', color: 'text.secondary', width: '120px' }}>ACTION</TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              <TablePagination
-                rowsPerPageOptions={[5, 10, 25, 50]}
-                component="div"
-                count={testcases.length}
-                rowsPerPage={testcasesRowsPerPage}
-                page={testcasesPage}
-                onPageChange={(_, page) => setTestcasesPage(page)}
-                onRowsPerPageChange={(e) => {
-                  setTestcasesRowsPerPage(parseInt(e.target.value, 10));
-                  setTestcasesPage(0);
-                }}
-              />
+                    </TableHead>
+                    <TableBody>
+                      {filteredDiscoveredUrls
+                        .slice(urlsPage * urlsRowsPerPage, urlsPage * urlsRowsPerPage + urlsRowsPerPage)
+                        .map((urlStr, index) => {
+                          const isScanned = taskDetail.pages_scanned?.includes(urlStr) || taskDetail.pages_scanned?.some(scanned => scanned === urlStr || scanned.replace(/\/$/, '') === urlStr.replace(/\/$/, ''));
+                          return (
+                            <TableRow key={index} hover>
+                              <TableCell sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+                                {urlsPage * urlsRowsPerPage + index + 1}
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                {urlStr}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={isScanned ? 'SCANNED' : 'DISCOVERED'}
+                                  color={isScanned ? 'success' : 'default'}
+                                  size="small"
+                                  sx={{ fontWeight: '700', borderRadius: '6px', fontSize: '0.65rem' }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <IconButton
+                                  size="small"
+                                  component="a"
+                                  href={urlStr}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  sx={{ color: 'primary.main' }}
+                                  title="Open Page in New Tab"
+                                >
+                                  <LaunchIcon sx={{ fontSize: '1.1rem' }} />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      {filteredDiscoveredUrls.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
+                            <Typography variant="body1" color="text.secondary">No URLs found matching your search.</Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                  <TablePagination
+                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    component="div"
+                    count={filteredDiscoveredUrls.length}
+                    rowsPerPage={urlsRowsPerPage}
+                    page={urlsPage}
+                    onPageChange={(_, page) => setUrlsPage(page)}
+                    onRowsPerPageChange={(e) => {
+                      setUrlsRowsPerPage(parseInt(e.target.value, 10));
+                      setUrlsPage(0);
+                    }}
+                  />
+                </TableContainer>
+              </Stack>
             </Card>
           )}
         </Stack>

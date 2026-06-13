@@ -22,7 +22,8 @@ class AuditSessionRepo:
         task_id: str,
         url: str,
         org_id: Optional[str] = None,
-        proj_id: Optional[str] = None
+        proj_id: Optional[str] = None,
+        depth: int = 1
     ) -> AuditSession:
         """Create a new AuditSession record with tenant resolution."""
         db = get_session_local()()
@@ -60,6 +61,7 @@ class AuditSessionRepo:
                 status="crawling",
                 organization_id=resolved_org_id,
                 project_id=resolved_proj_id,
+                depth=depth,
                 timestamp=datetime.utcnow()
             )
             db.add(session_record)
@@ -87,7 +89,8 @@ class AuditSessionRepo:
                     "timestamp": session_rec.timestamp,
                     "summary": session_rec.summary,
                     "organization_id": session_rec.organization_id,
-                    "project_id": session_rec.project_id
+                    "project_id": session_rec.project_id,
+                    "depth": session_rec.depth or 1
                 }
             return None
         except Exception as e:

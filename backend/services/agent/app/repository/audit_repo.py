@@ -29,7 +29,7 @@ class AuditProgressRepo:
 
     # ── Write operations ────────────────────────────────────────────────────
 
-    def create(self, task_id: str, url: str) -> AuditTask:
+    def create(self, task_id: str, url: str, depth: int = 1) -> AuditTask:
         """Insert a new progress row when an audit starts."""
         db = get_session_local()()
         try:
@@ -42,6 +42,7 @@ class AuditProgressRepo:
                 pages_total=0,
                 pages_scanned=[],
                 pages_discovered=[],
+                depth=depth,
             )
             db.add(row)
             db.commit()
@@ -137,6 +138,7 @@ class AuditProgressRepo:
             report_url=row.report_url,
             error=row.error,
             token_usage=row.token_usage,
+            depth=row.depth or 1,
         )
 
     def as_audit_task(self, task_id: str) -> Optional[AuditTask]:

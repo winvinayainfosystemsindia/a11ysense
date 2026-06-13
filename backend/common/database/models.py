@@ -72,6 +72,7 @@ class AuditSession(Base):
     summary = Column(JSON, nullable=True)  # accessibility_score, passes, total violations breakdown
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    depth = Column(Integer, default=1, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     organization = relationship("Organization")
@@ -126,6 +127,7 @@ class AuditProgress(Base):
     # JSON arrays of URL strings
     pages_scanned = Column(JSON, default=list)
     pages_discovered = Column(JSON, default=list)
+    depth = Column(Integer, default=1, nullable=True)
     # Completion payload
     report_url = Column(String, nullable=True)
     error = Column(Text, nullable=True)

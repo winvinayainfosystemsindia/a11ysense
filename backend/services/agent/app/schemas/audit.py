@@ -54,3 +54,4 @@ class AuditTask(BaseModel):
     error: Optional[str] = None
     token_usage: Optional[Dict[str, Any]] = None
     summary: Optional[Dict[str, Any]] = None
+    depth: Optional[int] = 1

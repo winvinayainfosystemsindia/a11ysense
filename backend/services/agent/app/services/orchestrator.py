@@ -378,11 +378,11 @@ class AuditOrchestrator:
         task_id = str(uuid.uuid4())
 
         # Write initial AuditProgress row
-        progress_row = audit_progress_repo.create(task_id, str(request.url))
+        progress_row = audit_progress_repo.create(task_id, str(request.url), request.depth)
 
         # Bootstrap AuditSession record
         try:
-            audit_session_repo.bootstrap_session(task_id, str(request.url), org_id, proj_id)
+            audit_session_repo.bootstrap_session(task_id, str(request.url), org_id, proj_id, request.depth)
         except Exception as db_err:
             logger.error(f"Failed to bootstrap audit session: {db_err}")
 
@@ -452,7 +452,8 @@ class AuditOrchestrator:
                 pages_discovered=[session_rec.get("url")] if session_rec.get("status") == "completed" else [],
                 error=summary.get("error"),
                 token_usage=summary.get("token_usage"),
-                summary=summary
+                summary=summary,
+                depth=session_rec.get("depth", 1)
             )
 
         return AuditTask(task_id=task_id, status="not_found")
