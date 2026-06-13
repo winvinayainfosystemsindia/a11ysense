@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Stack, Button, IconButton } from '@mui/material';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { Box, Typography, Stack } from '@mui/material';
 import AuditsTable from '../../components/audits/AuditsTable';
 import { StartAuditDialog } from '../../components/audit/StartAuditDialog';
 import { auditService } from '../../service/auditService';
@@ -52,22 +50,6 @@ const AuditsPage: React.FC = () => {
             Track ongoing scans and review past accessibility reports.
           </Typography>
         </Box>
-        
-        <Stack component="div" direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          <IconButton onClick={fetchAudits} color="primary" sx={{ bgcolor: 'background.paper', boxShadow: 1 }} title="Refresh">
-            <RefreshIcon />
-          </IconButton>
-          
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<PlayArrowIcon />}
-            onClick={() => setIsDialogOpen(true)}
-            sx={{ fontWeight: '700', borderRadius: '8px', px: 3 }}
-          >
-            New Audit
-          </Button>
-        </Stack>
       </Stack>
 
       <AuditsTable audits={audits} isLoading={isLoading} onRefresh={fetchAudits} />
