@@ -45,6 +45,9 @@ def _run_agent_audit_worker() -> None:
                 pages_discovered = payload.get("pages_discovered", [url])
                 sitemaps_found = payload.get("sitemaps_found", [])
                 credential_config = payload.get("credential_config")
+                storage_state = payload.get("storage_state")
+                auth_headers = payload.get("auth_headers", {})
+                pages_depth_map = payload.get("pages_depth_map", {})
                 error = payload.get("error")
                 
                 if not task_id or not url:
@@ -84,6 +87,7 @@ def _run_agent_audit_worker() -> None:
                         pages_found=len(pages_discovered),
                         pages_total=len(pages_discovered),
                         pages_discovered=pages_discovered,
+                        pages_depth_map=pages_depth_map or None,
                     )
                     
                     loop.run_until_complete(
@@ -93,7 +97,10 @@ def _run_agent_audit_worker() -> None:
                             discovered_urls=pages_discovered,
                             sitemaps_found=sitemaps_found,
                             org_id=org_id,
-                            proj_id=proj_id
+                            proj_id=proj_id,
+                            storage_state=storage_state,
+                            auth_headers=auth_headers,
+                            pages_depth_map=pages_depth_map,
                         )
                     )
                 except Exception as run_err:

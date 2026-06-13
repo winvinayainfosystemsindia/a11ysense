@@ -21,6 +21,7 @@ export interface AuditTaskDetail {
   pages_total?: number;
   pages_scanned?: string[];
   pages_discovered?: string[];
+  pages_depth_map?: Record<string, number>;
   error?: string;
   summary?: any;
 }

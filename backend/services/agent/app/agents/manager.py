@@ -25,7 +25,10 @@ class ManagerAgent(BaseAgent):
         request: AuditRequest,
         task_id: str = None,
         pre_discovered_urls: list[str] = None,
-        pre_sitemaps_found: list[str] = None
+        pre_sitemaps_found: list[str] = None,
+        pre_storage_state: dict = None,
+        pre_auth_headers: dict = None,
+        pre_pages_depth_map: dict = None,
     ) -> AuditResult:
         """
         Orchestrates the multi-agent audit process.
@@ -40,6 +43,10 @@ class ManagerAgent(BaseAgent):
 
         # 2. Discover crawlable pages or reuse pre-discovered lists
         sitemaps_found = pre_sitemaps_found or []
+        pages_depth_map = pre_pages_depth_map or {}
+        crawl_storage_state = None
+        crawl_auth_headers = {}
+
         if pre_discovered_urls is not None:
             discovered_urls = pre_discovered_urls
             logger.info(f"Using {len(discovered_urls)} pre-discovered crawl URLs from the event bus.")
@@ -70,6 +77,9 @@ class ManagerAgent(BaseAgent):
                         crawl_data = response.json()
                         discovered_urls = crawl_data.get("pages_discovered", [str(request.url)])
                         sitemaps_found = crawl_data.get("sitemaps_found", [])
+                        crawl_storage_state = crawl_data.get("storage_state")
+                        crawl_auth_headers = crawl_data.get("auth_headers", {})
+                        pages_depth_map = crawl_data.get("pages_depth_map", {})
                         logger.info(f"Crawler returned {len(discovered_urls)} pages: {discovered_urls}")
                 except Exception as e:
                     logger.error(f"Crawler Service failed, defaulting to start URL: {str(e)}")
@@ -83,14 +93,17 @@ class ManagerAgent(BaseAgent):
                 pages_found=len(discovered_urls),
                 pages_total=len(discovered_urls),
                 pages_discovered=discovered_urls,
+                pages_depth_map=pages_depth_map or None,
             )
 
-        # 2.5 Retrieve storage_state if credentials are set
-        storage_state = None
-        if request.credential_config:
+        # 2.5 Resolve storage_state for authenticated audit pages
+        storage_state = pre_storage_state or crawl_storage_state
+        auth_headers = pre_auth_headers or crawl_auth_headers or {}
+        if request.credential_config and not storage_state:
+            # Fallback: if the crawler didn't provide storage_state, perform a login
             from common.config import get_service_url
             crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
-            logger.info("Retrieving active login session state from crawler service for audit...")
+            logger.info("No pre-fetched storage_state. Falling back to /login for audit context...")
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
@@ -101,9 +114,12 @@ class ManagerAgent(BaseAgent):
                     response.raise_for_status()
                     login_data = response.json()
                     storage_state = login_data.get("storage_state")
-                    logger.info("Successfully retrieved storage state from login session.")
+                    auth_headers = login_data.get("headers", {})
+                    logger.info("Successfully retrieved storage state from login fallback.")
             except Exception as e:
-                logger.error(f"Failed to perform login for audit context: {e}")
+                logger.error(f"Failed to perform login fallback for audit context: {e}")
+        elif storage_state:
+            logger.info("Using pre-fetched storage_state from crawler response (no second login needed).")
 
         # 3. Execution — iterative multi-page scanning
         all_violations = []
@@ -140,8 +156,9 @@ class ManagerAgent(BaseAgent):
                         is_login_page = True
                         
                 current_storage_state = None if is_login_page else storage_state
+                current_auth_headers = {} if is_login_page else auth_headers
                 
-                async with browser_manager.get_page(storage_state=current_storage_state) as page:
+                async with browser_manager.get_page(storage_state=current_storage_state, extra_http_headers=current_auth_headers or None) as page:
                     # Navigate
                     await browser_skill.navigate(page, target_url)
                     current_title = await page.title()

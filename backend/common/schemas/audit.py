@@ -50,6 +50,7 @@ class AuditTask(BaseModel):
     pages_total: Optional[int] = 0
     pages_scanned: Optional[List[str]] = None
     pages_discovered: Optional[List[str]] = None
+    pages_depth_map: Optional[Dict[str, int]] = None
     error: Optional[str] = None
     token_usage: Optional[Dict[str, Any]] = None
     summary: Optional[Dict[str, Any]] = None

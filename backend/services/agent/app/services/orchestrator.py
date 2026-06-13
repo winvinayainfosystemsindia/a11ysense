@@ -94,6 +94,9 @@ class AuditOrchestrator:
         discovered_urls = [str(request.url)]
         sitemaps_found = []
         crawl_error = None
+        crawl_storage_state = None
+        crawl_auth_headers = {}
+        crawl_depth_map = {}
         
         if request.depth > 1:
             crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
@@ -116,7 +119,14 @@ class AuditOrchestrator:
                     crawl_data = response.json()
                     discovered_urls = crawl_data.get("pages_discovered", [str(request.url)])
                     sitemaps_found = crawl_data.get("sitemaps_found", [])
+                    crawl_storage_state = crawl_data.get("storage_state")
+                    crawl_auth_headers = crawl_data.get("auth_headers", {})
+                    crawl_depth_map = crawl_data.get("pages_depth_map", {})
                     write_debug(f"Crawler completed. Discovered {len(discovered_urls)} URLs: {discovered_urls}")
+                    if crawl_storage_state:
+                        write_debug("Crawler provided storage_state for auth propagation.")
+                    if crawl_depth_map:
+                        write_debug(f"Crawler provided depth map: {crawl_depth_map}")
             except Exception as e:
                 err_trace = traceback.format_exc()
                 write_debug(f"Crawl failed: {str(e)}\nTraceback:\n{err_trace}")
@@ -132,6 +142,7 @@ class AuditOrchestrator:
                 pages_found=len(discovered_urls),
                 pages_total=len(discovered_urls),
                 pages_discovered=discovered_urls,
+                pages_depth_map=crawl_depth_map or None,
             )
             write_debug("DB states updated to auditing successfully.")
         except Exception as e:
@@ -158,7 +169,10 @@ class AuditOrchestrator:
                 discovered_urls=discovered_urls,
                 sitemaps_found=sitemaps_found,
                 org_id=org_id,
-                proj_id=proj_id
+                proj_id=proj_id,
+                storage_state=crawl_storage_state,
+                auth_headers=crawl_auth_headers,
+                pages_depth_map=crawl_depth_map,
             )
             write_debug("Orchestrated audit completed successfully.")
         except Exception as run_err:
@@ -178,7 +192,10 @@ class AuditOrchestrator:
         discovered_urls: List[str],
         sitemaps_found: List[str],
         org_id: Optional[str] = None,
-        proj_id: Optional[str] = None
+        proj_id: Optional[str] = None,
+        storage_state: Optional[Dict] = None,
+        auth_headers: Optional[Dict[str, str]] = None,
+        pages_depth_map: Optional[Dict[str, int]] = None,
     ):
         """Execute the Multi-Agent Audit using pre-discovered URLs."""
         import httpx
@@ -196,7 +213,10 @@ class AuditOrchestrator:
                 request,
                 task_id=task_id,
                 pre_discovered_urls=discovered_urls,
-                pre_sitemaps_found=sitemaps_found
+                pre_sitemaps_found=sitemaps_found,
+                pre_storage_state=storage_state,
+                pre_auth_headers=auth_headers,
+                pre_pages_depth_map=pages_depth_map,
             )
 
             # Route raw results to Analyzer Service

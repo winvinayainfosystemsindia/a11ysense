@@ -17,7 +17,7 @@ class BrowserManager:
             await self.pw.stop()
 
     @contextlib.asynccontextmanager
-    async def get_page(self, storage_state: dict = None):
+    async def get_page(self, storage_state: dict = None, extra_http_headers: dict = None):
         if not self.browser:
             await self.start()
         
@@ -28,6 +28,8 @@ class BrowserManager:
         }
         if storage_state:
             kwargs["storage_state"] = storage_state
+        if extra_http_headers:
+            kwargs["extra_http_headers"] = extra_http_headers
 
         context = await self.browser.new_context(**kwargs)
         page = await context.new_page()

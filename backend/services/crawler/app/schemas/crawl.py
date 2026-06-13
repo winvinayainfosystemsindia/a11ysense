@@ -1,6 +1,12 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from common.schemas.audit import PageCredentialConfig
+
+class PageDiscovery(BaseModel):
+    """Represents a single discovered page with its crawl depth and auth status."""
+    url: str
+    depth: int = 1
+    is_authenticated: bool = False
 
 class CrawlRequest(BaseModel):
     url: str = Field(..., description="The absolute starting URL for the crawl")
@@ -17,8 +23,12 @@ class CrawlRequest(BaseModel):
 
 class CrawlResponse(BaseModel):
     start_url: str
-    pages_discovered: List[str] = Field(default_factory=list, description="Successfully crawled URLs")
+    pages_discovered: List[str] = Field(default_factory=list, description="Flat list of discovered URLs (backward compat)")
+    pages_with_depth: List[PageDiscovery] = Field(default_factory=list, description="Discovered pages with depth and auth metadata")
+    pages_depth_map: Dict[str, int] = Field(default_factory=dict, description="URL to depth mapping")
     ignored_urls: List[str] = Field(default_factory=list, description="URLs ignored (e.g. domain mismatch, exclusions, robots.txt)")
     failed_urls: Dict[str, str] = Field(default_factory=dict, description="Failed URLs mapped to error details")
     sitemaps_found: List[str] = Field(default_factory=list, description="Discovered sitemaps")
     duration_seconds: float
+    storage_state: Optional[Dict[str, Any]] = Field(default=None, description="Playwright storage state (cookies + localStorage) for auth propagation")
+    auth_headers: Dict[str, str] = Field(default_factory=dict, description="Auth headers (e.g. Bearer token) extracted during login")

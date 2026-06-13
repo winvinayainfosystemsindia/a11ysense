@@ -66,13 +66,17 @@ class AuditProgressRepo:
         pages_found: int,
         pages_total: int,
         pages_discovered: List[str],
+        pages_depth_map: dict = None,
     ) -> None:
         """Record how many pages were discovered after the crawl phase."""
-        self._patch(task_id, {
+        payload = {
             "pages_found": pages_found,
             "pages_total": pages_total,
             "pages_discovered": pages_discovered,
-        })
+        }
+        if pages_depth_map:
+            payload["pages_depth_map"] = pages_depth_map
+        self._patch(task_id, payload)
 
     def increment_completed(self, task_id: str, scanned_url: str) -> None:
         """Atomically increment pages_completed and append the scanned URL."""
@@ -135,6 +139,7 @@ class AuditProgressRepo:
             pages_total=row.pages_total or 0,
             pages_scanned=row.pages_scanned or [],
             pages_discovered=row.pages_discovered or [],
+            pages_depth_map=row.pages_depth_map,
             report_url=row.report_url,
             error=row.error,
             token_usage=row.token_usage,

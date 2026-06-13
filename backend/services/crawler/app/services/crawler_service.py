@@ -103,6 +103,9 @@ class CrawlerService:
                     "pages_discovered": crawl_res.pages_discovered,
                     "sitemaps_found": crawl_res.sitemaps_found,
                     "credential_config": payload.get("credential_config"),
+                    "storage_state": crawl_res.storage_state,
+                    "auth_headers": crawl_res.auth_headers,
+                    "pages_depth_map": crawl_res.pages_depth_map,
                     "error": None
                 }
                 logger.info(

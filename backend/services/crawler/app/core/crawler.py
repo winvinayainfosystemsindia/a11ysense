@@ -9,7 +9,7 @@ from typing import List, Dict, Set
 import httpx
 from bs4 import BeautifulSoup
 
-from app.schemas.crawl import CrawlRequest, CrawlResponse
+from app.schemas.crawl import CrawlRequest, CrawlResponse, PageDiscovery
 
 logger = logging.getLogger(__name__)
 
@@ -182,10 +182,12 @@ class WebCrawler:
         
         # Crawl status sets
         self.visited_urls: Set[str] = set()
-        self.pages_discovered: Set[str] = set()
+        self.pages_discovered: Dict[str, int] = {}  # url -> depth
         self.ignored_urls: Set[str] = set()
         self.failed_urls: Dict[str, str] = {}
         self.sitemaps_found: List[str] = []
+        self.storage_state: Dict = None  # Playwright storage state for auth propagation
+        self.auth_headers: Dict[str, str] = {}  # Auth headers extracted during login
         
         self.default_delay = request.crawl_delay
         self.last_request_time = 0.0
@@ -220,6 +222,31 @@ class WebCrawler:
             if path.endswith(ext):
                 return True
         return False
+
+    def _build_response(self, duration: float) -> CrawlResponse:
+        """Build CrawlResponse with depth metadata, storage_state, and backward-compat flat URL list."""
+        has_creds = self.request.credential_config is not None
+        login_url = None
+        if has_creds and self.request.credential_config.login_url:
+            login_url = normalize_url(self.request.credential_config.login_url)
+
+        pages_with_depth = []
+        for url, depth in self.pages_discovered.items():
+            is_auth = has_creds and (url != login_url) if login_url else False
+            pages_with_depth.append(PageDiscovery(url=url, depth=depth, is_authenticated=is_auth))
+
+        return CrawlResponse(
+            start_url=self.start_url,
+            pages_discovered=list(self.pages_discovered.keys()),
+            pages_with_depth=pages_with_depth,
+            pages_depth_map=dict(self.pages_discovered),
+            ignored_urls=list(self.ignored_urls),
+            failed_urls=self.failed_urls,
+            sitemaps_found=self.sitemaps_found,
+            duration_seconds=round(duration, 2),
+            storage_state=self.storage_state,
+            auth_headers=self.auth_headers,
+        )
 
     async def crawl(self) -> CrawlResponse:
         if self.request.credential_config:
@@ -370,7 +397,7 @@ class WebCrawler:
                         self.ignored_urls.add(normalized_final)
                         continue
                         
-                    self.pages_discovered.add(normalized_final)
+                    self.pages_discovered[normalized_final] = depth
                     
                     # Verify Content-Type before parsing HTML body
                     content_type = response.headers.get("content-type", "").lower()
@@ -398,14 +425,7 @@ class WebCrawler:
                     self.failed_urls[normalized_url] = f"Internal Exception: {str(exc)}"
                     
         duration = time.time() - start_time
-        return CrawlResponse(
-            start_url=self.start_url,
-            pages_discovered=list(self.pages_discovered),
-            ignored_urls=list(self.ignored_urls),
-            failed_urls=self.failed_urls,
-            sitemaps_found=self.sitemaps_found,
-            duration_seconds=round(duration, 2)
-        )
+        return self._build_response(duration)
 
     async def crawl_with_playwright(self) -> CrawlResponse:
         start_time = time.time()
@@ -482,7 +502,14 @@ class WebCrawler:
                     landed_url = landed
                 # Inject JWT/Bearer tokens extracted from localStorage into all subsequent page requests
                 if headers_ext:
+                    self.auth_headers = headers_ext
                     await context.set_extra_http_headers(headers_ext)
+                # Capture storage state for propagation to the audit agent
+                try:
+                    self.storage_state = await context.storage_state()
+                    logger.info("Captured Playwright storage state after form login.")
+                except Exception as ss_err:
+                    logger.warning(f"Failed to capture storage state: {ss_err}")
             elif config.auth_type == "cookie":
                 # Direct cookie injection
                 pw_cookies = []
@@ -508,7 +535,8 @@ class WebCrawler:
                 # Token header injection
                 token = config.password or config.username
                 if token:
-                    await context.set_extra_http_headers({"Authorization": f"Bearer {token}"})
+                    self.auth_headers = {"Authorization": f"Bearer {token}"}
+                    await context.set_extra_http_headers(self.auth_headers)
 
             queue = deque()
             
@@ -622,10 +650,10 @@ class WebCrawler:
                     if normalized_current != normalized_url:
                         self.visited_urls.add(normalized_current)
 
-                    self.pages_discovered.add(normalized_current)
+                    self.pages_discovered[normalized_current] = depth
                     
                     if depth < self.max_depth:
-                        # Extract all links
+                        # Extract all links via URL-depth discovery (anchor hrefs)
                         links = await page.evaluate("""() => {
                             const anchors = Array.from(document.querySelectorAll('a[href]'));
                             return anchors.map(a => a.href);
@@ -638,81 +666,10 @@ class WebCrawler:
                             if normalized_resolved not in self.visited_urls:
                                 queue.append((normalized_resolved, depth + 1))
                                 
-                        # Dynamic sidebar menu click route discovery (for SPAs).
-                        # Uses textContent (not innerText) so items hidden via CSS
-                        # (e.g. collapsed MUI mini-drawer) are still captured.
-                        # Clicks via JS dispatchEvent so hidden elements are reachable.
-                        try:
-                            menu_items = await page.evaluate("""() => {
-                                const items = [];
-                                const seenTexts = new Set();
-                                const seenEls = new WeakSet();
-                                const targetSel = 'nav [role="button"], aside [role="button"], ' +
-                                    '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
-                                    'nav button, aside button, [role="navigation"] [role="button"]';
-                                const elts = document.querySelectorAll(targetSel);
-                                for (const el of elts) {
-                                    if (seenEls.has(el)) continue;
-                                    seenEls.add(el);
-                                    // textContent works even when CSS hides the text
-                                    const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                                    if (text && text.length > 1 && text.length < 60 && !seenTexts.has(text)) {
-                                        seenTexts.add(text);
-                                        items.push({ text: text });
-                                    }
-                                }
-                                return items;
-                            }""")
-
-                            logger.info(f"[Playwright Crawl] Nav items on {normalized_current}: {[m['text'] for m in menu_items]}")
-
-                            for item in menu_items:
-                                try:
-                                    # Click via JS so it works even when text is CSS-hidden
-                                    clicked = await page.evaluate("""(targetText) => {
-                                        const targetSel = 'nav [role="button"], aside [role="button"], ' +
-                                            '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
-                                            'nav button, aside button, [role="navigation"] [role="button"]';
-                                        const elts = document.querySelectorAll(targetSel);
-                                        for (const el of elts) {
-                                            const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                                            if (t === targetText) {
-                                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                                                return true;
-                                            }
-                                        }
-                                        return false;
-                                    }""", item['text'])
-
-                                    if not clicked:
-                                        continue
-
-                                    logger.info(f"[Playwright Crawl] Clicking menu item '{item['text']}' to discover route...")
-                                    await page.wait_for_timeout(2000)  # Wait for SPA route transition
-
-                                    new_url = page.url
-                                    norm_new = normalize_url(new_url)
-                                    if norm_new != normalized_current and self.is_same_domain(norm_new) and not self.is_excluded(norm_new):
-                                        logger.info(f"[Playwright Crawl] Discovered route: {norm_new} from '{item['text']}'")
-                                        if norm_new not in self.visited_urls:
-                                            queue.append((norm_new, depth + 1))
-
-                                    # Navigate back to the page being analysed.
-                                    if normalize_url(page.url) != normalized_current:
-                                        await page.goto(normalized_current, wait_until="domcontentloaded")
-                                        try:
-                                            await page.wait_for_load_state("networkidle", timeout=10000)
-                                        except Exception:
-                                            pass
-                                        try:
-                                            await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=8000)
-                                            await page.wait_for_timeout(3000)
-                                        except Exception:
-                                            await page.wait_for_timeout(5000)
-                                except Exception as click_err:
-                                    logger.debug(f"Failed clicking menu item '{item['text']}': {click_err}")
-                        except Exception as menu_err:
-                            logger.debug(f"Error scanning dynamic menu items: {menu_err}")
+                        # NOTE: Click-based SPA route discovery has been removed.
+                        # URL-depth discovery via anchor href extraction is more reliable
+                        # and deterministic. Click-based discovery was unreliable for
+                        # collapsed menus, dynamic loading, and non-standard SPA routing.
                                 
                 except Exception as exc:
                     logger.error(f"[Playwright Crawl] Failed on {normalized_url}: {exc}")
@@ -733,16 +690,13 @@ class WebCrawler:
             raise outer_exc
 
         # Ensure the start URL and the login URL are in discovered pages
-        self.pages_discovered.add(normalize_url(self.start_url))
+        norm_start = normalize_url(self.start_url)
+        if norm_start not in self.pages_discovered:
+            self.pages_discovered[norm_start] = 0
         if self.request.credential_config and self.request.credential_config.login_url:
-            self.pages_discovered.add(normalize_url(self.request.credential_config.login_url))
+            norm_login = normalize_url(self.request.credential_config.login_url)
+            if norm_login not in self.pages_discovered:
+                self.pages_discovered[norm_login] = 0
 
         duration = time.time() - start_time
-        return CrawlResponse(
-            start_url=self.start_url,
-            pages_discovered=list(self.pages_discovered),
-            ignored_urls=list(self.ignored_urls),
-            failed_urls=self.failed_urls,
-            sitemaps_found=self.sitemaps_found,
-            duration_seconds=round(duration, 2)
-        )
+        return self._build_response(duration)

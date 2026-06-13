@@ -19,6 +19,7 @@ interface UrlsListTabProps {
 const COLUMNS: ColumnDefinition<any>[] = [
   { id: 'urlIndex', label: '#', sortable: false, width: '80px' },
   { id: 'page_url', label: 'PAGE URL', sortable: false },
+  { id: 'depth', label: 'DEPTH', sortable: false, width: '100px' },
   { id: 'status', label: 'STATUS', sortable: false, width: '150px' },
   { id: 'actions', label: 'ACTION', sortable: false, align: 'right', width: '120px' }
 ];
@@ -43,6 +44,8 @@ export const UrlsListTab: React.FC<UrlsListTabProps> = ({
   const renderRow = (item: { urlStr: string; urlIndex: number }) => {
     const isScanned = taskDetail.pages_scanned?.includes(item.urlStr) || 
       taskDetail.pages_scanned?.some(scanned => scanned === item.urlStr || scanned.replace(/\/$/, '') === item.urlStr.replace(/\/$/, ''));
+    const pageDepth = taskDetail.pages_depth_map?.[item.urlStr] ?? 1;
+
     return (
       <TableRow key={item.urlStr} hover>
         <TableCell sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
@@ -50,6 +53,14 @@ export const UrlsListTab: React.FC<UrlsListTabProps> = ({
         </TableCell>
         <TableCell sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
           {item.urlStr}
+        </TableCell>
+        <TableCell>
+          <Chip
+            label={`Depth ${pageDepth}`}
+            variant="outlined"
+            size="small"
+            sx={{ fontWeight: '600', borderRadius: '6px', fontSize: '0.65rem' }}
+          />
         </TableCell>
         <TableCell>
           <Chip

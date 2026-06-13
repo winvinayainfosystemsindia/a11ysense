@@ -127,6 +127,7 @@ class AuditProgress(Base):
     # JSON arrays of URL strings
     pages_scanned = Column(JSON, default=list)
     pages_discovered = Column(JSON, default=list)
+    pages_depth_map = Column(JSON, nullable=True)  # {url: depth} mapping from crawler
     depth = Column(Integer, default=1, nullable=True)
     # Completion payload
     report_url = Column(String, nullable=True)
