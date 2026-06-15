@@ -32,3 +32,5 @@ class CrawlResponse(BaseModel):
     duration_seconds: float
     storage_state: Optional[Dict[str, Any]] = Field(default=None, description="Playwright storage state (cookies + localStorage) for auth propagation")
     auth_headers: Dict[str, str] = Field(default_factory=dict, description="Auth headers (e.g. Bearer token) extracted during login")
+    url_to_menu_text: Dict[str, str] = Field(default_factory=dict, description="Discovered routes mapped to their sidebar menu text")
+

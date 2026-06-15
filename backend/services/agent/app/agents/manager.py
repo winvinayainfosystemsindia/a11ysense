@@ -29,6 +29,7 @@ class ManagerAgent(BaseAgent):
         pre_storage_state: dict = None,
         pre_auth_headers: dict = None,
         pre_pages_depth_map: dict = None,
+        pre_url_to_menu_text: dict = None,
     ) -> AuditResult:
         """
         Orchestrates the multi-agent audit process.
@@ -46,6 +47,31 @@ class ManagerAgent(BaseAgent):
         pages_depth_map = pre_pages_depth_map or {}
         crawl_storage_state = None
         crawl_auth_headers = {}
+        url_to_menu_text = pre_url_to_menu_text or {}
+        
+        import urllib.parse
+        def local_normalize(url_str: str) -> str:
+            try:
+                parsed = urllib.parse.urlparse(url_str)
+                scheme = parsed.scheme.lower()
+                netloc = parsed.netloc.lower()
+                if scheme == "http" and netloc.endswith(":80"):
+                    netloc = netloc[:-3]
+                elif scheme == "https" and netloc.endswith(":443"):
+                    netloc = netloc[:-4]
+                path = parsed.path
+                if not path or path == "/":
+                    path = ""
+                elif len(path) > 1 and path.endswith("/"):
+                    path = path[:-1]
+                query = ""
+                if parsed.query:
+                    params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+                    params.sort()
+                    query = urllib.parse.urlencode(params)
+                return urllib.parse.urlunparse((scheme, netloc, path, parsed.params, query, ""))
+            except Exception:
+                return url_str
 
         if pre_discovered_urls is not None:
             discovered_urls = pre_discovered_urls
@@ -70,8 +96,8 @@ class ManagerAgent(BaseAgent):
                         }
                         if request.credential_config:
                             payload["credential_config"] = request.credential_config.model_dump(mode="json")
-                        # Authenticated Playwright crawls can take several minutes; allow up to 5 minutes
-                        crawl_timeout = 300.0 if request.credential_config else 60.0
+                        # Authenticated Playwright crawls can take several minutes; allow up to 10 minutes
+                        crawl_timeout = 600.0 if request.credential_config else 180.0
                         response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=crawl_timeout)
                         response.raise_for_status()
                         crawl_data = response.json()
@@ -80,6 +106,7 @@ class ManagerAgent(BaseAgent):
                         crawl_storage_state = crawl_data.get("storage_state")
                         crawl_auth_headers = crawl_data.get("auth_headers", {})
                         pages_depth_map = crawl_data.get("pages_depth_map", {})
+                        url_to_menu_text = crawl_data.get("url_to_menu_text", {})
                         logger.info(f"Crawler returned {len(discovered_urls)} pages: {discovered_urls}")
                 except Exception as e:
                     logger.error(f"Crawler Service failed, defaulting to start URL: {str(e)}")
@@ -159,8 +186,96 @@ class ManagerAgent(BaseAgent):
                 current_auth_headers = {} if is_login_page else auth_headers
                 
                 async with browser_manager.get_page(storage_state=current_storage_state, extra_http_headers=current_auth_headers or None) as page:
-                    # Navigate
-                    await browser_skill.navigate(page, target_url)
+                    # Determine how to navigate to the target URL
+                    target_url_norm = local_normalize(target_url)
+                    target_menu_text = url_to_menu_text.get(target_url_norm) if url_to_menu_text else None
+                    
+                    if target_menu_text and target_url_norm != local_normalize(str(request.url)):
+                        logger.info(f"Using client-side navigation. Loading entrypoint URL first: {request.url}")
+                        await browser_skill.navigate(page, str(request.url))
+                        
+                        # Wait for entrypoint to be ready
+                        try:
+                            await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                        except Exception:
+                            pass
+                        try:
+                            await page.wait_for_selector("li, nav a, aside a, main, #root, #app", state="visible", timeout=15000)
+                            await page.wait_for_timeout(3000)
+                        except Exception:
+                            await page.wait_for_timeout(5000)
+                        
+                        # Click the menu item client-side
+                        logger.info(f"Clicking menu item '{target_menu_text}' to navigate client-side to {target_url}")
+                        clicked = await page.evaluate("""(targetMenuText) => {
+                            const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                'nav button, aside button, [role="navigation"] [role="button"], ' +
+                                'nav a, aside a, .MuiDrawer-root a';
+                            const elts = document.querySelectorAll(targetSel);
+                            
+                            // First, try to find the menu item directly
+                            for (const el of elts) {
+                                const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                if (t === targetMenuText) {
+                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                    return true;
+                                }
+                            }
+                            
+                            // If it's not found directly (maybe sub-menu is collapsed), expand all collapsed toggles
+                            for (const el of elts) {
+                                const isExpanded = el.getAttribute('aria-expanded') === 'true' || 
+                                                   el.classList.contains('Mui-expanded');
+                                if (!isExpanded) {
+                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                }
+                            }
+                            
+                            // Try again
+                            const reElts = document.querySelectorAll(targetSel);
+                            for (const el of reElts) {
+                                const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                if (t === targetMenuText) {
+                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }""", target_menu_text)
+                        
+                        if clicked:
+                            await page.wait_for_timeout(3000)
+                            # Wait for loaders on the new page
+                            try:
+                                await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                            except Exception:
+                                pass
+                            
+                            current_url_norm = local_normalize(page.url)
+                            if current_url_norm != target_url_norm:
+                                logger.warning(f"Client-side navigation clicked, but URL is {page.url} instead of {target_url}. Falling back to direct page.goto.")
+                                await browser_skill.navigate(page, target_url)
+                        else:
+                            logger.warning(f"Could not click menu item '{target_menu_text}'. Falling back to direct page.goto.")
+                            await browser_skill.navigate(page, target_url)
+                    else:
+                        # Fallback to direct navigation
+                        await browser_skill.navigate(page, target_url)
+
+                    # Wait for React SPA to render and load completely (disappearing spinners, loading text)
+                    try:
+                        await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                    except Exception:
+                        pass
+                    # Wait for navigation/content elements to be visible
+                    try:
+                        await page.wait_for_selector("li, nav a, aside a, main, #root, #app", state="visible", timeout=15000)
+                        # Give it a moment to finish rendering
+                        await page.wait_for_timeout(3000)
+                    except Exception:
+                        await page.wait_for_timeout(5000)
+
                     current_title = await page.title()
 
                     if idx == 0:

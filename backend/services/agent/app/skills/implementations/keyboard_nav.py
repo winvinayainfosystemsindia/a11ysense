@@ -12,6 +12,8 @@ class KeyboardNavSkill:
     
     async def run_keyboard_test(self, page: Page) -> dict:
         logger.info("Running Keyboard Navigation accessibility checks")
+        violations = []
+        passes = []
         
         # 1. Reset focus to the top of the page
         try:
@@ -74,8 +76,6 @@ class KeyboardNavSkill:
         # We tab through elements and record their properties
         active_elements = []
         max_tabs = 50  # Prevent infinite loop
-        violations = []
-        passes = []
 
         previous_rect = None
         previous_active = None

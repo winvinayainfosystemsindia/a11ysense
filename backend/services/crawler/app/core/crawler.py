@@ -188,6 +188,7 @@ class WebCrawler:
         self.sitemaps_found: List[str] = []
         self.storage_state: Dict = None  # Playwright storage state for auth propagation
         self.auth_headers: Dict[str, str] = {}  # Auth headers extracted during login
+        self.url_to_menu_text: Dict[str, str] = {}  # Discovered route -> menu text mapping
         
         self.default_delay = request.crawl_delay
         self.last_request_time = 0.0
@@ -246,6 +247,7 @@ class WebCrawler:
             duration_seconds=round(duration, 2),
             storage_state=self.storage_state,
             auth_headers=self.auth_headers,
+            url_to_menu_text=dict(self.url_to_menu_text),
         )
 
     async def crawl(self) -> CrawlResponse:
@@ -483,7 +485,7 @@ class WebCrawler:
                 await context.add_cookies(pw_cookies)
 
             page = await context.new_page()
-            page.set_default_timeout(60000)
+            page.set_default_timeout(120000)
             
             # Perform login steps if config is form auth
             landed_url = self.start_url
@@ -537,6 +539,74 @@ class WebCrawler:
                 if token:
                     self.auth_headers = {"Authorization": f"Bearer {token}"}
                     await context.set_extra_http_headers(self.auth_headers)
+
+            # Track dynamic collapsible parent menu items that do not change the URL when clicked (self-learning toggle scanner)
+            expanded_toggle_texts = set()
+            item_to_parent = {}
+
+            async def ensure_toggle_expanded(toggle_text):
+                if not toggle_text:
+                    return
+                grandparent = item_to_parent.get(toggle_text)
+                if grandparent:
+                    await ensure_toggle_expanded(grandparent)
+                
+                try:
+                    is_expanded = await page.evaluate("""(text) => {
+                        const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                            '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                            'nav button, aside button, [role="navigation"] [role="button"], ' +
+                            'nav a, aside a, .MuiDrawer-root a';
+                        const elts = document.querySelectorAll(targetSel);
+                        for (const el of elts) {
+                            const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                            if (t === text) {
+                                const hasAriaExpanded = el.getAttribute('aria-expanded') === 'true' || 
+                                                       el.classList.contains('Mui-expanded');
+                                const parentExpanded = el.parentElement && (
+                                    el.parentElement.getAttribute('aria-expanded') === 'true' ||
+                                    el.parentElement.classList.contains('Mui-expanded')
+                                );
+                                return !!(hasAriaExpanded || parentExpanded);
+                            }
+                        }
+                        return false;
+                    }""", toggle_text)
+                    
+                    if not is_expanded:
+                        logger.info(f"[Playwright Crawl] Ensuring parent toggle '{toggle_text}' is expanded...")
+                        clicked = await page.evaluate("""(text) => {
+                            const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                'nav button, aside button, [role="navigation"] [role="button"], ' +
+                                'nav a, aside a, .MuiDrawer-root a';
+                            const elts = document.querySelectorAll(targetSel);
+                            for (const el of elts) {
+                                const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                if (t === text) {
+                                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }""", toggle_text)
+                        
+                        if clicked:
+                            await page.wait_for_timeout(800)
+                        else:
+                            locator = page.get_by_text(toggle_text, exact=True).first
+                            if await locator.count() > 0:
+                                await locator.click(timeout=3000)
+                                await page.wait_for_timeout(800)
+                except Exception as err:
+                    logger.debug(f"[Playwright Crawl] Failed to expand toggle '{toggle_text}': {err}")
+
+            async def restore_toggles():
+                if not expanded_toggle_texts:
+                    return
+                logger.info(f"[Playwright Crawl] Restoring expanded menu toggles: {expanded_toggle_texts}")
+                for toggle_text in list(expanded_toggle_texts):
+                    await ensure_toggle_expanded(toggle_text)
 
             queue = deque()
             
@@ -592,23 +662,75 @@ class WebCrawler:
                 
                 try:
                     logger.info(f"[Playwright Crawl] Navigating to: {normalized_url} at depth {depth}")
-                    response = await page.goto(normalized_url, wait_until="domcontentloaded")
+                    # Try to navigate client-side first to avoid SPA full-page reload bugs
+                    navigated_client_side = False
+                    if normalize_url(page.url) != normalized_url:
+                        # 1. Restore/expand any dynamic menu toggles
+                        await restore_toggles()
+                        
+                        # 2. Check if we have mapped menu text for the target URL
+                        target_menu_text = self.url_to_menu_text.get(normalized_url)
+                        
+                        # Attempt click-based client-side navigation
+                        try:
+                            clicked = await page.evaluate("""(args) => {
+                                const targetUrl = args.targetUrl;
+                                const targetMenuText = args.targetMenuText;
+                                const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                    '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                    '.MuiListItemButton-root, .MuiMenuItem-root, [role="menuitem"], ' +
+                                    'nav button, aside button, [role="navigation"] [role="button"], ' +
+                                    'nav a, aside a, .MuiDrawer-root a, a[href]';
+                                const elts = document.querySelectorAll(targetSel);
+                                
+                                // First try by menu text if available
+                                if (targetMenuText) {
+                                    for (const el of elts) {
+                                        const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                        if (t === targetMenuText) {
+                                            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                            return true;
+                                        }
+                                    }
+                                }
+                                
+                                // Second try by exact href
+                                for (const el of elts) {
+                                    if (el.href === targetUrl) {
+                                        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }""", {"targetUrl": normalized_url, "targetMenuText": target_menu_text})
+                            
+                            if clicked:
+                                await page.wait_for_timeout(2000)
+                                if normalize_url(page.url) == normalized_url:
+                                    logger.info(f"[Playwright Crawl] Successfully navigated client-side to: {normalized_url}")
+                                    navigated_client_side = True
+                        except Exception as e:
+                            logger.debug(f"[Playwright Crawl] Failed client-side navigation attempt: {e}")
+                    
+                    response = None
+                    if not navigated_client_side and normalize_url(page.url) != normalized_url:
+                        logger.info(f"[Playwright Crawl] Client-side navigation unavailable/failed. Falling back to page.goto for: {normalized_url}")
+                        response = await page.goto(normalized_url, wait_until="domcontentloaded")
 
-                    # Wait for React SPA to render navigation content.
-                    # Many SPAs have two-stage loading: first API call (auth check) fires
-                    # networkidle early, then a second wave (dashboard/page data) renders
-                    # the actual nav items. We wait for networkidle then watch for li/nav
-                    # elements to appear, which is the reliable signal that content is ready.
+                    # Wait for React SPA to render and load completely
+                    # Wait for any loaders or spinners to disappear
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=10000)
+                        await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
                     except Exception:
                         pass
+                    # Wait for key elements to be visible
                     try:
-                        await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=8000)
-                        # React fills text content progressively; give it a moment to finish
+                        await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=15000)
                         await page.wait_for_timeout(3000)
                     except Exception:
                         await page.wait_for_timeout(5000)
+
+                    await restore_toggles()
 
                     # Mid-crawl login detection: if this page is showing a login form, authenticate and continue
                     if config and config.auth_type == "form":
@@ -652,8 +774,8 @@ class WebCrawler:
 
                     self.pages_discovered[normalized_current] = depth
                     
+                    # Extract all links via URL-depth discovery (anchor hrefs)
                     if depth < self.max_depth:
-                        # Extract all links via URL-depth discovery (anchor hrefs)
                         links = await page.evaluate("""() => {
                             const anchors = Array.from(document.querySelectorAll('a[href]'));
                             return anchors.map(a => a.href);
@@ -665,12 +787,225 @@ class WebCrawler:
                             normalized_resolved = normalize_url(href)
                             if normalized_resolved not in self.visited_urls:
                                 queue.append((normalized_resolved, depth + 1))
+
+                    # Dynamic sidebar menu click route discovery (for SPAs)
+                    # This runs regardless of depth — sidebar items are sibling-level
+                    # navigation, not child pages, and are the primary discovery
+                    # mechanism for React SPAs where routes use onClick + navigate().
+                    try:
+                        # Helper to scan and return current menu items
+                        async def get_menu_items():
+                            return await page.evaluate("""() => {
+                                const items = [];
+                                const seenTexts = new Set();
+                                const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                    '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                    '.MuiListItemButton-root, .MuiMenuItem-root, [role="menuitem"], ' +
+                                    'nav button, aside button, [role="navigation"] [role="button"], ' +
+                                    'nav a, aside a, .MuiDrawer-root a';
+                                const elts = document.querySelectorAll(targetSel);
+                                elts.forEach((el) => {
+                                    const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                    const lowerText = text.toLowerCase();
+                                    if (text && text.length > 1 && text.length < 60 && 
+                                        !lowerText.includes("log out") && !lowerText.includes("logout") && 
+                                        !lowerText.includes("sign out") && !lowerText.includes("signout") && 
+                                        !lowerText.includes("exit")) {
+                                        if (!seenTexts.has(text)) {
+                                            seenTexts.add(text);
+                                            items.push({ text: text });
+                                        }
+                                    }
+                                });
+                                return items;
+                            }""")
+
+                        # Pre-extract all hrefs from sidebar/nav before click loop
+                        # This catches React Router <Link> components that render as <a>
+                        try:
+                            sidebar_hrefs = await page.evaluate("""() => {
+                                const sel = 'nav a[href], aside a[href], .MuiDrawer-root a[href], ' +
+                                    '[role="navigation"] a[href], .MuiList-root a[href]';
+                                const anchors = document.querySelectorAll(sel);
+                                const results = [];
+                                anchors.forEach(a => {
+                                    const href = a.href;
+                                    const text = (a.textContent || '').replace(/\\s+/g, ' ').trim();
+                                    if (href && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('#')) {
+                                        results.push({ href: href, text: text });
+                                    }
+                                });
+                                return results;
+                            }""")
+                            for item in sidebar_hrefs:
+                                href = item.get('href', '').strip()
+                                text = item.get('text', '')
+                                if not href:
+                                    continue
+                                norm_href = normalize_url(href)
+                                if self.is_same_domain(norm_href) and not self.is_excluded(norm_href) and not self.is_non_html(norm_href):
+                                    if norm_href not in self.visited_urls and norm_href not in self.pages_discovered:
+                                        logger.info(f"[Playwright Crawl] Pre-extracted sidebar href: {norm_href} ('{text}')")
+                                        if text:
+                                            self.url_to_menu_text[norm_href] = text
+                                        queue.append((norm_href, depth))
+                        except Exception as href_err:
+                            logger.debug(f"[Playwright Crawl] Sidebar href pre-extraction failed: {href_err}")
+
+                        clicked_texts = set()
+                        menu_items = [{"text": m["text"], "parent_toggle": None} for m in await get_menu_items()]
+                        logger.info(f"[Playwright Crawl] Sidebar menu items found: {[m['text'] for m in menu_items]}")
+                        
+                        idx = 0
+                        while idx < len(menu_items):
+                            item = menu_items[idx]
+                            idx += 1
+                            item_text = item['text']
+                            parent_toggle = item.get('parent_toggle')
+                            if item_text in clicked_texts:
+                                continue
+                            clicked_texts.add(item_text)
+                            
+                            if parent_toggle:
+                                await ensure_toggle_expanded(parent_toggle)
+                            
+                            logger.info(f"[Playwright Crawl] Clicking menu item '{item_text}' to discover route...")
+                            eval_res = await page.evaluate("""(targetText) => {
+                                const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                    '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                    '.MuiListItemButton-root, .MuiMenuItem-root, [role="menuitem"], ' +
+                                    'nav button, aside button, [role="navigation"] [role="button"], ' +
+                                    'nav a, aside a, .MuiDrawer-root a';
+                                const elts = document.querySelectorAll(targetSel);
+                                for (const el of elts) {
+                                    const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                    if (t === targetText) {
+                                        const href = el.getAttribute('href') || (el.closest('a') ? el.closest('a').getAttribute('href') : null);
+                                        let isCurrentLink = false;
+                                        if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+                                            try {
+                                                const absoluteHref = new URL(href, window.location.href).href;
+                                                const normCurrent = window.location.href.split('#')[0].split('?')[0].replace(/\/$/, '');
+                                                const normAbsolute = absoluteHref.split('#')[0].split('?')[0].replace(/\/$/, '');
+                                                if (normCurrent === normAbsolute) {
+                                                    isCurrentLink = true;
+                                                }
+                                            } catch (e) {}
+                                        }
+                                        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                        return { clicked: true, isCurrentLink: isCurrentLink };
+                                    }
+                                }
+                                return { clicked: false, isCurrentLink: false };
+                            }""", item_text)
+                            
+                            clicked = eval_res.get("clicked", False)
+                            is_current_link = eval_res.get("isCurrentLink", False)
+                            
+                            # If evaluate couldn't find the element, it may be because a
+                            # parent toggle collapsed. Restore toggles, wait, then retry.
+                            if not clicked:
+                                await restore_toggles()
+                                await page.wait_for_timeout(1500)
                                 
-                        # NOTE: Click-based SPA route discovery has been removed.
-                        # URL-depth discovery via anchor href extraction is more reliable
-                        # and deterministic. Click-based discovery was unreliable for
-                        # collapsed menus, dynamic loading, and non-standard SPA routing.
+                                # Retry the evaluate after toggles are restored
+                                try:
+                                    eval_res2 = await page.evaluate("""(targetText) => {
+                                        const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                                            '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                                            '.MuiListItemButton-root, .MuiMenuItem-root, [role="menuitem"], ' +
+                                            'nav button, aside button, [role="navigation"] [role="button"], ' +
+                                            'nav a, aside a, .MuiDrawer-root a';
+                                        const elts = document.querySelectorAll(targetSel);
+                                        for (const el of elts) {
+                                            const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                                            if (t === targetText) {
+                                                el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                                return { clicked: true };
+                                            }
+                                        }
+                                        return { clicked: false };
+                                    }""", item_text)
+                                    clicked = eval_res2.get("clicked", False)
+                                    if clicked:
+                                        logger.info(f"[Playwright Crawl] Clicked '{item_text}' after restoring toggles")
+                                except Exception:
+                                    pass
+                            
+                            # Final fallback: Playwright's locator-based click
+                            if not clicked:
+                                try:
+                                    locator = page.get_by_text(item_text, exact=True).first
+                                    if await locator.count() > 0:
+                                        await locator.click(timeout=3000)
+                                        clicked = True
+                                        logger.info(f"[Playwright Crawl] Clicked '{item_text}' via Playwright locator fallback")
+                                except Exception as loc_err:
+                                    logger.debug(f"[Playwright Crawl] Locator fallback also failed for '{item_text}': {loc_err}")
+                            
+                            if not clicked:
+                                logger.debug(f"[Playwright Crawl] Could not click '{item_text}' - element not found in DOM")
+                                continue
                                 
+                            await page.wait_for_timeout(1500) # Wait for route transition
+                            
+                            new_url = page.url
+                            norm_new = normalize_url(new_url)
+                            
+                            if norm_new != normalized_current:
+                                if self.is_same_domain(norm_new) and not self.is_excluded(norm_new):
+                                    logger.info(f"[Playwright Crawl] Discovered route: {norm_new} from '{item_text}'")
+                                    self.url_to_menu_text[norm_new] = item_text
+                                    # Immediately register in pages_discovered so it's counted
+                                    # even if later queue processing has navigation issues
+                                    if norm_new not in self.pages_discovered:
+                                        self.pages_discovered[norm_new] = depth
+                                if norm_new not in self.visited_urls:
+                                    queue.append((norm_new, depth))
+                                    
+                                # Navigate back to original page by direct goto (more reliable than go_back for SPAs)
+                                try:
+                                    await page.goto(normalized_current, wait_until="domcontentloaded")
+                                except Exception as nav_err:
+                                    logger.debug(f"[Playwright Crawl] Back-navigation failed: {nav_err}")
+                                
+                                # Wait for page to be ready after navigating back
+                                try:
+                                    await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=10000)
+                                except Exception:
+                                    pass
+                                try:
+                                    await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=8000)
+                                except Exception:
+                                    pass
+                                await page.wait_for_timeout(1500)
+                                await restore_toggles()
+                            else:
+                                # URL did not change -> it might have expanded a sub-menu!
+                                if not is_current_link and item_text.lower() not in ("home", "dashboard"):
+                                    if item_text not in expanded_toggle_texts:
+                                        logger.info(f"[Playwright Crawl] Menu toggle detected: '{item_text}'")
+                                        expanded_toggle_texts.add(item_text)
+                                        # Wait for sub-menu animation to complete after toggle expansion
+                                        await page.wait_for_timeout(1500)
+                                else:
+                                    logger.info(f"[Playwright Crawl] Clicked link pointing to current page or home/dashboard: '{item_text}' (not treated as toggle)")
+                                
+                                # Scan for new sub-menu items that appeared!
+                                sub_items = await get_menu_items()
+                                new_sub_count = 0
+                                for sub in sub_items:
+                                    sub_text = sub['text']
+                                    if sub_text not in clicked_texts and not any(m['text'] == sub_text for m in menu_items):
+                                        menu_items.append({"text": sub_text, "parent_toggle": item_text})
+                                        item_to_parent[sub_text] = item_text
+                                        new_sub_count += 1
+                                if new_sub_count > 0:
+                                    logger.info(f"[Playwright Crawl] Found {new_sub_count} new sub-menu items after expanding '{item_text}'")
+                                        
+                    except Exception as click_err:
+                        logger.error(f"[Playwright Crawl] Error clicking menu items on {normalized_current}: {click_err}")
+
                 except Exception as exc:
                     logger.error(f"[Playwright Crawl] Failed on {normalized_url}: {exc}")
                     self.failed_urls[normalized_url] = str(exc)

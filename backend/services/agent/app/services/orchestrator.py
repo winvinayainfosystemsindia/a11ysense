@@ -97,6 +97,7 @@ class AuditOrchestrator:
         crawl_storage_state = None
         crawl_auth_headers = {}
         crawl_depth_map = {}
+        crawl_url_to_menu_text = {}
         
         if request.depth > 1:
             crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
@@ -112,7 +113,7 @@ class AuditOrchestrator:
                     }
                     if request.credential_config:
                         payload["credential_config"] = request.credential_config.model_dump(mode="json")
-                    crawl_timeout = 300.0 if request.credential_config else 60.0
+                    crawl_timeout = 600.0 if request.credential_config else 180.0
                     response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=crawl_timeout)
                     write_debug(f"Crawler response status: {response.status_code}")
                     response.raise_for_status()
@@ -122,6 +123,7 @@ class AuditOrchestrator:
                     crawl_storage_state = crawl_data.get("storage_state")
                     crawl_auth_headers = crawl_data.get("auth_headers", {})
                     crawl_depth_map = crawl_data.get("pages_depth_map", {})
+                    crawl_url_to_menu_text = crawl_data.get("url_to_menu_text", {})
                     write_debug(f"Crawler completed. Discovered {len(discovered_urls)} URLs: {discovered_urls}")
                     if crawl_storage_state:
                         write_debug("Crawler provided storage_state for auth propagation.")
@@ -173,6 +175,7 @@ class AuditOrchestrator:
                 storage_state=crawl_storage_state,
                 auth_headers=crawl_auth_headers,
                 pages_depth_map=crawl_depth_map,
+                url_to_menu_text=crawl_url_to_menu_text,
             )
             write_debug("Orchestrated audit completed successfully.")
         except Exception as run_err:
@@ -196,6 +199,7 @@ class AuditOrchestrator:
         storage_state: Optional[Dict] = None,
         auth_headers: Optional[Dict[str, str]] = None,
         pages_depth_map: Optional[Dict[str, int]] = None,
+        url_to_menu_text: Optional[Dict[str, str]] = None,
     ):
         """Execute the Multi-Agent Audit using pre-discovered URLs."""
         import httpx
@@ -217,6 +221,7 @@ class AuditOrchestrator:
                 pre_storage_state=storage_state,
                 pre_auth_headers=auth_headers,
                 pre_pages_depth_map=pages_depth_map,
+                pre_url_to_menu_text=url_to_menu_text,
             )
 
             # Route raw results to Analyzer Service

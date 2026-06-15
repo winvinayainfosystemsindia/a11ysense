@@ -46,7 +46,7 @@ class LoginService:
                 )
                 
                 page = await context.new_page()
-                page.set_default_timeout(60000)  # 60s timeout for login actions
+                page.set_default_timeout(120000)  # 120s timeout for login actions
 
                 success, cookies, headers, error_detail, landed_url = await self.perform_login_steps(config, page, context)
                 
@@ -324,7 +324,7 @@ class LoginService:
             )
             
             page = await context.new_page()
-            page.set_default_timeout(30000)
+            page.set_default_timeout(120000)
 
             success, cookies, headers, error_detail, landed_url = await self.perform_login_steps(config, page, context)
             

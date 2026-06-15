@@ -106,6 +106,7 @@ class CrawlerService:
                     "storage_state": crawl_res.storage_state,
                     "auth_headers": crawl_res.auth_headers,
                     "pages_depth_map": crawl_res.pages_depth_map,
+                    "url_to_menu_text": crawl_res.url_to_menu_text,
                     "error": None
                 }
                 logger.info(
