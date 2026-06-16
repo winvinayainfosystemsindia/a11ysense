@@ -352,9 +352,37 @@ class KeyboardNavSkill:
                 if await locator.count() > 0:
                     await locator.focus()
                     
+                    # 1.5 Fetch aria-expanded state before action
+                    expanded_before = await locator.get_attribute("aria-expanded")
+                    
                     # 2. Press Enter to open
                     await page.keyboard.press("Enter")
                     await page.wait_for_timeout(200)
+                    
+                    expanded_after = await locator.get_attribute("aria-expanded")
+                    
+                    # If aria-expanded is missing or did not toggle correctly
+                    if not expanded_after or (expanded_before == expanded_after):
+                        violations.append(Violation(
+                            id="keyboard-dropdown-expanded-state-failure",
+                            impact="serious",
+                            description=f"Dropdown trigger <{target_trigger['tagName']}> does not dynamically update its 'aria-expanded' state attribute upon interaction.",
+                            help="Ensure the trigger element has 'aria-expanded' and toggles its value between 'true' and 'false' when the menu opens and closes.",
+                            helpUrl="https://www.w3.org/WAI/ARIA/apg/patterns/menu-button/",
+                            nodes=[{"html": target_trigger["html"], "target": [selector]}],
+                            metadata={
+                                "friendly_name": "Dropdown ARIA Expanded State Failure",
+                                "wcag_criteria": "4.1.2 Name, Role, Value",
+                                "wcag_level": "A",
+                                "severity": "Serious",
+                                "business_impact": "Screen reader users will not receive announcements when a submenu opens or collapses, leaving them unaware of dynamic content changes.",
+                                "expected_result": "Dropdown triggers MUST update their 'aria-expanded' state dynamically to signify open/closed status.",
+                                "actual_result": f"Value before: '{expanded_before}', Value after: '{expanded_after}'",
+                                "steps_to_reproduce": f"1. Focus the dropdown trigger '{target_trigger['text']}'.\n2. Inspect 'aria-expanded' value.\n3. Activate the control and check if 'aria-expanded' toggles.",
+                                "remediation": "Add click/keydown event listeners to toggle the element's aria-expanded attribute dynamically between true and false.",
+                                "refined_by": "KeyboardNavSkill"
+                            }
+                        ))
                     
                     # 3. Check if focus moved to dropdown item
                     focused_tag = await page.evaluate("document.activeElement.tagName.toLowerCase()")

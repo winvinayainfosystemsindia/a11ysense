@@ -71,12 +71,17 @@ class ScreenReaderSkill:
         
         js_announcement_script = """() => {
             const elements = Array.from(document.querySelectorAll(
-                'a[href], area[href], input, select, textarea, button, iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable], [role="button"], [role="link"], [role="checkbox"], [role="radio"]'
+                'a[href], area[href], input, select, textarea, button, iframe, object, embed, [tabindex]:not([tabindex="-1"]), [contenteditable], [role="button"], [role="link"], [role="checkbox"], [role="radio"], img'
             )).filter(el => {
                 const rect = el.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0) return false;
                 const style = window.getComputedStyle(el);
-                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                
+                // Skip explicitly decorative images
+                if (el.tagName.toLowerCase() === "img" && el.getAttribute("alt") === "") return false;
+                
+                return true;
             });
 
             function getAnnouncement(el) {
@@ -209,7 +214,15 @@ class ScreenReaderSkill:
                                              className.includes("has-submenu") || className.includes("submenu") ||
                                              className.includes("nav-link") || className.includes("nav-item") ||
                                              className.includes("menu-item") || className.includes("navbar") ||
-                                             className.includes("menu-link");
+                                             className.includes("menu-link") ||
+                                             className.includes("burger") || idName.includes("burger") ||
+                                             className.includes("hamburger") || idName.includes("hamburger") ||
+                                             className.includes("toggle") || idName.includes("toggle");
+                                             
+                const isBurger = className.includes("burger") || idName.includes("burger") ||
+                                 className.includes("hamburger") || idName.includes("hamburger") ||
+                                 className.includes("menu-toggle") || idName.includes("menu-toggle") ||
+                                 className.includes("nav-toggle") || idName.includes("nav-toggle");
                                              
                 let hasSvgOrIconChild = false;
                 const icons = el.querySelectorAll('svg, i, span');
@@ -249,6 +262,7 @@ class ScreenReaderSkill:
                 
                 const isDropdown = hasDropdownText ||
                                    hasArrowChar ||
+                                   isBurger ||
                                    (hasDropdownClassOrId && (hasSvgOrIconChild || hasSubmenuContainer)) ||
                                    (el.getAttribute("aria-controls") && !el.getAttribute("aria-haspopup")) ||
                                    ((className.includes("nav") || className.includes("menu") || el.closest("nav") || el.closest("header")) && hasSvgOrIconChild);
@@ -293,7 +307,40 @@ class ScreenReaderSkill:
             return elements.map(el => getAnnouncement(el));
         }"""
         
-        computed_announcements = await page.evaluate(js_announcement_script)
+        # Capture visible elements at desktop size
+        desktop_elements = await page.evaluate(js_announcement_script)
+        
+        # Capture visible elements at mobile size
+        original_viewport = page.viewport_size
+        mobile_elements = []
+        try:
+            await page.set_viewport_size({"width": 375, "height": 812})
+            await page.wait_for_timeout(500)
+            mobile_elements = await page.evaluate(js_announcement_script)
+        except Exception as vp_err:
+            logger.warning(f"Failed to set mobile viewport for screen reader scan: {vp_err}")
+        finally:
+            if original_viewport:
+                try:
+                    await page.set_viewport_size(original_viewport)
+                    await page.wait_for_timeout(500)
+                except Exception:
+                    pass
+
+        # Merge and deduplicate announcements by their outerHTML snippet
+        seen_htmls = set()
+        computed_announcements = []
+        
+        for item in desktop_elements:
+            item["viewport"] = "desktop"
+            computed_announcements.append(item)
+            seen_htmls.add(item["html"])
+            
+        for item in mobile_elements:
+            if item["html"] not in seen_htmls:
+                item["viewport"] = "mobile"
+                computed_announcements.append(item)
+                seen_htmls.add(item["html"])
         
         violations = []
         passes = []
@@ -314,12 +361,34 @@ class ScreenReaderSkill:
             if nvda_active and announcement:
                 self.nvda.speak(announcement)
                 
+            # Validation 1.5: Identify generic placeholder alternate names
+            import re
+            numbered_pattern = re.compile(
+                r'^(corporate\s*)?(partner|sponsor|logo|image|client|member|slide|banner)\s*\d+$', 
+                re.IGNORECASE
+            )
+            generic_word_pattern = re.compile(
+                r'^(logo|image|img|graphic|icon|picture|photo|screenshot|placeholder)$',
+                re.IGNORECASE
+            )
+            prefix_pattern = re.compile(
+                r'^(image|photo|picture)\s+of\s+.+$',
+                re.IGNORECASE
+            )
+            
+            is_generic = False
+            if name:
+                cleaned_name = name.strip()
+                if numbered_pattern.match(cleaned_name) or generic_word_pattern.match(cleaned_name) or prefix_pattern.match(cleaned_name):
+                    is_generic = True
+
             # Validation 1: Missing accessible label/name
             if not name:
+                viewport_text = f" on {item.get('viewport', 'desktop')} viewports" if "viewport" in item else ""
                 violations.append(Violation(
                     id="screen-reader-missing-label",
                     impact="serious",
-                    description=f"Interactive element <{tagName}> is missing an accessible label for screen readers.",
+                    description=f"Interactive element <{tagName}> is missing an accessible label for screen readers{viewport_text}.",
                     help="Ensure all interactive elements have a descriptive accessible name (e.g. inner text, aria-label, or associated label).",
                     helpUrl="https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA14",
                     nodes=[{
@@ -336,6 +405,31 @@ class ScreenReaderSkill:
                         "actual_result": "The element has no accessible name or label. Under screen reader emulation, the element is announced only by its generic role (e.g. 'button' or 'link') without any context, leaving users unable to identify its purpose.",
                         "steps_to_reproduce": "1. Open the page in a browser.\n2. Locate the targeted interactive element in the DOM or on screen.\n3. Navigate to the element using a screen reader or inspect its properties in the browser's Accessibility developer pane.\n4. Observe that the computed accessible name field is empty and screen reader announcement lacks descriptive context.",
                         "remediation": "Add inner text, an aria-label, or link the input to a label element using the 'for' attribute.",
+                        "refined_by": "ScreenReaderSkill"
+                    }
+                ))
+            # Validation 1.5: Generic Placeholder name (alt text)
+            elif name and is_generic:
+                violations.append(Violation(
+                    id="screen-reader-generic-label",
+                    impact="serious",
+                    description=f"Interactive or graphic element <{tagName}> has a generic placeholder accessible name: '{name}'.",
+                    help="Provide a meaningful alternative text or label that describes the specific entity or brand (e.g. use 'WinVinaya Logo' instead of 'Logo').",
+                    helpUrl="https://www.w3.org/WAI/WCAG22/Understanding/non-text-content.html",
+                    nodes=[{
+                        "html": html,
+                        "target": [f"{tagName}{'#' + element_id if element_id else ''}"]
+                    }],
+                    metadata={
+                        "friendly_name": "Generic Placeholder Alternate Text Detected",
+                        "wcag_criteria": "1.1.1 Non-text Content",
+                        "wcag_level": "A",
+                        "severity": "Serious",
+                        "business_impact": "Screen reader users will only hear generic phrases like 'Corporate Partner 1' or 'logo' and will not know which specific partner logo or graphic is displayed.",
+                        "expected_result": "All meaningful images and graphics MUST have specific, descriptive alternative text conveying the logo's or graphic's true name/meaning.",
+                        "actual_result": f"Element uses generic placeholder alternative text: '{name}'.",
+                        "steps_to_reproduce": f"1. Audit the page's graphics and interactive controls.\n2. Observe that element has computed screen reader name '{name}' which matches generic collection templates.",
+                        "remediation": "Update the 'alt' or 'aria-label' attribute to be the descriptive name of the specific company, brand, or control function.",
                         "refined_by": "ScreenReaderSkill"
                     }
                 ))
@@ -610,6 +704,179 @@ class ScreenReaderSkill:
                 
         except Exception as landmark_err:
             logger.error(f"Failed in global landmark or heading validation: {landmark_err}")
+
+        # ── Custom Menu List/Grouping Structure Check (WCAG 1.3.1) ──
+        js_menu_structure_script = """() => {
+            const customMenuContainers = Array.from(document.querySelectorAll(
+                'div[class*="dropdown-menu"], div[class*="menu-items"], div[class*="submenu"], [role="menu"], [role="listbox"]'
+            ));
+            
+            const menuViolations = [];
+            customMenuContainers.forEach(container => {
+                const tagName = container.tagName.toLowerCase();
+                const role = container.getAttribute("role");
+                
+                if (tagName !== "ul" && tagName !== "ol" && role !== "menu" && role !== "listbox" && role !== "group") {
+                    const items = Array.from(container.querySelectorAll('a, button, [role="menuitem"], [role="option"]'));
+                    if (items.length > 1) {
+                        const lacksSemantics = items.every(item => {
+                            const hasListParent = item.closest('li') !== null;
+                            const hasRole = item.hasAttribute("role");
+                            const hasPos = item.hasAttribute("aria-posinset");
+                            return !hasListParent && !hasRole && !hasPos;
+                        });
+                        
+                        if (lacksSemantics) {
+                            menuViolations.push({
+                                html: container.outerHTML.substring(0, 300),
+                                tagName: tagName,
+                                className: container.className,
+                                id: container.id,
+                                itemCount: items.length
+                            });
+                        }
+                    }
+                }
+            });
+            return menuViolations;
+        }"""
+        
+        try:
+            custom_menu_violations = await page.evaluate(js_menu_structure_script)
+            for cmv in custom_menu_violations:
+                violations.append(Violation(
+                    id="screen-reader-menu-missing-list-structure",
+                    impact="moderate",
+                    description=f"Custom menu container <{cmv['tagName']}> containing {cmv['itemCount']} items is missing semantic list wrapping (<ul>/<li>) or ARIA positioning attributes.",
+                    help="Wrap custom dropdown/popover menu items in <ul> and <li> tags, or define role='menu' on parent and role='menuitem' on items.",
+                    helpUrl="https://www.w3.org/WAI/WCAG22/Understanding/info-and-relationships.html",
+                    nodes=[{"html": cmv["html"], "target": [f"{cmv['tagName']}{'#' + cmv['id'] if cmv['id'] else ''}"]}],
+                    metadata={
+                        "friendly_name": "Menu Structure Missing List or ARIA Semantics",
+                        "wcag_criteria": "1.3.1 Info and Relationships",
+                        "wcag_level": "A",
+                        "severity": "Medium",
+                        "business_impact": "Screen readers will not announce the total count of items or the position of the focused item (e.g. '1 of 5') in custom menus, disorienting users.",
+                        "expected_result": "Visual lists or menus of links/options MUST be announced as lists/menus by screen readers, reporting item indexes and total size.",
+                        "actual_result": f"Custom menu container has {cmv['itemCount']} adjacent items but lacks <ul>/<li> list structure or ARIA roles.",
+                        "steps_to_reproduce": "1. Open a custom menu/dropdown.\n2. Observe that elements are rendered as a custom div box instead of a semantic list or menu.",
+                        "remediation": "Replace custom layout container divs with <ul> and <li> elements or add role='menu' and role='menuitem' roles.",
+                        "refined_by": "ScreenReaderSkill"
+                    }
+                ))
+        except Exception as ms_err:
+            logger.error(f"Failed to scan custom menu structures: {ms_err}")
+
+        # ── Carousel Movement / Pause Controls Check (WCAG 2.2.2) ──
+        js_carousel_script = """() => {
+            const marquees = Array.from(document.querySelectorAll('marquee'));
+            
+            const animatedElements = [];
+            const allElements = document.querySelectorAll('*');
+            allElements.forEach(el => {
+                const style = window.getComputedStyle(el);
+                const animName = style.animationName;
+                const animIter = style.animationIterationCount;
+                
+                const isInfiniteAnim = animName !== 'none' && animIter === 'infinite';
+                const rect = el.getBoundingClientRect();
+                const isVisible = rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+                
+                if (isInfiniteAnim && isVisible) {
+                    animatedElements.push({
+                        html: el.outerHTML.substring(0, 300),
+                        tagName: el.tagName.toLowerCase(),
+                        id: el.id,
+                        className: el.className
+                    });
+                }
+            });
+            
+            const potentialCarousels = Array.from(document.querySelectorAll(
+                '[class*="carousel"], [class*="slider"], [class*="marquee"], [id*="carousel"], [id*="slider"], [id*="marquee"]'
+            ));
+            
+            const controlButtons = Array.from(document.querySelectorAll(
+                'button, a, [role="button"], [tabindex]:not([tabindex="-1"])'
+            ));
+            
+            const pauseControls = [];
+            controlButtons.forEach(btn => {
+                const text = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase();
+                const className = (btn.className || '').toString().toLowerCase();
+                const idName = (btn.id || '').toLowerCase();
+                
+                const hasPauseWord = text.includes('pause') || text.includes('stop') || text.includes('halt') || text.includes('play');
+                const hasPauseClass = className.includes('pause') || idName.includes('pause') || 
+                                      className.includes('stop') || idName.includes('stop');
+                                      
+                let hasPauseIcon = false;
+                const icons = btn.querySelectorAll('svg, i, span');
+                for (const icon of icons) {
+                    const iconClass = (icon.className || '').toString().toLowerCase();
+                    if (iconClass.includes('pause') || iconClass.includes('stop') || iconClass.includes('play')) {
+                        hasPauseIcon = true;
+                        break;
+                    }
+                }
+                
+                if (hasPauseWord || hasPauseClass || hasPauseIcon) {
+                    pauseControls.push(btn);
+                }
+            });
+            
+            return {
+                hasMarquee: marquees.length > 0,
+                marquees: marquees.map(m => m.outerHTML.substring(0, 300)),
+                animatedElements,
+                hasPotentialCarousels: potentialCarousels.length > 0,
+                carouselCount: potentialCarousels.length,
+                hasPauseControls: pauseControls.length > 0,
+                pauseControlsCount: pauseControls.length
+            };
+        }"""
+        
+        try:
+            carousel_data = await page.evaluate(js_carousel_script)
+            has_marquee = carousel_data.get("hasMarquee", False)
+            animated_elts = carousel_data.get("animatedElements", [])
+            has_carousels = carousel_data.get("hasPotentialCarousels", False)
+            has_pause = carousel_data.get("hasPauseControls", False)
+            
+            if (has_marquee or len(animated_elts) > 0 or has_carousels) and not has_pause:
+                target_html = "<body>"
+                target_tagName = "body"
+                target_id = ""
+                if has_marquee and len(carousel_data.get("marquees")) > 0:
+                    target_html = carousel_data.get("marquees")[0]
+                    target_tagName = "marquee"
+                elif len(animated_elts) > 0:
+                    target_html = animated_elts[0]["html"]
+                    target_tagName = animated_elts[0]["tagName"]
+                    target_id = animated_elts[0]["id"]
+                
+                violations.append(Violation(
+                    id="screen-reader-carousel-missing-pause",
+                    impact="serious",
+                    description=f"Auto-moving element <{target_tagName}> is missing a mechanism (such as a pause or stop button) to stop or hide visual movement.",
+                    help="Provide a user-accessible control (button or link) to pause, stop, or hide automatically moving/scrolling elements.",
+                    helpUrl="https://www.w3.org/WAI/WCAG22/Understanding/pause-stop-hide.html",
+                    nodes=[{"html": target_html, "target": [f"{target_tagName}{'#' + target_id if target_id else ''}"]}],
+                    metadata={
+                        "friendly_name": "Pause or Stop Control Missing for Moving Content",
+                        "wcag_criteria": "2.2.2 Pause, Stop, Hide",
+                        "wcag_level": "A",
+                        "severity": "Serious",
+                        "business_impact": "Users with cognitive, attention, or visual disabilities may be completely distracted or unable to read static page text due to non-stoppable scrolling or moving graphics.",
+                        "expected_result": "For any moving, blinking or scrolling information that starts automatically and lasts more than 5 seconds, there MUST be a mechanism for the user to pause, stop, or hide it.",
+                        "actual_result": "Infinite moving/scrolling content detected on page, but no visible pause or stop control was found.",
+                        "steps_to_reproduce": "1. Open the page.\n2. Observe elements scrolling or animating continuously.\n3. Search the page for a pause, stop, or close button.",
+                        "remediation": "Add a visible pause button that stops CSS animations/JS scrolls when clicked.",
+                        "refined_by": "ScreenReaderSkill"
+                    }
+                ))
+        except Exception as car_err:
+            logger.error(f"Failed to scan carousels/marquee movement: {car_err}")
             
         return {
             "violations": violations,
