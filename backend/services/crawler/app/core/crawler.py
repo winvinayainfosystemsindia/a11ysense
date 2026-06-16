@@ -189,6 +189,7 @@ class WebCrawler:
         self.storage_state: Dict = None  # Playwright storage state for auth propagation
         self.auth_headers: Dict[str, str] = {}  # Auth headers extracted during login
         self.url_to_menu_text: Dict[str, str] = {}  # Discovered route -> menu text mapping
+        self.clicked_sidebar_items: Set[str] = set()  # Track globally clicked menu/sub-menu texts
         
         self.default_delay = request.crawl_delay
         self.last_request_time = 0.0
@@ -608,6 +609,32 @@ class WebCrawler:
                 for toggle_text in list(expanded_toggle_texts):
                     await ensure_toggle_expanded(toggle_text)
 
+            async def get_menu_items():
+                return await page.evaluate("""() => {
+                    const items = [];
+                    const seenTexts = new Set();
+                    const targetSel = 'nav [role="button"], aside [role="button"], ' +
+                        '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
+                        '.MuiListItemButton-root, .MuiMenuItem-root, [role="menuitem"], ' +
+                        'nav button, aside button, [role="navigation"] [role="button"], ' +
+                        'nav a, aside a, .MuiDrawer-root a';
+                    const elts = document.querySelectorAll(targetSel);
+                    elts.forEach((el) => {
+                        const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                        const lowerText = text.toLowerCase();
+                        if (text && text.length > 1 && text.length < 60 && 
+                            !lowerText.includes("log out") && !lowerText.includes("logout") && 
+                            !lowerText.includes("sign out") && !lowerText.includes("signout") && 
+                            !lowerText.includes("exit")) {
+                            if (!seenTexts.has(text)) {
+                                seenTexts.add(text);
+                                items.push({ text: text });
+                            }
+                        }
+                    });
+                    return items;
+                }""")
+
             queue = deque()
             
             # Seed start URL
@@ -665,11 +692,12 @@ class WebCrawler:
                     # Try to navigate client-side first to avoid SPA full-page reload bugs
                     navigated_client_side = False
                     if normalize_url(page.url) != normalized_url:
-                        # 1. Restore/expand any dynamic menu toggles
-                        await restore_toggles()
-                        
-                        # 2. Check if we have mapped menu text for the target URL
+                        # Only expand the specific parent toggle of the target menu item if needed
                         target_menu_text = self.url_to_menu_text.get(normalized_url)
+                        if target_menu_text:
+                            parent_toggle = item_to_parent.get(target_menu_text)
+                            if parent_toggle:
+                                await ensure_toggle_expanded(parent_toggle)
                         
                         # Attempt click-based client-side navigation
                         try:
@@ -725,12 +753,14 @@ class WebCrawler:
                         pass
                     # Wait for key elements to be visible
                     try:
-                        await page.wait_for_selector("li, nav a, aside a", state="visible", timeout=15000)
-                        await page.wait_for_timeout(3000)
+                        await page.wait_for_selector("li, nav a, aside a, a, p, h1, h2, h3, main, #root", state="visible", timeout=5000)
+                        await page.wait_for_timeout(1000)
                     except Exception:
-                        await page.wait_for_timeout(5000)
+                        await page.wait_for_timeout(2000)
 
-                    await restore_toggles()
+                    current_items = await get_menu_items()
+                    if any(m["text"] not in self.clicked_sidebar_items for m in current_items):
+                        await restore_toggles()
 
                     # Mid-crawl login detection: if this page is showing a login form, authenticate and continue
                     if config and config.auth_type == "form":
@@ -793,32 +823,7 @@ class WebCrawler:
                     # navigation, not child pages, and are the primary discovery
                     # mechanism for React SPAs where routes use onClick + navigate().
                     try:
-                        # Helper to scan and return current menu items
-                        async def get_menu_items():
-                            return await page.evaluate("""() => {
-                                const items = [];
-                                const seenTexts = new Set();
-                                const targetSel = 'nav [role="button"], aside [role="button"], ' +
-                                    '.MuiDrawer-root [role="button"], .MuiList-root [role="button"], ' +
-                                    '.MuiListItemButton-root, .MuiMenuItem-root, [role="menuitem"], ' +
-                                    'nav button, aside button, [role="navigation"] [role="button"], ' +
-                                    'nav a, aside a, .MuiDrawer-root a';
-                                const elts = document.querySelectorAll(targetSel);
-                                elts.forEach((el) => {
-                                    const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                                    const lowerText = text.toLowerCase();
-                                    if (text && text.length > 1 && text.length < 60 && 
-                                        !lowerText.includes("log out") && !lowerText.includes("logout") && 
-                                        !lowerText.includes("sign out") && !lowerText.includes("signout") && 
-                                        !lowerText.includes("exit")) {
-                                        if (!seenTexts.has(text)) {
-                                            seenTexts.add(text);
-                                            items.push({ text: text });
-                                        }
-                                    }
-                                });
-                                return items;
-                            }""")
+                        # get_menu_items is defined above
 
                         # Pre-extract all hrefs from sidebar/nav before click loop
                         # This catches React Router <Link> components that render as <a>
@@ -862,6 +867,8 @@ class WebCrawler:
                             idx += 1
                             item_text = item['text']
                             parent_toggle = item.get('parent_toggle')
+                            if item_text in self.clicked_sidebar_items:
+                                continue
                             if item_text in clicked_texts:
                                 continue
                             clicked_texts.add(item_text)
@@ -947,6 +954,7 @@ class WebCrawler:
                                 logger.debug(f"[Playwright Crawl] Could not click '{item_text}' - element not found in DOM")
                                 continue
                                 
+                            self.clicked_sidebar_items.add(item_text)
                             await page.wait_for_timeout(1500) # Wait for route transition
                             
                             new_url = page.url
