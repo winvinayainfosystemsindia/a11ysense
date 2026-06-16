@@ -252,8 +252,8 @@ class WebCrawler:
         )
 
     async def crawl(self) -> CrawlResponse:
-        if self.request.credential_config:
-            return await self.crawl_with_playwright()
+        # Always use Playwright to execute JavaScript and discover dynamically rendered elements
+        return await self.crawl_with_playwright()
             
         start_time = time.time()
         
@@ -460,7 +460,7 @@ class WebCrawler:
             # Authorization: Bearer token causes the server to skip the login page
             # and redirect straight to the dashboard, making the form-fill steps
             # timeout looking for fields that don't exist.
-            is_form_auth = config.auth_type == "form"
+            is_form_auth = config.auth_type == "form" if config else False
 
             context_args = {
                 "viewport": {'width': 1280, 'height': 800},
@@ -491,7 +491,7 @@ class WebCrawler:
             # Perform login steps if config is form auth
             landed_url = self.start_url
             
-            if config.auth_type == "form":
+            if config and config.auth_type == "form":
                 logger.info("Performing Playwright form login for crawl...")
                 success, cookies_ext, headers_ext, error_detail, landed = await login_service.perform_login_steps(
                     config, page, context
@@ -513,7 +513,7 @@ class WebCrawler:
                     logger.info("Captured Playwright storage state after form login.")
                 except Exception as ss_err:
                     logger.warning(f"Failed to capture storage state: {ss_err}")
-            elif config.auth_type == "cookie":
+            elif config and config.auth_type == "cookie":
                 # Direct cookie injection
                 pw_cookies = []
                 parsed_url = urllib.parse.urlparse(self.start_url)
@@ -534,7 +534,7 @@ class WebCrawler:
                     })
                 if pw_cookies:
                     await context.add_cookies(pw_cookies)
-            elif config.auth_type == "bearer_token":
+            elif config and config.auth_type == "bearer_token":
                 # Token header injection
                 token = config.password or config.username
                 if token:
