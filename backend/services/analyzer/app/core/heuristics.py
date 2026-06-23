@@ -96,45 +96,84 @@ def filter_false_positives(nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         filtered.append(node)
     return filtered
 
+def _element_signature(node: Dict[str, Any]) -> str:
+    """
+    Identifies whether a violating node is the *same physical element* as another,
+    regardless of which page it was found on (e.g. a shared nav/footer element
+    repeated verbatim across pages). Falls back to the target selector when no
+    HTML snippet is available.
+    """
+    html = re.sub(r'\s+', ' ', node.get("html", "") or "").strip()
+    if html:
+        return html
+    return str(node.get("target", ""))
+
+
 def aggregate_and_deduplicate(violations: List[Violation]) -> List[Violation]:
     """
-    De-duplicates and merges similar compliance violations across multiple scanned pages.
-    Groups issues by Rule ID and eliminates identical node targets.
+    De-duplicates and groups compliance violations.
+
+    Violations are grouped by (rule_id, element signature) rather than rule_id
+    alone. This means:
+    - The SAME element (identical HTML/selector) repeated across multiple pages
+      — e.g. a shared nav/footer component — is consolidated into ONE violation
+      whose nodes span every affected page (recorded in metadata["affected_pages"]).
+    - The same rule firing on DIFFERENT content on different pages produces
+      SEPARATE violation objects, one per distinct element, so each page gets
+      its own clearly-attributed defect rather than being folded into a single
+      cross-page entry.
     """
-    grouped_violations: Dict[str, Violation] = {}
-    
+    grouped_violations: Dict[tuple, Violation] = {}
+
     for v in violations:
         # Apply pre-filtering heuristics to nodes
         filtered_nodes = filter_false_positives(v.nodes)
         if not filtered_nodes:
             # If all nodes under this violation are filtered out, discard the rule violation
             continue
-            
-        if v.id not in grouped_violations:
-            # Initialize a new Violation object with filtered nodes
-            grouped_violations[v.id] = Violation(
-                id=v.id,
-                impact=v.impact,
-                description=v.description,
-                help=v.help,
-                helpUrl=v.helpUrl,
-                nodes=[],
-                metadata=v.metadata.copy()
-            )
-            
-        target_violation = grouped_violations[v.id]
-        
-        # Merge nodes while avoiding duplicates
-        existing_signatures = {
-            (node.get("page_url", ""), str(node.get("target", "")), node.get("html", ""))
-            for node in target_violation.nodes
-        }
-        
+
+        # Partition this violation's nodes by element signature — a single
+        # axe-core/skill violation can already bundle multiple distinct elements.
+        nodes_by_signature: Dict[str, List[Dict[str, Any]]] = {}
         for node in filtered_nodes:
-            node_signature = (node.get("page_url", ""), str(node.get("target", "")), node.get("html", ""))
-            if node_signature not in existing_signatures:
-                target_violation.nodes.append(node)
-                existing_signatures.add(node_signature)
-                
+            sig = _element_signature(node)
+            nodes_by_signature.setdefault(sig, []).append(node)
+
+        for sig, sig_nodes in nodes_by_signature.items():
+            group_key = (v.id, sig)
+            if group_key not in grouped_violations:
+                grouped_violations[group_key] = Violation(
+                    id=v.id,
+                    impact=v.impact,
+                    description=v.description,
+                    help=v.help,
+                    helpUrl=v.helpUrl,
+                    nodes=[],
+                    metadata=v.metadata.copy()
+                )
+
+            target_violation = grouped_violations[group_key]
+
+            # Merge nodes while avoiding duplicates (e.g. the same element
+            # re-detected on the same page across keyboard/screen-reader/axe passes)
+            existing_signatures = {
+                (node.get("page_url", ""), str(node.get("target", "")))
+                for node in target_violation.nodes
+            }
+
+            for node in sig_nodes:
+                node_signature = (node.get("page_url", ""), str(node.get("target", "")))
+                if node_signature not in existing_signatures:
+                    target_violation.nodes.append(node)
+                    existing_signatures.add(node_signature)
+
+    # Record which pages each violation affects, so a violation spanning
+    # multiple pages (shared component) can be displayed/reported as such.
+    for violation in grouped_violations.values():
+        affected_pages = sorted({
+            node.get("page_url", "") for node in violation.nodes if node.get("page_url")
+        })
+        violation.metadata["affected_pages"] = affected_pages
+
     # Sort de-duplicated violations alphabetically by Rule ID for readability
     return sorted(grouped_violations.values(), key=lambda v: v.id)

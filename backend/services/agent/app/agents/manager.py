@@ -335,8 +335,16 @@ class ManagerAgent(BaseAgent):
                             node["page_url"] = target_url
                             node["page_title"] = current_title
 
+                    # Attach page metadata to each pass record too, mirroring violations,
+                    # so passed checks are also attributable to the page they ran on.
+                    page_passes = scan_data.get("passes", [])
+                    for p in page_passes:
+                        if isinstance(p, dict):
+                            p["page_url"] = target_url
+                            p["page_title"] = current_title
+
                     all_violations.extend(violations)
-                    all_passes.extend(scan_data.get("passes", []))
+                    all_passes.extend(page_passes)
                     all_incomplete.extend(scan_data.get("incomplete", []))
                     all_inapplicable.extend(scan_data.get("inapplicable", []))
 

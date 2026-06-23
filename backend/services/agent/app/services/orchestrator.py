@@ -686,9 +686,10 @@ class AuditOrchestrator:
                 
                 p_metadata = p.get('metadata') if isinstance(p, dict) else getattr(p, 'metadata', None)
                 meta = self.resolve_passed_metadata(p_id, p_tags, p_desc, p_help, p_metadata)
-                
-                page_title = result.metadata.get("page_title", "Page")
-                custom_id = self.generate_tc_custom_id(result.url, page_title, counter)
+
+                page_url = (p.get('page_url') if isinstance(p, dict) else getattr(p, 'page_url', None)) or str(result.url)
+                page_title = (p.get('page_title') if isinstance(p, dict) else getattr(p, 'page_title', None)) or result.metadata.get("page_title", "Page")
+                custom_id = self.generate_tc_custom_id(page_url, page_title, counter)
                 testcases.append({
                     "testcase_id": custom_id,
                     "defect_id": "N/A",
@@ -707,7 +708,7 @@ class AuditOrchestrator:
                     "refined_by": "N/A",
                     "help_url": p_help_url,
                     "status": "PASS",
-                    "page_url": str(result.url),
+                    "page_url": page_url,
                     "page_title": page_title,
                     "input_tokens": 0,
                     "output_tokens": 0
@@ -722,23 +723,35 @@ class AuditOrchestrator:
                 if not isinstance(nodes, list):
                     nodes = [nodes]
 
-                page_title = result.metadata.get("page_title", "Page")
-                target_url = str(result.url)
-                for node in nodes:
-                    nd = node if isinstance(node, dict) else (
+                normalized_nodes = [
+                    node if isinstance(node, dict) else (
                         node.model_dump(mode='json') if hasattr(node, 'model_dump') else vars(node)
                     )
-                    if nd.get("page_url"):
-                        target_url = nd["page_url"]
-                    if nd.get("page_title") and nd["page_title"] != "N/A":
-                        page_title = nd["page_title"]
-                    break
+                    for node in nodes
+                ]
+
+                # Collect every distinct page this violation's nodes were found on.
+                # The analyzer only groups nodes from different pages together when
+                # they're the exact same element (e.g. a shared nav/footer component) —
+                # see aggregate_and_deduplicate — so >1 page here means a genuinely
+                # shared defect, not a mis-attributed one.
+                affected_pages = sorted({nd["page_url"] for nd in normalized_nodes if nd.get("page_url")})
+
+                page_title = result.metadata.get("page_title", "Page")
+                if len(affected_pages) == 1:
+                    target_url = affected_pages[0]
+                    for nd in normalized_nodes:
+                        if nd.get("page_url") == target_url and nd.get("page_title") and nd["page_title"] != "N/A":
+                            page_title = nd["page_title"]
+                            break
+                elif len(affected_pages) > 1:
+                    target_url = affected_pages[0]
+                    page_title = f"Shared across {len(affected_pages)} pages"
+                else:
+                    target_url = str(result.url)
 
                 html_snippets = []
-                for node in nodes[:2]:
-                    nd = node if isinstance(node, dict) else (
-                        node.model_dump(mode='json') if hasattr(node, 'model_dump') else vars(node)
-                    )
+                for nd in normalized_nodes[:2]:
                     html = nd.get("html", "")
                     if html:
                         html_snippets.append(html[:500])
@@ -765,6 +778,7 @@ class AuditOrchestrator:
                     "status": "FAIL",
                     "page_url": target_url,
                     "page_title": page_title,
+                    "affected_pages": affected_pages if len(affected_pages) > 1 else None,
                     "input_tokens": metadata.get("input_tokens", 0),
                     "output_tokens": metadata.get("output_tokens", 0),
                     "screenshot": metadata.get("screenshot", "N/A")

@@ -7,7 +7,8 @@ import {
   Stack,
   IconButton,
   Box,
-  Button
+  Button,
+  Tooltip
 } from '@mui/material';
 import LaunchIcon from '@mui/icons-material/Launch';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -84,21 +85,32 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
 
         {/* 4. URL */}
         <TableCell sx={{ minWidth: 180 }}>
-          <Stack component="div" direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-            <Typography variant="body2" sx={{
-              fontFamily: 'monospace',
-              fontSize: '0.8rem',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: 200,
-              display: 'block'
-            }}>
-              {v.page_url}
-            </Typography>
-            <IconButton size="small" component="a" href={v.page_url} target="_blank" rel="noopener noreferrer">
-              <LaunchIcon sx={{ fontSize: '0.9rem' }} />
-            </IconButton>
-          </Stack>
+          {v.affected_pages && v.affected_pages.length > 1 ? (
+            <Tooltip title={v.affected_pages.join('\n')}>
+              <Chip
+                label={`Shared • ${v.affected_pages.length} pages`}
+                size="small"
+                color="default"
+                sx={{ fontWeight: '600', fontSize: '0.7rem' }}
+              />
+            </Tooltip>
+          ) : (
+            <Stack component="div" direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+              <Typography variant="body2" sx={{
+                fontFamily: 'monospace',
+                fontSize: '0.8rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: 200,
+                display: 'block'
+              }}>
+                {v.page_url}
+              </Typography>
+              <IconButton size="small" component="a" href={v.page_url} target="_blank" rel="noopener noreferrer">
+                <LaunchIcon sx={{ fontSize: '0.9rem' }} />
+              </IconButton>
+            </Stack>
+          )}
         </TableCell>
 
         {/* 5. Criteria */}
