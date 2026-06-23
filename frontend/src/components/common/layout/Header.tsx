@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StartAuditDialog } from '../../audit/StartAuditDialog';
+import { StartAuditWizard } from '../../audit/StartAuditWizard';
 import {
   Box,
   IconButton,
@@ -106,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobile, onMenuClick }) => {
           </IconButton>
         </Box>
       </Box>
-      <StartAuditDialog open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
+      <StartAuditWizard open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
     </Box>
   );
 };

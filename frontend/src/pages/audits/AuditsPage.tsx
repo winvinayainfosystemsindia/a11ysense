@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Stack } from '@mui/material';
 import AuditsTable from '../../components/audits/AuditsTable';
-import { StartAuditDialog } from '../../components/audit/StartAuditDialog';
+import { StartAuditWizard } from '../../components/audit/StartAuditWizard';
 import { auditService } from '../../service/auditService';
 import type { AuditSessionInfo } from '../../service/auditService';
 
@@ -54,9 +54,9 @@ const AuditsPage: React.FC = () => {
 
       <AuditsTable audits={audits} isLoading={isLoading} onRefresh={fetchAudits} />
 
-      <StartAuditDialog 
-        open={isDialogOpen} 
-        onClose={() => setIsDialogOpen(false)} 
+      <StartAuditWizard
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
         onSuccess={handleAuditStarted}
       />
     </Box>

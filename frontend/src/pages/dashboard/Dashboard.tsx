@@ -18,7 +18,7 @@ import {
   RecentAuditsTable,
   WelcomeHeader
 } from '../../components/dashboard';
-import { StartAuditDialog } from '../../components/audit/StartAuditDialog';
+import { StartAuditWizard } from '../../components/audit/StartAuditWizard';
 
 const Dashboard: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -114,7 +114,7 @@ const Dashboard: React.FC = () => {
           </>
         )}
       </Box>
-      <StartAuditDialog open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
+      <StartAuditWizard open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
     </Box>
   );
 };

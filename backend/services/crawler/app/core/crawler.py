@@ -251,10 +251,48 @@ class WebCrawler:
             url_to_menu_text=dict(self.url_to_menu_text),
         )
 
+    def _reset_state(self) -> None:
+        """Clear mutable crawl state before retrying with a different strategy."""
+        self.visited_urls = set()
+        self.pages_discovered = {}
+        self.ignored_urls = set()
+        self.failed_urls = {}
+        self.sitemaps_found = []
+        self.storage_state = None
+        self.auth_headers = {}
+        self.url_to_menu_text = {}
+        self.clicked_sidebar_items = set()
+        self.last_request_time = 0.0
+        self._relogged = False
+
     async def crawl(self) -> CrawlResponse:
         if self.request.credential_config:
             return await self.crawl_with_playwright()
-            
+
+        response = await self._crawl_with_httpx()
+
+        # Edge case: JS-rendered single-page apps with no sitemap and no
+        # server-rendered <a href> links yield only the start page via plain
+        # HTTP fetching. Retry once with a real browser so client-side routes
+        # can be discovered. Most static/server-rendered sites never hit this
+        # branch, so the common case stays on the fast path.
+        if len(response.pages_discovered) <= 1 and not response.sitemaps_found:
+            logger.info(
+                "Static crawl discovered no additional pages beyond the start URL; "
+                "retrying with Playwright in case the site renders links client-side."
+            )
+            self._reset_state()
+            try:
+                pw_response = await self.crawl_with_playwright()
+                if len(pw_response.pages_discovered) > len(response.pages_discovered):
+                    return pw_response
+            except Exception as e:
+                logger.warning(f"Playwright fallback crawl failed: {e}. Returning original static crawl result.")
+            return response
+
+        return response
+
+    async def _crawl_with_httpx(self) -> CrawlResponse:
         start_time = time.time()
         
         headers = {
@@ -460,7 +498,7 @@ class WebCrawler:
             # Authorization: Bearer token causes the server to skip the login page
             # and redirect straight to the dashboard, making the form-fill steps
             # timeout looking for fields that don't exist.
-            is_form_auth = config.auth_type == "form"
+            is_form_auth = bool(config) and config.auth_type == "form"
 
             context_args = {
                 "viewport": {'width': 1280, 'height': 800},
@@ -491,7 +529,7 @@ class WebCrawler:
             # Perform login steps if config is form auth
             landed_url = self.start_url
             
-            if config.auth_type == "form":
+            if config and config.auth_type == "form":
                 logger.info("Performing Playwright form login for crawl...")
                 success, cookies_ext, headers_ext, error_detail, landed = await login_service.perform_login_steps(
                     config, page, context
@@ -513,7 +551,7 @@ class WebCrawler:
                     logger.info("Captured Playwright storage state after form login.")
                 except Exception as ss_err:
                     logger.warning(f"Failed to capture storage state: {ss_err}")
-            elif config.auth_type == "cookie":
+            elif config and config.auth_type == "cookie":
                 # Direct cookie injection
                 pw_cookies = []
                 parsed_url = urllib.parse.urlparse(self.start_url)
@@ -534,7 +572,7 @@ class WebCrawler:
                     })
                 if pw_cookies:
                     await context.add_cookies(pw_cookies)
-            elif config.auth_type == "bearer_token":
+            elif config and config.auth_type == "bearer_token":
                 # Token header injection
                 token = config.password or config.username
                 if token:

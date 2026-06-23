@@ -138,6 +138,35 @@ class AuditProgress(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CrawlProgress(Base):
+    """
+    Tracks an async crawl-only discovery task (the "Discover pages" wizard step),
+    polled by the frontend before the user picks which pages to audit.
+    """
+    __tablename__ = "crawl_progress"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    crawl_task_id = Column(String, unique=True, nullable=False, index=True)
+    url = Column(String, nullable=False)
+    scan_target = Column(String, nullable=False)  # web_page, web_application, both
+    status = Column(String, nullable=False, default="queued")  # queued, crawling, completed, failed
+    pages_discovered = Column(JSON, default=list)
+    pages_depth_map = Column(JSON, nullable=True)
+    url_to_menu_text = Column(JSON, nullable=True)
+    sitemaps_found = Column(JSON, default=list)
+    unauth_pages_discovered = Column(JSON, default=list)
+    auth_pages_discovered = Column(JSON, default=list)
+    # Authenticated session captured during discovery, carried forward into the
+    # audit phase so selected authenticated pages aren't audited anonymously.
+    storage_state = Column(JSON, nullable=True)
+    auth_headers = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
 

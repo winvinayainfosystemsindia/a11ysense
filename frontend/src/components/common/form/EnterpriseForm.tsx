@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Paper, useTheme, Fade, Slide, alpha, Alert, Collapse } from '@mui/material';
 import EnterpriseFormHeader, { type FormStep } from './EnterpriseFormHeader';
 import EnterpriseFormFooter from './EnterpriseFormFooter';
@@ -15,6 +15,9 @@ interface EnterpriseFormProps {
 	error?: string | null;
 	onDelete?: () => void;
 	headerActions?: React.ReactNode;
+	nextDisabled?: boolean;
+	saveDisabled?: boolean;
+	onStepChange?: (step: number) => void;
 }
 
 /**
@@ -33,11 +36,19 @@ const EnterpriseForm: React.FC<EnterpriseFormProps> = ({
 	saveButtonText,
 	error,
 	onDelete,
-	headerActions
+	headerActions,
+	nextDisabled = false,
+	saveDisabled = false,
+	onStepChange
 }) => {
 	const theme = useTheme();
 	const [activeStep, setActiveStep] = useState(0);
 	const [direction, setDirection] = useState<'left' | 'right'>('left');
+
+	useEffect(() => {
+		onStepChange?.(activeStep);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activeStep]);
 
 	const handleNext = () => {
 		if (activeStep < steps.length - 1) {
@@ -137,6 +148,8 @@ const EnterpriseForm: React.FC<EnterpriseFormProps> = ({
 				saveButtonText={saveButtonText}
 				mode={mode}
 				onDelete={onDelete}
+				nextDisabled={nextDisabled}
+				saveDisabled={saveDisabled}
 			/>
 		</Paper>
 	);

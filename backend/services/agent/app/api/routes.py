@@ -7,6 +7,8 @@ from fastapi.responses import Response, StreamingResponse
 from app.schemas import AuditRequest, AuditTask
 from app.services.orchestrator import audit_orchestrator
 from app.services.telemetry import telemetry_service
+from app.services.crawl_discovery_orchestrator import crawl_discovery_orchestrator
+from common.schemas.audit import CrawlDiscoveryRequest, CrawlDiscoveryTask
 
 router = APIRouter()
 
@@ -27,6 +29,24 @@ async def start_audit(
     org_id = fastapi_req.headers.get("X-Organization-ID")
     proj_id = fastapi_req.headers.get("X-Project-ID")
     return await audit_orchestrator.start_audit(request, org_id, proj_id, background_tasks)
+
+
+@router.post("/crawl_discovery", response_model=CrawlDiscoveryTask)
+async def start_crawl_discovery(
+    request: CrawlDiscoveryRequest,
+    fastapi_req: Request,
+    background_tasks: BackgroundTasks
+) -> CrawlDiscoveryTask:
+    """Start a standalone page-discovery crawl (background task)."""
+    org_id = fastapi_req.headers.get("X-Organization-ID")
+    proj_id = fastapi_req.headers.get("X-Project-ID")
+    return await crawl_discovery_orchestrator.start_discovery(request, org_id, proj_id, background_tasks)
+
+
+@router.get("/crawl_discovery/{crawl_task_id}", response_model=CrawlDiscoveryTask)
+async def get_crawl_discovery_status(crawl_task_id: str) -> CrawlDiscoveryTask:
+    """Poll the status of a crawl-discovery task."""
+    return await crawl_discovery_orchestrator.get_status(crawl_task_id)
 
 
 @router.get("/status/{task_id}", response_model=AuditTask)

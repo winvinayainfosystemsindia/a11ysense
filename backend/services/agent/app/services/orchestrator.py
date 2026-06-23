@@ -16,6 +16,7 @@ from app.schemas import AuditRequest, AuditTask, AuditResult, Violation
 from app.agents.manager import ManagerAgent
 from app.repository.audit_repo import audit_progress_repo
 from app.repository.session_repo import audit_session_repo
+from app.repository.crawl_progress_repo import crawl_progress_repo
 
 from common.config import get_service_url, get_storage_path, get_audit_storage_path
 from common.utils.event_bus import publish_event, get_redis_client
@@ -99,7 +100,19 @@ class AuditOrchestrator:
         crawl_depth_map = {}
         crawl_url_to_menu_text = {}
         
-        if request.depth > 1:
+        if request.selected_urls:
+            discovered_urls = request.selected_urls
+            write_debug(f"Using {len(discovered_urls)} pre-selected URLs from the discovery step; skipping crawler call.")
+            if request.crawl_task_id:
+                auth_context = crawl_progress_repo.get_auth_context(request.crawl_task_id)
+                if auth_context:
+                    crawl_storage_state = auth_context.get("storage_state")
+                    crawl_auth_headers = auth_context.get("auth_headers") or {}
+                    crawl_depth_map = auth_context.get("pages_depth_map") or {}
+                    crawl_url_to_menu_text = auth_context.get("url_to_menu_text") or {}
+                    sitemaps_found = auth_context.get("sitemaps_found") or []
+                    write_debug("Recovered auth context (storage_state/auth_headers) from prior crawl discovery.")
+        elif request.depth > 1:
             crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
             try:
                 write_debug(f"Calling crawler service at {crawler_service_url}/crawl...")
@@ -424,6 +437,22 @@ class AuditOrchestrator:
         }
         if request.credential_config:
             task_payload["credential_config"] = request.credential_config.model_dump(mode="json")
+        if request.selected_urls:
+            task_payload["selected_urls"] = request.selected_urls
+        if request.crawl_task_id:
+            task_payload["crawl_task_id"] = request.crawl_task_id
+            # Carry forward the auth session captured during discovery so the crawler
+            # worker can skip re-crawling and the audit phase still authenticates correctly.
+            auth_context = crawl_progress_repo.get_auth_context(request.crawl_task_id)
+            if auth_context:
+                if auth_context.get("storage_state"):
+                    task_payload["storage_state"] = auth_context["storage_state"]
+                if auth_context.get("auth_headers"):
+                    task_payload["auth_headers"] = auth_context["auth_headers"]
+                if auth_context.get("pages_depth_map"):
+                    task_payload["pages_depth_map"] = auth_context["pages_depth_map"]
+                if auth_context.get("url_to_menu_text"):
+                    task_payload["url_to_menu_text"] = auth_context["url_to_menu_text"]
 
         if get_redis_client() is not None:
             publish_event("audit:tasks", task_payload)

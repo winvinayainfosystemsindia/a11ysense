@@ -7,6 +7,7 @@ import projectReducer from './slices/projectSlice';
 import billingReducer from './slices/billingSlice';
 import dashboardReducer from './slices/dashboardSlice';
 import auditReducer from './slices/auditSlice';
+import crawlDiscoveryReducer from './slices/crawlDiscoverySlice';
 import adminReducer from './slices/adminSlice';
 import metricsReducer from './slices/metricsSlice';
 
@@ -83,6 +84,7 @@ export const store = configureStore({
     billing: billingReducer,
     dashboard: dashboardReducer,
     audit: auditReducer,
+    crawlDiscovery: crawlDiscoveryReducer,
     admin: adminReducer,
     metrics: metricsReducer,
   },

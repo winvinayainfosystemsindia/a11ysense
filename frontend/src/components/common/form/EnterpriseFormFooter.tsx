@@ -18,6 +18,7 @@ interface EnterpriseFormFooterProps {
 	onCancel: () => void;
 	isSubmitting?: boolean;
 	saveDisabled?: boolean;
+	nextDisabled?: boolean;
 	useAccent?: boolean;
 	saveButtonText?: string;
 	mode: 'create' | 'edit' | 'view';
@@ -37,6 +38,7 @@ const EnterpriseFormFooter: React.FC<EnterpriseFormFooterProps> = ({
 	onCancel,
 	isSubmitting = false,
 	saveDisabled = false,
+	nextDisabled = false,
 	useAccent = true,
 	saveButtonText = 'Save Changes',
 	mode,
@@ -167,7 +169,7 @@ const EnterpriseFormFooter: React.FC<EnterpriseFormFooterProps> = ({
 								variant="contained"
 								endIcon={isSubmitting ? <CircularProgress size={16} color="inherit" /> : <NavigateNext />}
 								onClick={onNext}
-								disabled={isSubmitting || saveDisabled}
+								disabled={isSubmitting || nextDisabled}
 								sx={{
 									textTransform: 'none',
 									fontWeight: 700,

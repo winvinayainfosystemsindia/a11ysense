@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from common.database import get_db
 from common.database.models import User
 from common.auth.deps import get_current_user, require_role
-from common.schemas.audit import AuditRequest, AuditTask
+from common.schemas.audit import AuditRequest, AuditTask, CrawlDiscoveryRequest, CrawlDiscoveryTask
 from app.services.proxy_service import proxy_service
 
 router = APIRouter(tags=["Audit Proxy"])
@@ -31,9 +31,32 @@ async def start_audit(
     """
     Start a new accessibility audit. Proxies the request to the Agent Service
     with full multi-tenant context headers attached.
-    Requires Auditor or Admin role. Enforces credit and plan depth boundaries.
+    Requires Auditor or Admin role. Enforces credit balance boundaries.
     """
     return await proxy_service.start_audit(request, project_id, current_user, db)
+
+
+@router.post("/crawl_discovery", response_model=CrawlDiscoveryTask)
+async def start_crawl_discovery(
+    request: CrawlDiscoveryRequest,
+    project_id: Optional[str] = None,
+    current_user: User = Depends(require_role(["Auditor", "Admin"])),
+    db: Session = Depends(get_db)
+):
+    """
+    Discover all pages for a site (no user-facing depth control) so the user can
+    pick which pages to audit. Proxies to the Agent Service's crawl_discovery task.
+    """
+    return await proxy_service.start_crawl_discovery(request, project_id, current_user, db)
+
+
+@router.get("/crawl_discovery/{crawl_task_id}", response_model=CrawlDiscoveryTask)
+async def get_crawl_discovery_status(
+    crawl_task_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Poll the status of a crawl-discovery task."""
+    return await proxy_service.get_crawl_discovery_status(crawl_task_id, current_user)
 
 
 @router.get("/task/{task_id}", response_model=AuditTask)

@@ -17,10 +17,12 @@ class PageCredentialConfig(BaseModel):
 
 class AuditRequest(BaseModel):
     url: str
-    depth: int = Field(default=1, ge=1, le=5)
-    audit_type: str = Field(default="standard", pattern="^(standard|comprehensive)$")
+    depth: int = Field(default=1, ge=1, le=999)
+    audit_type: str = Field(default="standard", pattern="^(standard|comprehensive|web_page|web_application|both)$")
     credentials_id: Optional[UUID] = None
     credential_config: Optional[PageCredentialConfig] = None
+    selected_urls: Optional[List[str]] = Field(default=None, description="When set, audit exactly these URLs instead of auto-discovering")
+    crawl_task_id: Optional[str] = Field(default=None, description="Links back to the CrawlProgress discovery run that produced selected_urls")
 
 class Violation(BaseModel):
     id: str

@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from common.database.models import User, AuditSession
-from common.schemas.audit import AuditRequest, AuditTask
+from common.schemas.audit import AuditRequest, AuditTask, CrawlDiscoveryRequest, CrawlDiscoveryTask
 from common.utils.correlation import get_correlation_headers
 from common.config import get_service_url
 from app.repository.proxy_repo import proxy_repo
@@ -41,18 +41,16 @@ class ProxyService:
     ) -> AuditTask:
         from common.billing.billing_manager import billing_manager
 
-        # 1. Enforce subscription crawl depth boundaries
         org_id = current_user.organization_id
-        billing_manager.check_feature_access(db, org_id, "max_depth", request.depth)
 
-        # 2. Enforce credit balance boundaries (minimum 10 to start)
+        # Enforce credit balance boundaries (minimum 10 to start)
         if not billing_manager.has_sufficient_credits(db, org_id, minimum_required=10):
             raise HTTPException(
                 status_code=402,
                 detail="Insufficient credits. A minimum of 10 credits is required to initiate an audit scan."
             )
 
-        # 3. Resolve credential configuration if credentials_id is supplied
+        # Resolve credential configuration if credentials_id is supplied
         if request.credentials_id:
             from app.services.credential_service import credential_service
             config = credential_service.resolve_for_audit(request.credentials_id, org_id, db)
@@ -96,6 +94,62 @@ class ProxyService:
                 raise HTTPException(status_code=hse.response.status_code, detail=detail)
             except HTTPException as he:
                 raise he
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    async def start_crawl_discovery(
+        self,
+        request: CrawlDiscoveryRequest,
+        project_id: Optional[str],
+        current_user: User,
+        db: Session
+    ) -> CrawlDiscoveryTask:
+        org_id = current_user.organization_id
+
+        # Resolve credential configuration if credentials_id is supplied (web_application / both)
+        if request.credentials_id:
+            from app.services.credential_service import credential_service
+            request.credential_config = credential_service.resolve_for_audit(request.credentials_id, org_id, db)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                discovery_data = request.model_dump(mode="json")
+                headers = self._build_context_headers(current_user, project_id)
+
+                if not project_id:
+                    default_proj = proxy_repo.get_default_project_by_org(db, org_id)
+                    if default_proj:
+                        headers["X-Project-ID"] = str(default_proj.id)
+
+                response = await client.post(
+                    f"{AGENT_SERVICE_URL}/crawl_discovery",
+                    json=discovery_data,
+                    headers=headers
+                )
+                response.raise_for_status()
+                return CrawlDiscoveryTask(**response.json())
+            except httpx.HTTPStatusError as hse:
+                detail = hse.response.text
+                try:
+                    detail = hse.response.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise HTTPException(status_code=hse.response.status_code, detail=detail)
+            except HTTPException as he:
+                raise he
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    async def get_crawl_discovery_status(self, crawl_task_id: str, current_user: User) -> CrawlDiscoveryTask:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                headers = self._build_context_headers(current_user)
+                response = await client.get(
+                    f"{AGENT_SERVICE_URL}/crawl_discovery/{crawl_task_id}",
+                    headers=headers
+                )
+                response.raise_for_status()
+                return CrawlDiscoveryTask(**response.json())
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
