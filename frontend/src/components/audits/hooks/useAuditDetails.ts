@@ -194,30 +194,26 @@ export const useAuditDetails = () => {
   }, [filteredViolations, selectedViolation]);
 
   // KPI Calculations
+  // Pass-rate score: the % of accessibility checks (testcases) that passed.
+  // This mirrors how compliance is communicated to stakeholders (e.g. "82% of
+  // checks passed") instead of an opaque penalty formula.
   const calculatedScore = useMemo(() => {
-    if (violations.length === 0) return 100;
-    let totalPenalty = 0;
-    violations.forEach(v => {
-      const severity = v.severity?.toLowerCase() || 'moderate';
-      let weight = 3.0;
-      if (severity === 'blocker' || severity === 'critical') weight = 10.0;
-      else if (severity === 'serious' || severity === 'high') weight = 6.0;
-      else if (severity === 'moderate' || severity === 'medium') weight = 3.0;
-      else if (severity === 'minor' || severity === 'low') weight = 1.0;
+    if (testcases.length === 0) return 100;
+    const passedCount = testcases.filter(tc => tc.status === 'PASS').length;
+    return parseFloat(((passedCount / testcases.length) * 100).toFixed(1));
+  }, [testcases]);
 
-      const snippet = v.html_snippet || '';
-      const nodeCount = snippet ? snippet.split('\n').filter(Boolean).length : 1;
-      
-      const penalty = weight * Math.log(1.0 + nodeCount);
-      totalPenalty += penalty;
-    });
-    const score = Math.max(0, Math.min(100, 100 - totalPenalty));
-    return parseFloat(score.toFixed(1));
-  }, [violations]);
-
-  const accessibilityScore = taskDetail?.summary?.accessibility_score ?? (taskDetail?.status === 'completed' ? calculatedScore : 0);
+  // Always derive the score from the loaded testcases when available, so it
+  // stays consistent with the Test Case/Defects counts shown on this same
+  // page. Falls back to the persisted summary score only when testcases
+  // haven't loaded yet (e.g. audit still in progress).
+  const accessibilityScore = testcases.length > 0
+    ? calculatedScore
+    : (taskDetail?.summary?.accessibility_score ?? 0);
   const criticalCount = useMemo(() => violations.filter(v => v.severity?.toLowerCase() === 'critical').length, [violations]);
-  const moderateCount = useMemo(() => violations.filter(v => v.severity?.toLowerCase() === 'moderate').length, [violations]);
+  const totalIssuesCount = violations.length;
+  const pagesScannedCount = taskDetail?.pages_scanned?.length ?? taskDetail?.pages_completed ?? 0;
+  const pagesDiscoveredCount = taskDetail?.pages_discovered?.length ?? taskDetail?.pages_found ?? pagesScannedCount;
 
   const isCompleted = taskDetail?.status === 'completed';
   const isStopped = taskDetail?.status === 'stopped';
@@ -269,7 +265,9 @@ export const useAuditDetails = () => {
     filteredDiscoveredUrls,
     accessibilityScore,
     criticalCount,
-    moderateCount,
+    totalIssuesCount,
+    pagesScannedCount,
+    pagesDiscoveredCount,
     isCompleted,
     isStopped,
     isRunning,

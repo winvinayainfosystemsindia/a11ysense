@@ -93,7 +93,8 @@ def test_aggregate_and_deduplicate():
 
 def test_scoring_engine():
     """
-    Validates weighted compliance scoring and logarithmic multipliers.
+    Validates pass-rate based compliance scoring: the percentage of
+    accessibility checks (axe-core rules) that passed out of all checks run.
     """
     violations = [
         Violation(
@@ -117,16 +118,16 @@ def test_scoring_engine():
             ]
         )
     ]
-    
-    score, breakdown = calculate_accessibility_score(violations)
-    
-    # 1. Critical Penalty: 10 * ln(1 + 3) = 10 * 1.386 = 13.86
-    # 2. Serious Penalty: 6 * ln(1 + 1) = 6 * 0.693 = 4.16
-    # Total Penalty: 18.02
-    # Score: 100 - 18.02 = 81.98 -> rounded to 82.0
-    assert score == 82.0
-    assert breakdown.critical_penalty == 13.86
-    assert breakdown.serious_penalty == 4.16
+
+    # 8 rules passed, 2 rules failed -> 10 total checks -> 80% pass rate
+    score, breakdown = calculate_accessibility_score(violations, passes_count=8)
+
+    assert score == 80.0
+    assert breakdown.total_checks == 10
+    assert breakdown.passed_checks == 8
+    assert breakdown.failed_checks == 2
+    assert breakdown.critical_count == 1
+    assert breakdown.serious_count == 1
 
 def test_trend_regression_engine():
     """

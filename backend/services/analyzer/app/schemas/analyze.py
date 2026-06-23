@@ -3,10 +3,13 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
 class ScoreBreakdown(BaseModel):
-    critical_penalty: float = 0.0
-    serious_penalty: float = 0.0
-    moderate_penalty: float = 0.0
-    minor_penalty: float = 0.0
+    total_checks: int = 0
+    passed_checks: int = 0
+    failed_checks: int = 0
+    critical_count: int = 0
+    serious_count: int = 0
+    moderate_count: int = 0
+    minor_count: int = 0
 
 class TrendBreakdown(BaseModel):
     previous_score: Optional[float] = None

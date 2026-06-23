@@ -65,7 +65,9 @@ const AuditDetailsPage: React.FC = () => {
     filteredDiscoveredUrls,
     accessibilityScore,
     criticalCount,
-    moderateCount,
+    totalIssuesCount,
+    pagesScannedCount,
+    pagesDiscoveredCount,
     isCompleted,
     isStopped,
     isRunning,
@@ -126,8 +128,9 @@ const AuditDetailsPage: React.FC = () => {
           <CompletedViewDashboard
             accessibilityScore={accessibilityScore}
             criticalCount={criticalCount}
-            moderateCount={moderateCount}
-            taskDetail={taskDetail}
+            totalIssuesCount={totalIssuesCount}
+            pagesScannedCount={pagesScannedCount}
+            pagesDiscoveredCount={pagesDiscoveredCount}
           />
 
           {/* Navigation Tabs */}

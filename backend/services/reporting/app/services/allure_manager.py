@@ -322,10 +322,13 @@ class AllureManager:
                 
             breakdown = result.metadata.get("score_breakdown", {})
             if breakdown:
-                f.write(f"Audit.Penalty.Critical={breakdown.get('critical_penalty', 0.0)}\n")
-                f.write(f"Audit.Penalty.Serious={breakdown.get('serious_penalty', 0.0)}\n")
-                f.write(f"Audit.Penalty.Moderate={breakdown.get('moderate_penalty', 0.0)}\n")
-                f.write(f"Audit.Penalty.Minor={breakdown.get('minor_penalty', 0.0)}\n")
+                f.write(f"Audit.Checks.Total={breakdown.get('total_checks', 0)}\n")
+                f.write(f"Audit.Checks.Passed={breakdown.get('passed_checks', 0)}\n")
+                f.write(f"Audit.Checks.Failed={breakdown.get('failed_checks', 0)}\n")
+                f.write(f"Audit.Issues.Critical={breakdown.get('critical_count', 0)}\n")
+                f.write(f"Audit.Issues.Serious={breakdown.get('serious_count', 0)}\n")
+                f.write(f"Audit.Issues.Moderate={breakdown.get('moderate_count', 0)}\n")
+                f.write(f"Audit.Issues.Minor={breakdown.get('minor_count', 0)}\n")
                 
             trend = result.metadata.get("trend", {})
             if trend:

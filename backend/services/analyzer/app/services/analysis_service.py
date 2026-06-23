@@ -21,8 +21,9 @@ class AnalysisService:
         # 1. Cross-page de-duplication and heuristic pre-filtering
         deduped_violations = aggregate_and_deduplicate(result.violations)
         
-        # 2. Weighted scoring calculations
-        score, breakdown = calculate_accessibility_score(deduped_violations)
+        # 2. Pass-rate scoring calculation
+        passes_count = len(result.passes or [])
+        score, breakdown = calculate_accessibility_score(deduped_violations, passes_count)
         
         # 3. Trend analysis delta compilation (delegates historical loading to repo via wrappers)
         trend = generate_trend_analysis(result.url, score, deduped_violations)

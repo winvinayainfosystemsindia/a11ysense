@@ -2,22 +2,23 @@ import React from 'react';
 import { Box, Card, Stack, Typography, LinearProgress, useTheme } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ErrorIcon from '@mui/icons-material/Error';
-import WarningIcon from '@mui/icons-material/Warning';
-import LayersIcon from '@mui/icons-material/Layers';
-import type { AuditTaskDetail } from '../../../service/auditService';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
+import BugReportIcon from '@mui/icons-material/BugReport';
 
 interface CompletedViewDashboardProps {
   accessibilityScore: number;
   criticalCount: number;
-  moderateCount: number;
-  taskDetail: AuditTaskDetail;
+  totalIssuesCount: number;
+  pagesScannedCount: number;
+  pagesDiscoveredCount: number;
 }
 
 export const CompletedViewDashboard: React.FC<CompletedViewDashboardProps> = ({
   accessibilityScore,
   criticalCount,
-  moderateCount,
-  taskDetail
+  totalIssuesCount,
+  pagesScannedCount,
+  pagesDiscoveredCount
 }) => {
   const theme = useTheme();
 
@@ -35,11 +36,28 @@ export const CompletedViewDashboard: React.FC<CompletedViewDashboardProps> = ({
           </Typography>
           <Typography variant="h6" color="text.secondary">/ 100</Typography>
         </Box>
-        <LinearProgress 
-          variant="determinate" 
-          value={accessibilityScore} 
+        <LinearProgress
+          variant="determinate"
+          value={accessibilityScore}
           sx={{ height: 6, borderRadius: 3, bgcolor: '#e2e8f0', '& .MuiLinearProgress-bar': { bgcolor: accessibilityScore >= 80 ? 'success.main' : accessibilityScore >= 70 ? 'warning.main' : 'error.main', borderRadius: 3 } }}
         />
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          % of accessibility checks passed
+        </Typography>
+      </Card>
+
+      {/* Pages Scanned Card */}
+      <Card variant="outlined" sx={{ p: 3, borderRadius: '16px', borderLeft: `6px solid ${theme.palette.info.main}` }}>
+        <Stack component="div" direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
+          <TravelExploreIcon color="info" />
+          <Typography variant="overline" sx={{ fontWeight: '800', color: 'text.secondary', fontSize: '0.7rem' }}>Pages Scanned</Typography>
+        </Stack>
+        <Typography variant="h3" sx={{ fontWeight: '800', color: 'info.main', mb: 0.5 }}>
+          {pagesScannedCount}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {pagesDiscoveredCount > pagesScannedCount ? `Of ${pagesDiscoveredCount} pages discovered` : 'Pages covered in this audit'}
+        </Typography>
       </Card>
 
       {/* Critical Issues Card */}
@@ -54,28 +72,16 @@ export const CompletedViewDashboard: React.FC<CompletedViewDashboardProps> = ({
         <Typography variant="caption" color="text.secondary">Requires immediate attention</Typography>
       </Card>
 
-      {/* Moderate Issues Card */}
+      {/* Total Issues Card */}
       <Card variant="outlined" sx={{ p: 3, borderRadius: '16px', borderLeft: `6px solid ${theme.palette.warning.main}` }}>
         <Stack component="div" direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
-          <WarningIcon color="warning" />
-          <Typography variant="overline" sx={{ fontWeight: '800', color: 'text.secondary', fontSize: '0.7rem' }}>Moderate Issues</Typography>
+          <BugReportIcon color="warning" />
+          <Typography variant="overline" sx={{ fontWeight: '800', color: 'text.secondary', fontSize: '0.7rem' }}>Total Issues Found</Typography>
         </Stack>
         <Typography variant="h3" sx={{ fontWeight: '800', color: 'warning.main', mb: 0.5 }}>
-          {moderateCount}
+          {totalIssuesCount}
         </Typography>
-        <Typography variant="caption" color="text.secondary">Improvement recommended</Typography>
-      </Card>
-
-      {/* Crawl Depth Card */}
-      <Card variant="outlined" sx={{ p: 3, borderRadius: '16px', borderLeft: `6px solid ${theme.palette.info.main}` }}>
-        <Stack component="div" direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
-          <LayersIcon color="info" />
-          <Typography variant="overline" sx={{ fontWeight: '800', color: 'text.secondary', fontSize: '0.7rem' }}>Crawl Depth</Typography>
-        </Stack>
-        <Typography variant="h3" sx={{ fontWeight: '800', color: 'info.main', mb: 0.5 }}>
-          {taskDetail.depth ?? 1}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">Maximum crawl limit</Typography>
+        <Typography variant="caption" color="text.secondary">Across all severities</Typography>
       </Card>
     </Box>
   );
