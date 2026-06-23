@@ -26,6 +26,7 @@ import KeyIcon from '@mui/icons-material/Key';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import PeopleIcon from '@mui/icons-material/People';
 import LockIcon from '@mui/icons-material/Lock';
+import FolderIcon from '@mui/icons-material/Folder';
 import { useAppDispatch } from '../../../store';
 import { logoutUser } from '../../../store/slices/authSlice';
 
@@ -80,6 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: `/org/${orgId}/dashboard` },
+    { text: 'Projects', icon: <FolderIcon />, path: `/org/${orgId}/projects` },
     { text: 'Audits', icon: <ChecklistIcon />, path: `/org/${orgId}/audits` },
     { text: 'Agents', icon: <SmartToyIcon />, path: `/org/${orgId}/agents` },
     { text: 'Reports', icon: <DescriptionIcon />, path: '/maintenance' },
