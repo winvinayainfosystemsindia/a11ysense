@@ -15,12 +15,48 @@ const createServices = (envName, venvPath, gatewayPort, agentPort, reportingPort
   };
 
   const services = [
-    { name: `${envName}-gateway`, script: `backend/${venvPath}/bin/uvicorn`, args: `app.main:app --host 0.0.0.0 --port ${gatewayPort} --loop asyncio`, cwd: "./backend/services/gateway" },
-    { name: `${envName}-agent`, script: `backend/${venvPath}/bin/uvicorn`, args: `app.main:app --host 0.0.0.0 --port ${agentPort} --loop asyncio`, cwd: "./backend/services/agent" },
-    { name: `${envName}-reporting`, script: `backend/${venvPath}/bin/uvicorn`, args: `app.main:app --host 0.0.0.0 --port ${reportingPort} --loop asyncio`, cwd: "./backend/services/reporting" },
-    { name: `${envName}-crawler`, script: `backend/${venvPath}/bin/uvicorn`, args: `app.main:app --host 0.0.0.0 --port ${crawlerPort} --loop asyncio`, cwd: "./backend/services/crawler" },
-    { name: `${envName}-analyzer`, script: `backend/${venvPath}/bin/uvicorn`, args: `app.main:app --host 0.0.0.0 --port ${analyzerPort} --loop asyncio`, cwd: "./backend/services/analyzer" },
-    { name: `${envName}-llm`, script: `backend/${venvPath}/bin/uvicorn`, args: `app.main:app --host 0.0.0.0 --port ${llmPort} --loop asyncio`, cwd: "./backend/services/llm" },
+    {
+      name: `${envName}-gateway`,
+      script: path.join(__dirname, 'backend', venvPath, 'bin', 'uvicorn'),
+      args: `app.main:app --host 0.0.0.0 --port ${gatewayPort} --loop asyncio`,
+      cwd: path.join(__dirname, 'backend', 'services', 'gateway'),
+      interpreter: 'none'
+    },
+    {
+      name: `${envName}-agent`,
+      script: path.join(__dirname, 'backend', venvPath, 'bin', 'uvicorn'),
+      args: `app.main:app --host 0.0.0.0 --port ${agentPort} --loop asyncio`,
+      cwd: path.join(__dirname, 'backend', 'services', 'agent'),
+      interpreter: 'none'
+    },
+    {
+      name: `${envName}-reporting`,
+      script: path.join(__dirname, 'backend', venvPath, 'bin', 'uvicorn'),
+      args: `app.main:app --host 0.0.0.0 --port ${reportingPort} --loop asyncio`,
+      cwd: path.join(__dirname, 'backend', 'services', 'reporting'),
+      interpreter: 'none'
+    },
+    {
+      name: `${envName}-crawler`,
+      script: path.join(__dirname, 'backend', venvPath, 'bin', 'uvicorn'),
+      args: `app.main:app --host 0.0.0.0 --port ${crawlerPort} --loop asyncio`,
+      cwd: path.join(__dirname, 'backend', 'services', 'crawler'),
+      interpreter: 'none'
+    },
+    {
+      name: `${envName}-analyzer`,
+      script: path.join(__dirname, 'backend', venvPath, 'bin', 'uvicorn'),
+      args: `app.main:app --host 0.0.0.0 --port ${analyzerPort} --loop asyncio`,
+      cwd: path.join(__dirname, 'backend', 'services', 'analyzer'),
+      interpreter: 'none'
+    },
+    {
+      name: `${envName}-llm`,
+      script: path.join(__dirname, 'backend', venvPath, 'bin', 'uvicorn'),
+      args: `app.main:app --host 0.0.0.0 --port ${llmPort} --loop asyncio`,
+      cwd: path.join(__dirname, 'backend', 'services', 'llm'),
+      interpreter: 'none'
+    }
   ];
 
   return services.map(s => ({ ...s, env: commonEnv, autorestart: true, max_memory_restart: '1G' }));
