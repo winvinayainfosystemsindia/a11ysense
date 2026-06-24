@@ -16,8 +16,6 @@ import { alpha } from '@mui/material/styles';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
-import DescriptionIcon from '@mui/icons-material/Description';
-import SettingsIcon from '@mui/icons-material/Settings';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -84,13 +82,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
     { text: 'Projects', icon: <FolderIcon />, path: `/org/${orgId}/projects` },
     { text: 'Audits', icon: <ChecklistIcon />, path: `/org/${orgId}/audits` },
     { text: 'Agents', icon: <SmartToyIcon />, path: `/org/${orgId}/agents` },
-    { text: 'Reports', icon: <DescriptionIcon />, path: '/maintenance' },
     { text: 'Billing', icon: <PaymentIcon />, path: `/org/${orgId}/billing` },
     { text: 'Credits', icon: <AccountBalanceWalletIcon />, path: `/org/${orgId}/credits` },
     ...(showUserManagement ? [{ text: 'Users', icon: <PeopleIcon />, path: `/org/${orgId}/users` }] : []),
     { text: 'Credentials', icon: <LockIcon />, path: `/org/${orgId}/credentials` },
     { text: 'API Keys', icon: <KeyIcon />, path: `/org/${orgId}/api-keys` },
-    { text: 'Settings', icon: <SettingsIcon />, path: '/maintenance' },
   ];
 
   return (
