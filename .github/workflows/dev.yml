@@ -2,14 +2,60 @@ name: DEV Build and Deploy
 
 on:
   push:
-    branches: [ dev ]
+    branches: [dev]
   workflow_dispatch:
 
 jobs:
-  deploy:
+  ci:
+    name: Build & Test (CI)
     runs-on: ubuntu-latest
     steps:
-      - name: Deploying to DEV
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # --- Backend CI ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      - name: Install Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Check Backend Python Syntax
+        run: |
+          python -m py_compile $(find backend -name "*.py")
+
+      # --- Frontend CI ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run Frontend Linter
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: npm run build
+
+  deploy:
+    name: Deploy to DEV (CD)
+    needs: [ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploying to DEV via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
