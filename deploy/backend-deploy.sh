@@ -31,10 +31,37 @@ if [[ "$ENV" == "main" ]]; then
   PM2_ENV="prod"
 fi
 VENV_DIR="venv-$PM2_ENV"
+PYENV_PYTHON="$HOME/.pyenv/versions/3.11.9/bin/python3.11"
+
+# The Ubuntu release on this host ships Python 3.14 by default, which is too
+# new for pinned deps (greenlet/pydantic-core/psycopg2-binary lack 3.14 wheels),
+# and deadsnakes does not publish 3.11 packages for this release. Python 3.11
+# is built via pyenv instead; deploy scripts run over a non-interactive SSH
+# session that does not source ~/.bashrc, so the pyenv shim PATH is unavailable
+# and the binary must be referenced by its full path.
+if command -v python3.11 &> /dev/null; then
+    PYTHON_BIN="python3.11"
+elif [ -x "$PYENV_PYTHON" ]; then
+    PYTHON_BIN="$PYENV_PYTHON"
+else
+    echo "ERROR: python3.11 not found (checked PATH and $PYENV_PYTHON)."
+    echo "Install it with: curl https://pyenv.run | bash && ~/.pyenv/bin/pyenv install 3.11.9"
+    exit 1
+fi
+
+# Recreate the venv if it was built with a different Python version
+# (e.g. left over from manual troubleshooting with the system python3)
+if [ -d "$VENV_DIR" ]; then
+    EXISTING_VERSION="$("$VENV_DIR/bin/python" --version 2>&1 | awk '{print $2}')"
+    if [[ "$EXISTING_VERSION" != 3.11.* ]]; then
+        echo "Existing $VENV_DIR uses Python $EXISTING_VERSION, expected 3.11.x. Recreating..."
+        rm -rf "$VENV_DIR"
+    fi
+fi
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "Creating virtual environment in $VENV_DIR..."
-    python3.10 -m venv "$VENV_DIR"
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 source "$VENV_DIR/bin/activate"
 
