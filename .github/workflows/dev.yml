@@ -58,8 +58,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            mkdir -p /var/www/a11ysense-ai/dev
-            cd /var/www/a11ysense-ai/dev
+            cd /var/www/a11ysense
             git fetch --all
             git checkout dev
             git reset --hard origin/dev

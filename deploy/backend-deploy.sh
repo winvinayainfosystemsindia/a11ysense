@@ -12,10 +12,12 @@ if [[ "$ENV" != "dev" && "$ENV" != "qa" && "$ENV" != "main" && "$ENV" != "prod" 
   exit 1
 fi
 
-PROJECT_ROOT="/var/www/a11ysense-ai/$ENV"
+# Determine project root dynamically from script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 echo "Deploying Backend for $ENV environment in $PROJECT_ROOT..."
 
-cd $PROJECT_ROOT
+cd "$PROJECT_ROOT"
 
 # 1. Load environment variables
 if [ -f ".env.$ENV" ]; then
