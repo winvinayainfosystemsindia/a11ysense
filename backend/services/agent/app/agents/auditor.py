@@ -44,6 +44,9 @@ class AuditorAgent(BaseAgent):
         # 2. AI Refinement
         refined_violations = []
         llm_refined_count = 0
+        to_refine = []
+        to_keep = []
+
         for v in violations:
             # Always refine critical keyboard navigation and screen reader simulation defects
             is_custom_defect = v.id in [
@@ -56,19 +59,31 @@ class AuditorAgent(BaseAgent):
                 "keyboard-skip-link-missing"
             ]
             if llm_refined_count < 20 or is_custom_defect:
-                try:
-                    ai_refined = await self.refine_violation(v, session_id=session_id)
-                    refined_violations.append(ai_refined)
+                to_refine.append(v)
+                if not is_custom_defect:
                     llm_refined_count += 1
+            else:
+                to_keep.append(v)
+
+        # Run LLM refinements in parallel with a semaphore limit of 5 to avoid rate limits
+        sem = asyncio.Semaphore(5)
+
+        async def refine_with_sem(v):
+            async with sem:
+                try:
+                    return await self.refine_violation(v, session_id=session_id)
                 except Exception as e:
                     logger.error(f"Failed to refine violation {v.id}: {str(e)}")
                     # Fallback to the unrefined violation so we don't lose data
-                    refined_violations.append(v)
-            else:
-                # Keep the remaining violations unrefined rather than dropping them
-                refined_violations.append(v)
-            
-        logger.info(f"AuditorAgent: {len(refined_violations)} violations total ({llm_refined_count} LLM-refined) on {url}")
+                    return v
+
+        if to_refine:
+            refined_results = await asyncio.gather(*(refine_with_sem(v) for v in to_refine))
+            refined_violations = list(refined_results) + to_keep
+        else:
+            refined_violations = to_keep
+
+        logger.info(f"AuditorAgent: {len(refined_violations)} violations total ({len(to_refine)} LLM-refined) on {url}")
 
         # 3. Capture screenshots for refined violations
         if session_id:

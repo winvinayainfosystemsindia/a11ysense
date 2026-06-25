@@ -2,29 +2,44 @@ import os
 import json
 import redis
 import logging
+import time
 from typing import Dict, Any, Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
 _redis_client = None
+_last_connect_time = 0.0
+_connect_cooldown = 10.0  # Retry connecting at most once every 10 seconds if offline
 
 def get_redis_client():
     """
     Acquires a persistent connection to the Redis client.
     """
-    global _redis_client
+    global _redis_client, _last_connect_time
     if _redis_client is not None:
-        return _redis_client if _redis_client is not False else None
+        try:
+            _redis_client.ping()
+            return _redis_client
+        except Exception:
+            _redis_client = None
+
+    now = time.time()
+    if now - _last_connect_time < _connect_cooldown:
+        return None
+
+    _last_connect_time = now
     try:
         redis_host = os.getenv("REDIS_HOST", "localhost")
         # Use a local variable to prevent concurrent threads from returning an unvalidated connection
         client = redis.Redis(host=redis_host, port=6379, db=0, socket_timeout=2.0)
         client.ping()
         _redis_client = client
+        logger.info("Event Bus: Successfully connected to Redis.")
+        return _redis_client
     except Exception as e:
         logger.warning(f"Event Bus: Redis connection failed. Detail: {str(e)}")
-        _redis_client = False
-    return _redis_client if _redis_client is not False else None
+        _redis_client = None
+        return None
 
 
 def publish_event(stream_name: str, payload: Dict[str, Any]) -> Optional[str]:
