@@ -13,6 +13,11 @@ from app.schemas.crawl import CrawlRequest, CrawlResponse, PageDiscovery
 
 logger = logging.getLogger(__name__)
 
+# Many sites front their traffic with a WAF/load balancer that 403s requests
+# carrying a non-browser User-Agent (e.g. AWS WAF Bot Control). Identify as a
+# real browser so the static fetch path doesn't get blocked outright.
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+
 # Non-HTML Extensions to skip
 NON_HTML_EXTENSIONS = {
     '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.bmp', '.tiff', '.ico',
@@ -296,7 +301,7 @@ class WebCrawler:
         start_time = time.time()
         
         headers = {
-            "User-Agent": "A11ySenseCrawler/1.0",
+            "User-Agent": DEFAULT_USER_AGENT,
             **self.request.headers
         }
         
@@ -477,7 +482,7 @@ class WebCrawler:
         robots_parser = None
         if self.request.respect_robots_txt:
             try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with httpx.AsyncClient(timeout=5.0, headers={"User-Agent": DEFAULT_USER_AGENT}) as client:
                     robots_parser = await RobotsParser.fetch_and_parse(client, self.start_url)
                     self.sitemaps_found = robots_parser.sitemaps
                     if robots_parser.crawl_delay is not None and self.default_delay == 0.5:
@@ -502,7 +507,7 @@ class WebCrawler:
 
             context_args = {
                 "viewport": {'width': 1280, 'height': 800},
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                "user_agent": DEFAULT_USER_AGENT
             }
             if self.request.headers and not is_form_auth:
                 context_args["extra_http_headers"] = self.request.headers
