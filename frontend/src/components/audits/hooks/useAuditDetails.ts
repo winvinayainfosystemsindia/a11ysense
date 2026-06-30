@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { auditService } from '../../../service/auditService';
 import type { AuditTaskDetail } from '../../../service/auditService';
@@ -40,7 +40,11 @@ export const useAuditDetails = () => {
     return s === 'completed' || s === 'failed' || s === 'stopped';
   };
 
+  const fetchInFlight = useRef(false);
+
   const fetchData = async (showLoading = false) => {
+    if (fetchInFlight.current) return;
+    fetchInFlight.current = true;
     if (showLoading) setLoading(true);
     try {
       const [taskData] = await Promise.all([
@@ -57,6 +61,7 @@ export const useAuditDetails = () => {
       setError(err.message || 'Failed to load audit details');
     } finally {
       if (showLoading) setLoading(false);
+      fetchInFlight.current = false;
     }
   };
 
