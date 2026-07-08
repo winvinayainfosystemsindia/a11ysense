@@ -156,6 +156,9 @@ class ManagerAgent(BaseAgent):
         pages_summary = {}
         page_title = "Multi-Page Audit"
 
+        # Per-page timeout: 5 minutes max per page (covers nav + axe + kb-nav + sr-sim + LLM)
+        PAGE_TIMEOUT_SECONDS = int(os.getenv("AUDIT_PAGE_TIMEOUT_SECONDS", "300"))
+
         for idx, target_url in enumerate(discovered_urls):
             if task_id:
                 # Poll DB to check if paused or stopped
@@ -172,8 +175,13 @@ class ManagerAgent(BaseAgent):
                         logger.info(f"Task {task_id} is STOPPED/DELETED. Terminating audit iteration.")
                         break
 
-            logger.info(f"Auditing page {idx + 1}/{len(discovered_urls)}: {target_url}")
-            try:
+            logger.info(f"Auditing page {idx + 1}/{len(discovered_urls)}: {target_url} (timeout={PAGE_TIMEOUT_SECONDS}s)")
+
+            async def _audit_single_page(
+                target_url=target_url, idx=idx
+            ):
+                """Inner coroutine so we can wrap it in asyncio.wait_for."""
+                nonlocal page_title
                 # Use guest context (no auth) for the login page, and authenticated context for other pages
                 is_login_page = False
                 if request.credential_config:
@@ -194,16 +202,19 @@ class ManagerAgent(BaseAgent):
                         logger.info(f"Using client-side navigation. Loading entrypoint URL first: {request.url}")
                         await browser_skill.navigate(page, str(request.url))
                         
-                        # Wait for entrypoint to be ready
+                        # Wait for entrypoint to be fully rendered before trying to click
                         try:
-                            await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                            await page.wait_for_load_state("networkidle", timeout=20000)
                         except Exception:
                             pass
                         try:
-                            await page.wait_for_selector("li, nav a, aside a, main, #root, #app", state="visible", timeout=15000)
-                            await page.wait_for_timeout(3000)
+                            await page.wait_for_selector(
+                                "[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner']",
+                                state="hidden", timeout=10000
+                            )
                         except Exception:
-                            await page.wait_for_timeout(5000)
+                            pass
+                        await page.wait_for_timeout(2000)
                         
                         # Click the menu item client-side
                         logger.info(f"Clicking menu item '{target_menu_text}' to navigate client-side to {target_url}")
@@ -245,10 +256,16 @@ class ManagerAgent(BaseAgent):
                         }""", target_menu_text)
                         
                         if clicked:
-                            await page.wait_for_timeout(3000)
-                            # Wait for loaders on the new page
+                            # Wait for the navigated page to be fully rendered
                             try:
-                                await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                                await page.wait_for_load_state("networkidle", timeout=20000)
+                            except Exception:
+                                pass
+                            try:
+                                await page.wait_for_selector(
+                                    "[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner']",
+                                    state="hidden", timeout=10000
+                                )
                             except Exception:
                                 pass
                             
@@ -263,26 +280,47 @@ class ManagerAgent(BaseAgent):
                         # Fallback to direct navigation
                         await browser_skill.navigate(page, target_url)
 
-                    # Wait for React SPA to render and load completely (disappearing spinners, loading text)
+                    # ── Robust SPA readiness wait ──
+                    # Step 1: Wait for network to go idle (real signal for JS-rendered SPAs)
                     try:
-                        await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                        await page.wait_for_load_state("networkidle", timeout=20000)
+                        logger.debug(f"Network idle reached for {target_url}")
                     except Exception:
-                        pass
-                    # Wait for navigation/content elements to be visible
+                        # networkidle timed out (e.g. long-polling site) — fall through to DOM check
+                        logger.debug(f"networkidle timeout for {target_url}, falling back to DOM stabilization")
+
+                    # Step 2: Wait for any spinners / loading overlays to disappear
                     try:
-                        await page.wait_for_selector("li, nav a, aside a, main, #root, #app", state="visible", timeout=15000)
-                        # Give it a moment to finish rendering
-                        await page.wait_for_timeout(3000)
+                        await page.wait_for_selector(
+                            "[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner']",
+                            state="hidden", timeout=10000
+                        )
                     except Exception:
-                        await page.wait_for_timeout(5000)
+                        pass  # No spinner found or already hidden
+
+                    # Step 3: Poll DOM element count until it stabilizes (handles lazy-render SPAs)
+                    prev_count = 0
+                    for _ in range(8):  # up to 8 × 1.5s = 12s max
+                        await page.wait_for_timeout(1500)
+                        curr_count = await page.evaluate("document.querySelectorAll('*').length")
+                        logger.debug(f"DOM element count for {target_url}: {curr_count} (prev: {prev_count})")
+                        if curr_count == prev_count and curr_count > 100:
+                            break  # DOM has stabilized with real content
+                        prev_count = curr_count
 
                     current_title = await page.title()
+                    logger.info(f"Page ready: '{current_title}' — {prev_count} DOM elements")
 
                     if idx == 0:
                         page_title = current_title
 
-                    # Run Axe scan ONCE and share results across both agents
+                    # ── Axe scan (runs on fully-rendered DOM) ──
                     scan_data = await scanner_skill.run_axe(page)
+                    logger.info(
+                        f"Axe scan complete on {target_url}: "
+                        f"{len(scan_data.get('violations', []))} violations, "
+                        f"{len(scan_data.get('passes', []))} passes"
+                    )
 
                     # ── Keyboard Navigation Audit (independent fault-tolerant block) ──
                     try:
@@ -354,6 +392,20 @@ class ManagerAgent(BaseAgent):
                         "passes_count": len(scan_data.get("passes", [])),
                         "status": "success"
                     }
+
+            try:
+                await asyncio.wait_for(_audit_single_page(), timeout=PAGE_TIMEOUT_SECONDS)
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"Page audit TIMED OUT after {PAGE_TIMEOUT_SECONDS}s for {target_url}. "
+                    "Skipping to next page."
+                )
+                pages_summary[target_url] = {
+                    "title": "Timed out",
+                    "violations_count": 0,
+                    "passes_count": 0,
+                    "status": f"failed: page audit timed out after {PAGE_TIMEOUT_SECONDS}s"
+                }
             except Exception as e:
                 logger.error(f"Failed to audit page {target_url}: {str(e)}")
                 pages_summary[target_url] = {
@@ -366,6 +418,16 @@ class ManagerAgent(BaseAgent):
             # Persist incremental page progress after each page
             if task_id:
                 audit_progress_repo.increment_completed(task_id, target_url)
+
+        # If every single page failed, don't report a fabricated clean/completed result —
+        # surface the real failure so the task is marked failed instead of "100% score, 0 issues".
+        if discovered_urls and pages_summary and all(
+            not str(p.get("status", "")).startswith("success") for p in pages_summary.values()
+        ):
+            failure_reasons = "; ".join(
+                f"{url}: {p.get('status')}" for url, p in pages_summary.items()
+            )
+            raise RuntimeError(f"All {len(pages_summary)} page(s) failed to audit — {failure_reasons}")
 
         # 4. Consolidated Result
         return AuditResult(

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from app.agents.base import BaseAgent
 from app.skills.implementations.scanner import scanner_skill
 from playwright.async_api import Page
@@ -78,8 +79,19 @@ class AuditorAgent(BaseAgent):
                     return v
 
         if to_refine:
-            refined_results = await asyncio.gather(*(refine_with_sem(v) for v in to_refine))
-            refined_violations = list(refined_results) + to_keep
+            LLM_BATCH_TIMEOUT = int(os.environ.get("AUDIT_LLM_BATCH_TIMEOUT_SECONDS", "180"))
+            try:
+                refined_results = await asyncio.wait_for(
+                    asyncio.gather(*(refine_with_sem(v) for v in to_refine)),
+                    timeout=LLM_BATCH_TIMEOUT
+                )
+                refined_violations = list(refined_results) + to_keep
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"LLM refinement batch TIMED OUT after {LLM_BATCH_TIMEOUT}s on {url}. "
+                    "Returning unrefined violations."
+                )
+                refined_violations = to_refine + to_keep
         else:
             refined_violations = to_keep
 
@@ -89,7 +101,6 @@ class AuditorAgent(BaseAgent):
         if session_id:
             try:
                 from common.config import get_audit_storage_path
-                import os
                 import uuid
                 
                 reports_dir = get_audit_storage_path(session_id)

@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import logging
 from typing import Optional
@@ -157,18 +158,44 @@ class ProxyService:
         session = proxy_repo.get_session_by_task_id(db, task_id)
         self._assert_session_ownership(session, current_user)
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        headers = self._build_context_headers(current_user)
+        last_exc = None
+
+        for attempt in range(1, 4):  # up to 3 attempts
             try:
-                headers = self._build_context_headers(current_user)
-                response = await client.get(
-                    f"{AGENT_SERVICE_URL}/status/{task_id}",
-                    headers=headers
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    response = await client.get(
+                        f"{AGENT_SERVICE_URL}/status/{task_id}",
+                        headers=headers
+                    )
+                    response.raise_for_status()
+                    return AuditTask(**response.json())
+            except (httpx.ReadTimeout, httpx.ConnectError, httpx.ConnectTimeout) as e:
+                last_exc = e
+                logger.warning(
+                    f"Transient connection error fetching task status {task_id} "
+                    f"(attempt {attempt}/3): {type(e).__name__}: {e}"
                 )
-                response.raise_for_status()
-                return AuditTask(**response.json())
+                if attempt < 3:
+                    await asyncio.sleep(attempt)  # 1s, 2s backoff
+                continue
+            except httpx.HTTPStatusError as hse:
+                detail = hse.response.text
+                try:
+                    detail = hse.response.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise HTTPException(status_code=hse.response.status_code, detail=detail)
             except Exception as e:
                 logger.exception(f"Error fetching task status for task {task_id}")
                 raise HTTPException(status_code=500, detail=str(e))
+
+        # All retries exhausted — return a user-friendly error
+        logger.error(f"All 3 attempts to fetch task status for {task_id} failed: {last_exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Audit service temporarily unavailable. The task is still running — please try again in a moment."
+        )
 
     async def get_task_token_usage(self, task_id: str, current_user: User, db: Session) -> dict:
         session = proxy_repo.get_session_by_task_id(db, task_id)

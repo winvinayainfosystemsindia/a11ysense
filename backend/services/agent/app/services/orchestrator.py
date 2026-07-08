@@ -176,21 +176,36 @@ class AuditOrchestrator:
         elif crawl_error:
             write_debug(f"Non-fatal crawl warning: {crawl_error}. Proceeding with {len(discovered_urls)} discovered URL(s).")
 
+        # Global task timeout: max 1 hour total for the whole audit (configurable via env)
+        TASK_TIMEOUT_SECONDS = int(os.getenv("AUDIT_TASK_TIMEOUT_SECONDS", "3600"))
+
         try:
             write_debug(f"Orchestrating multi-agent audit scanning for URLs: {discovered_urls}")
-            await self.orchestrate_agent_audit(
-                task_id=task_id,
-                request=request,
-                discovered_urls=discovered_urls,
-                sitemaps_found=sitemaps_found,
-                org_id=org_id,
-                proj_id=proj_id,
-                storage_state=crawl_storage_state,
-                auth_headers=crawl_auth_headers,
-                pages_depth_map=crawl_depth_map,
-                url_to_menu_text=crawl_url_to_menu_text,
+            await asyncio.wait_for(
+                self.orchestrate_agent_audit(
+                    task_id=task_id,
+                    request=request,
+                    discovered_urls=discovered_urls,
+                    sitemaps_found=sitemaps_found,
+                    org_id=org_id,
+                    proj_id=proj_id,
+                    storage_state=crawl_storage_state,
+                    auth_headers=crawl_auth_headers,
+                    pages_depth_map=crawl_depth_map,
+                    url_to_menu_text=crawl_url_to_menu_text,
+                ),
+                timeout=TASK_TIMEOUT_SECONDS
             )
             write_debug("Orchestrated audit completed successfully.")
+        except asyncio.TimeoutError:
+            timeout_msg = f"Audit task timed out after {TASK_TIMEOUT_SECONDS // 60} minutes. Please retry."
+            write_debug(f"TASK TIMEOUT: {timeout_msg}")
+            logger.error(f"Task {task_id} exceeded global timeout of {TASK_TIMEOUT_SECONDS}s. Marking as failed.")
+            audit_progress_repo.mark_failed(task_id, timeout_msg, {})
+            try:
+                audit_session_repo.mark_session_failed(task_id, timeout_msg, {})
+            except Exception as fail_db_err:
+                write_debug(f"Failed to record timeout failure in DB: {fail_db_err}")
         except Exception as run_err:
             err_trace = traceback.format_exc()
             write_debug(f"Orchestrated audit failed: {str(run_err)}\nTrace:\n{err_trace}")
@@ -457,14 +472,42 @@ class AuditOrchestrator:
         if get_redis_client() is not None:
             publish_event("audit:tasks", task_payload)
         else:
-            logger.info(f"Redis is offline. Triggering audit for task {task_id} in-memory via BackgroundTasks.")
-            background_tasks.add_task(
-                self.run_in_memory_audit_flow,
-                task_id=task_id,
-                request=request,
-                org_id=org_id,
-                proj_id=proj_id
-            )
+            logger.info(f"Redis is offline. Triggering audit for task {task_id} via isolated background thread.")
+            import threading
+
+            def _run_in_thread():
+                """Run the async audit in its own event loop, isolated from the Uvicorn event loop.
+                This prevents a hung Playwright call from blocking the /status/{task_id} endpoint.
+                """
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(
+                        self.run_in_memory_audit_flow(
+                            task_id=task_id,
+                            request=request,
+                            org_id=org_id,
+                            proj_id=proj_id
+                        )
+                    )
+                except Exception as thread_err:
+                    logger.error(f"Background audit thread failed for task {task_id}: {thread_err}")
+                    audit_progress_repo.mark_failed(task_id, str(thread_err), {})
+                    try:
+                        audit_session_repo.mark_session_failed(task_id, str(thread_err), {})
+                    except Exception:
+                        pass
+                finally:
+                    # Clean up the Playwright browser for this thread
+                    try:
+                        from app.utils.browser import browser_manager
+                        loop.run_until_complete(browser_manager.stop())
+                    except Exception:
+                        pass
+                    loop.close()
+
+            t = threading.Thread(target=_run_in_thread, daemon=True, name=f"audit-{task_id[:8]}")
+            t.start()
 
         return audit_progress_repo.as_audit_task(task_id) or progress_row
 
