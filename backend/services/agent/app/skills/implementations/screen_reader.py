@@ -459,22 +459,31 @@ class ScreenReaderSkill:
                     }
                 ))
             else:
+                is_link = tagName.lower() == "a" or role == "link"
+                pass_id = "link-purpose" if is_link else "screen-reader-pass"
+                pass_help = f"Link purpose verified on <{tagName}>" if is_link else f"Accessible name verified on <{tagName}>"
+                pass_help_url = "https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-in-context" if is_link else "https://www.w3.org/WAI/WCAG22/Understanding/name-role-value"
+                pass_tags = ["wcag2a", "wcag244"] if is_link else ["wcag2a", "wcag412"]
+                pass_criteria = "2.4.4 Link Purpose (In Context)" if is_link else "4.1.2 Name, Role, Value"
+                pass_expected = "Link text or accessible name must clearly describe the link's purpose or destination." if is_link else "Interactive elements must have a descriptive accessible name that a screen reader can compute and announce."
+                pass_actual = f"Verification passed: Link purpose computed successfully as '{announcement}'." if is_link else f"Verification passed: Screen reader announcement computed successfully as '{announcement}'."
+
                 passes.append({
-                    "id": "screen-reader-pass",
-                    "help": f"Accessible name verified on <{tagName}>",
+                    "id": pass_id,
+                    "help": pass_help,
                     "description": f"Screen reader announcement computed successfully: '{announcement}'",
-                    "helpUrl": "https://www.w3.org/WAI/WCAG22/Understanding/name-role-value",
-                    "tags": ["wcag2a", "wcag412"],
+                    "helpUrl": pass_help_url,
+                    "tags": pass_tags,
                     "nodes": [{
                         "html": html,
                         "target": [f"{tagName}{'#' + element_id if element_id else ''}"]
                     }],
                     "metadata": {
-                        "wcag_criteria": "4.1.2 Name, Role, Value",
+                        "wcag_criteria": pass_criteria,
                         "wcag_level": "A",
                         "severity": "Serious",
-                        "expected_result": "Interactive elements must have a descriptive accessible name that a screen reader can compute and announce.",
-                        "actual_result": f"Verification passed: Screen reader announcement computed successfully as '{announcement}'.",
+                        "expected_result": pass_expected,
+                        "actual_result": pass_actual,
                         "steps_to_reproduce": (
                             f"1. Locate the <{tagName}> element.\n"
                             f"2. Inspect its accessible name in the accessibility tree.\n"
