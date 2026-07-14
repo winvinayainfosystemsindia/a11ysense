@@ -61,7 +61,7 @@ class ReportRepository:
             "S.No", "Test Case ID", "Test Case Name", "Page Title", "Page URL", 
             "Rule ID", "Criteria", "Level", "Severity", "Status", "Description", 
             "Expected Result", "Actual Result", "Steps to Reproduce", "Remediation", 
-            "Refined By", "Screenshot"
+            "Refined By", "HTML Snippet", "Screenshot"
         ]
         
         def populate_sheet(ws, cases):
@@ -105,6 +105,7 @@ class ReportRepository:
                     steps,
                     remediation,
                     tc.get("refined_by", "N/A"),
+                    tc.get("html_snippet", "N/A"),
                     tc.get("screenshot", "N/A")
                 ]
                 
@@ -115,12 +116,12 @@ class ReportRepository:
                     cell = ws.cell(row=row_idx, column=col_idx)
                     cell.border = border_thin
                     
-                    if col_idx in [1, 2, 7, 8, 9, 10, 17]:
+                    if col_idx in [1, 2, 7, 8, 9, 10, 18]:
                         cell.alignment = align_center
                     else:
                         cell.alignment = align_left
                         
-                    if col_idx in [2, 6]:
+                    if col_idx in [2, 6, 17]:
                         cell.font = code_font
                     else:
                         cell.font = data_font
