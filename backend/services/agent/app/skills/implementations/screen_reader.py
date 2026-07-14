@@ -465,6 +465,10 @@ class ScreenReaderSkill:
                     "description": f"Screen reader announcement computed successfully: '{announcement}'",
                     "helpUrl": "https://www.w3.org/WAI/WCAG22/Understanding/name-role-value",
                     "tags": ["wcag2a", "wcag412"],
+                    "nodes": [{
+                        "html": html,
+                        "target": [f"{tagName}{'#' + element_id if element_id else ''}"]
+                    }],
                     "metadata": {
                         "wcag_criteria": "4.1.2 Name, Role, Value",
                         "wcag_level": "A",

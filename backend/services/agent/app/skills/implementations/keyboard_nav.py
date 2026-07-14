@@ -270,6 +270,10 @@ class KeyboardNavSkill:
                     "description": f"The interactive element <{active_info['tagName']}> has a visible focus indicator when active.",
                     "helpUrl": "https://www.w3.org/WAI/WCAG22/Understanding/focus-visible",
                     "tags": ["wcag2aa", "wcag247", "wcag22"],
+                    "nodes": [{
+                        "html": active_info.get("html", ""),
+                        "target": [f"{active_info['tagName']}{'#' + active_info['id'] if active_info['id'] else ''}"]
+                    }],
                     "metadata": {
                         "wcag_criteria": "2.4.7 Focus Visible",
                         "wcag_level": "AA",
@@ -317,6 +321,10 @@ class KeyboardNavSkill:
                         "description": f"Focus transitioned to <{active_info['tagName']}> in a logical vertical sequence.",
                         "helpUrl": "https://www.w3.org/WAI/WCAG22/Understanding/focus-order",
                         "tags": ["wcag2a", "wcag243"],
+                        "nodes": [{
+                            "html": active_info.get("html", ""),
+                            "target": [f"{active_info['tagName']}{'#' + active_info['id'] if active_info['id'] else ''}"]
+                        }],
                         "metadata": {
                             "wcag_criteria": "2.4.3 Focus Order",
                             "wcag_level": "A",

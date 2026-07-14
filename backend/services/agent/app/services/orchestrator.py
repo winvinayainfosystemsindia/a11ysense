@@ -730,6 +730,24 @@ class AuditOrchestrator:
                 p_metadata = p.get('metadata') if isinstance(p, dict) else getattr(p, 'metadata', None)
                 meta = self.resolve_passed_metadata(p_id, p_tags, p_desc, p_help, p_metadata)
 
+                p_nodes = p.get('nodes', []) if isinstance(p, dict) else getattr(p, 'nodes', [])
+                if not isinstance(p_nodes, list):
+                    p_nodes = [p_nodes]
+
+                normalized_p_nodes = [
+                    node if isinstance(node, dict) else (
+                        node.model_dump(mode='json') if hasattr(node, 'model_dump') else vars(node)
+                    )
+                    for node in p_nodes
+                ]
+
+                html_snippets = []
+                for nd in normalized_p_nodes[:2]:
+                    html_val = nd.get("html", "")
+                    if html_val:
+                        html_snippets.append(html_val[:500])
+                html_snippet = "\n".join(html_snippets) if html_snippets else "N/A"
+
                 page_url = (p.get('page_url') if isinstance(p, dict) else getattr(p, 'page_url', None)) or str(result.url)
                 page_title = (p.get('page_title') if isinstance(p, dict) else getattr(p, 'page_title', None)) or result.metadata.get("page_title", "Page")
                 custom_id = self.generate_tc_custom_id(page_url, page_title, counter)
@@ -747,7 +765,7 @@ class AuditOrchestrator:
                     "steps_to_reproduce": meta["steps_to_reproduce"],
                     "remediation": meta["remediation"],
                     "business_impact": meta["business_impact"],
-                    "html_snippet": "",
+                    "html_snippet": html_snippet,
                     "refined_by": "N/A",
                     "help_url": p_help_url,
                     "status": "PASS",
