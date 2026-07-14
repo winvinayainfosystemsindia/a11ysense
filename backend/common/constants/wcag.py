@@ -122,6 +122,79 @@ IMPACT_TO_SEVERITY: dict[str, str] = {
     "minor": "Minor",
 }
 
+# ──────────────────────────────────────────────────────────────────────────────
+# A11ySense Audit Scope — verified against the codebase (coverage report v2).
+# These are the WCAG 2.1 Level A & AA criteria that the tool actively checks.
+# ──────────────────────────────────────────────────────────────────────────────
+A11YSENSE_AUDIT_SCOPE: list[dict[str, str]] = [
+    # Level A (19)
+    {"code": "1.1.1", "name": "Non-text Content", "level": "A"},
+    {"code": "1.2.1", "name": "Audio-only and Video-only", "level": "A"},
+    {"code": "1.2.2", "name": "Captions (Prerecorded)", "level": "A"},
+    {"code": "1.3.1", "name": "Info and Relationships", "level": "A"},
+    {"code": "1.4.1", "name": "Use of Color", "level": "A"},
+    {"code": "1.4.2", "name": "Audio Control", "level": "A"},
+    {"code": "2.1.1", "name": "Keyboard", "level": "A"},
+    {"code": "2.1.2", "name": "No Keyboard Trap", "level": "A"},
+    {"code": "2.2.1", "name": "Timing Adjustable", "level": "A"},
+    {"code": "2.2.2", "name": "Pause, Stop, Hide", "level": "A"},
+    {"code": "2.4.1", "name": "Bypass Blocks", "level": "A"},
+    {"code": "2.4.2", "name": "Page Titled", "level": "A"},
+    {"code": "2.4.3", "name": "Focus Order", "level": "A"},
+    {"code": "2.4.4", "name": "Link Purpose (In Context)", "level": "A"},
+    {"code": "2.5.3", "name": "Label in Name", "level": "A"},
+    {"code": "3.1.1", "name": "Language of Page", "level": "A"},
+    {"code": "3.3.2", "name": "Labels or Instructions", "level": "A"},
+    {"code": "4.1.1", "name": "Parsing", "level": "A"},
+    {"code": "4.1.2", "name": "Name, Role, Value", "level": "A"},
+    # Level AA (7)
+    {"code": "1.3.4", "name": "Orientation", "level": "AA"},
+    {"code": "1.3.5", "name": "Identify Input Purpose", "level": "AA"},
+    {"code": "1.4.3", "name": "Contrast (Minimum)", "level": "AA"},
+    {"code": "1.4.4", "name": "Resize Text", "level": "AA"},
+    {"code": "1.4.12", "name": "Text Spacing", "level": "AA"},
+    {"code": "2.4.7", "name": "Focus Visible", "level": "AA"},
+    {"code": "3.1.2", "name": "Language of Parts", "level": "AA"},
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Criteria NOT covered by A11ySense — require manual review by a human tester.
+# Group A: Can be automated later (14) + Group B: Always needs a person (10).
+# ──────────────────────────────────────────────────────────────────────────────
+A11YSENSE_MANUAL_REVIEW_CRITERIA: list[dict[str, str]] = [
+    # Group A — Can be automated later (Level A: 6)
+    {"code": "2.1.4", "name": "Character Key Shortcuts", "level": "A", "group": "A"},
+    {"code": "2.5.1", "name": "Pointer Gestures", "level": "A", "group": "A"},
+    {"code": "2.5.2", "name": "Pointer Cancellation", "level": "A", "group": "A"},
+    {"code": "3.2.1", "name": "On Focus", "level": "A", "group": "A"},
+    {"code": "3.2.2", "name": "On Input", "level": "A", "group": "A"},
+    {"code": "3.3.1", "name": "Error Identification", "level": "A", "group": "A"},
+    # Group A — Can be automated later (Level AA: 8)
+    {"code": "1.4.5", "name": "Images of Text", "level": "AA", "group": "A"},
+    {"code": "1.4.10", "name": "Reflow", "level": "AA", "group": "A"},
+    {"code": "1.4.11", "name": "Non-text Contrast", "level": "AA", "group": "A"},
+    {"code": "1.4.13", "name": "Content on Hover or Focus", "level": "AA", "group": "A"},
+    {"code": "3.2.3", "name": "Consistent Navigation", "level": "AA", "group": "A"},
+    {"code": "3.2.4", "name": "Consistent Identification", "level": "AA", "group": "A"},
+    {"code": "3.3.3", "name": "Error Suggestion", "level": "AA", "group": "A"},
+    {"code": "4.1.3", "name": "Status Messages", "level": "AA", "group": "A"},
+    # Group B — Always needs a person (Level A: 5)
+    {"code": "1.2.3", "name": "Audio Description or Media Alternative", "level": "A", "group": "B"},
+    {"code": "1.3.2", "name": "Meaningful Sequence", "level": "A", "group": "B"},
+    {"code": "1.3.3", "name": "Sensory Characteristics", "level": "A", "group": "B"},
+    {"code": "2.3.1", "name": "Three Flashes or Below Threshold", "level": "A", "group": "B"},
+    {"code": "2.5.4", "name": "Motion Actuation", "level": "A", "group": "B"},
+    # Group B — Always needs a person (Level AA: 5)
+    {"code": "1.2.4", "name": "Captions (Live)", "level": "AA", "group": "B"},
+    {"code": "1.2.5", "name": "Audio Description (Prerecorded)", "level": "AA", "group": "B"},
+    {"code": "2.4.5", "name": "Multiple Ways", "level": "AA", "group": "B"},
+    {"code": "2.4.6", "name": "Headings and Labels", "level": "AA", "group": "B"},
+    {"code": "3.3.4", "name": "Error Prevention (Legal, Financial, Data)", "level": "AA", "group": "B"},
+]
+
+# Quick lookup: set of criteria codes covered by the tool's audit scope.
+_AUDIT_SCOPE_CODES: set[str] = {c["code"] for c in A11YSENSE_AUDIT_SCOPE}
+
 
 def parse_wcag_tags(tags: list[str]) -> tuple[str, str]:
     """

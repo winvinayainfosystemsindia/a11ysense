@@ -20,7 +20,7 @@ from app.repository.crawl_progress_repo import crawl_progress_repo
 
 from common.config import get_service_url, get_storage_path, get_audit_storage_path
 from common.utils.event_bus import publish_event, get_redis_client
-from common.constants import parse_wcag_tags
+from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA, _AUDIT_SCOPE_CODES, WCAG_CRITERIA_MAP
 
 logger = logging.getLogger(__name__)
 manager_agent = ManagerAgent()
@@ -275,6 +275,52 @@ class AuditOrchestrator:
             except Exception as e:
                 logger.error(f"Analyzer Service unavailable, falling back: {str(e)}")
 
+            # Calculate WCAG criteria coverage
+            covered_a = set()
+            covered_aa = set()
+            
+            def _extract_criteria_code(rule) -> str | None:
+                tags = []
+                if isinstance(rule, dict):
+                    tags = rule.get("tags", [])
+                elif hasattr(rule, "tags"):
+                    tags = getattr(rule, "tags", [])
+                elif hasattr(rule, "model_dump"):
+                    tags = rule.model_dump().get("tags", [])
+                criteria, _ = parse_wcag_tags(tags)
+                if criteria != "N/A":
+                    code = criteria.split(" ")[0]
+                    if code in _AUDIT_SCOPE_CODES:
+                        return code
+                return None
+
+            for rule_list in [refined_result.passes, refined_result.violations]:
+                for r in (rule_list or []):
+                    code = _extract_criteria_code(r)
+                    if code:
+                        scope_entry = next((s for s in A11YSENSE_AUDIT_SCOPE if s["code"] == code), None)
+                        if scope_entry:
+                            if scope_entry["level"] == "A":
+                                covered_a.add(code)
+                            elif scope_entry["level"] == "AA":
+                                covered_aa.add(code)
+
+            # Mark manual review and N/A criteria
+            refined_result.metadata["criteria_coverage"] = {
+                "covered_a": list(covered_a),
+                "covered_aa": list(covered_aa),
+                "manual_review": [c["code"] for c in A11YSENSE_MANUAL_REVIEW_CRITERIA],
+                "not_applicable": [c["code"] for c in A11YSENSE_AUDIT_SCOPE if c["code"] not in covered_a and c["code"] not in covered_aa and c["code"] not in [m["code"] for m in A11YSENSE_MANUAL_REVIEW_CRITERIA]]
+            }
+
+            wcag_stats = {
+                "level_a_covered": len(covered_a),
+                "level_a_total": 19,
+                "level_aa_covered": len(covered_aa),
+                "level_aa_total": 7
+            }
+            refined_result.metadata["wcag_stats"] = wcag_stats
+
             # Compile final token usage report
             token_usage = await self.fetch_and_format_token_usage(task_id)
             refined_result.metadata["token_usage"] = token_usage
@@ -359,8 +405,19 @@ class AuditOrchestrator:
                 "total_violations": total_violations,
                 "violations_by_impact": violations_by_impact,
                 "passes_count": len(refined_result.passes or []) if refined_result.passes else 0,
-                "token_usage": token_usage
+                "token_usage": token_usage,
+                "wcag_stats": wcag_stats
             }
+
+            # Save summary_data to summary_{task_id}.json in reports storage
+            try:
+                reports_dir = get_audit_storage_path(task_id, org_id, proj_id)
+                summary_path = os.path.join(reports_dir, f"summary_{task_id}.json")
+                with open(summary_path, "w", encoding="utf-8") as f:
+                    json.dump(summary_data, f, indent=2)
+                logger.info(f"Saved summary JSON to {summary_path}")
+            except Exception as summary_file_err:
+                logger.error(f"Failed to write summary JSON file: {summary_file_err}")
 
             try:
                 status = "stopped" if is_stopped else "completed"
@@ -845,6 +902,82 @@ class AuditOrchestrator:
                     "screenshot": metadata.get("screenshot", "N/A")
                 })
                 counter += 1
+
+        # ── NOT_APPLICABLE entries for the 26 scope criteria not already covered ──
+        covered_criteria_codes = set()
+        for tc in testcases:
+            crit = tc.get("criteria", "N/A")
+            if crit != "N/A":
+                # Extract code from full name like "1.4.3 Contrast (Minimum)"
+                code = crit.split(" ")[0]
+                covered_criteria_codes.add(code)
+
+        base_page_url = str(result.url)
+        base_page_title = result.metadata.get("page_title", "Page")
+
+        for scope_crit in A11YSENSE_AUDIT_SCOPE:
+            if scope_crit["code"] not in covered_criteria_codes:
+                crit_full = WCAG_CRITERIA_MAP.get(scope_crit["code"], f"{scope_crit['code']} {scope_crit['name']}")
+                custom_id = self.generate_tc_custom_id(base_page_url, base_page_title, counter)
+                testcases.append({
+                    "testcase_id": custom_id,
+                    "defect_id": "N/A",
+                    "rule_id": f"wcag-{scope_crit['code']}",
+                    "testcase_name": scope_crit["name"],
+                    "description": f"WCAG {scope_crit['code']} {scope_crit['name']} — No elements matching this criterion were found on the audited pages.",
+                    "criteria": crit_full,
+                    "level": scope_crit["level"],
+                    "severity": "N/A",
+                    "expected_result": f"Elements on the page should comply with WCAG {scope_crit['code']} {scope_crit['name']}.",
+                    "actual_result": "No elements matching this criterion were found on the website. This criterion is not applicable for this audit.",
+                    "steps_to_reproduce": "N/A",
+                    "remediation": "No action required. This criterion did not apply to the audited pages.",
+                    "business_impact": "N/A",
+                    "html_snippet": "N/A",
+                    "refined_by": "N/A",
+                    "help_url": "",
+                    "status": "NOT_APPLICABLE",
+                    "page_url": base_page_url,
+                    "page_title": base_page_title,
+                    "input_tokens": 0,
+                    "output_tokens": 0
+                })
+                counter += 1
+
+        # ── MANUAL_REVIEW entries for the 24 criteria not covered by the tool ─────
+        for manual_crit in A11YSENSE_MANUAL_REVIEW_CRITERIA:
+            crit_full = WCAG_CRITERIA_MAP.get(manual_crit["code"], f"{manual_crit['code']} {manual_crit['name']}")
+            group = manual_crit.get("group", "B")
+            if group == "A":
+                review_note = "This criterion can potentially be automated in a future release. Manual testing is recommended for now."
+            else:
+                review_note = "This criterion requires human judgement, real device testing, or watching/listening to content. It cannot be reliably automated."
+
+            custom_id = self.generate_tc_custom_id(base_page_url, base_page_title, counter)
+            testcases.append({
+                "testcase_id": custom_id,
+                "defect_id": "N/A",
+                "rule_id": f"wcag-{manual_crit['code']}",
+                "testcase_name": manual_crit["name"],
+                "description": f"WCAG {manual_crit['code']} {manual_crit['name']} — {review_note}",
+                "criteria": crit_full,
+                "level": manual_crit["level"],
+                "severity": "N/A",
+                "expected_result": f"Elements on the page should comply with WCAG {manual_crit['code']} {manual_crit['name']}.",
+                "actual_result": f"This criterion is not covered by the automated audit tool. {review_note}",
+                "steps_to_reproduce": "Manual review required by a human accessibility tester.",
+                "remediation": "Perform manual accessibility testing for this criterion.",
+                "business_impact": f"Manual review ensures full WCAG 2.1 Level A and AA compliance for {manual_crit['name']}.",
+                "html_snippet": "N/A",
+                "refined_by": "N/A",
+                "help_url": "",
+                "status": "MANUAL_REVIEW",
+                "page_url": base_page_url,
+                "page_title": base_page_title,
+                "input_tokens": 0,
+                "output_tokens": 0
+            })
+            counter += 1
 
         reports_dir = get_audit_storage_path(task_id, org_id, proj_id)
         json_path = os.path.join(reports_dir, f"testcase_report_{task_id}.json")

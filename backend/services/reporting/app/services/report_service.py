@@ -257,7 +257,7 @@ class ReportService:
             return JSONResponse(status_code=404, content={"detail": "Report JSON not found"})
 
         try:
-            excel_file = report_repo.generate_excel_file(testcases)
+            excel_file = report_repo.generate_excel_file(testcases, task_id)
         except Exception as e:
             logger.exception("Failed to generate Excel report")
             return JSONResponse(status_code=500, content={"detail": f"Error generating Excel report: {str(e)}"})

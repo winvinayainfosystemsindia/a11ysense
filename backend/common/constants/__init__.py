@@ -1,11 +1,17 @@
 """
 Common constants package.
 """
-from .wcag import WCAG_CRITERIA_MAP, IMPACT_TO_LEVEL, IMPACT_TO_SEVERITY, parse_wcag_tags
+from .wcag import (
+    WCAG_CRITERIA_MAP, IMPACT_TO_LEVEL, IMPACT_TO_SEVERITY, parse_wcag_tags,
+    A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA, _AUDIT_SCOPE_CODES,
+)
 
 __all__ = [
     "WCAG_CRITERIA_MAP",
     "IMPACT_TO_LEVEL",
     "IMPACT_TO_SEVERITY",
     "parse_wcag_tags",
+    "A11YSENSE_AUDIT_SCOPE",
+    "A11YSENSE_MANUAL_REVIEW_CRITERIA",
+    "_AUDIT_SCOPE_CODES",
 ]
