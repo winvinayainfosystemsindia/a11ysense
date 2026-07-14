@@ -360,6 +360,25 @@ class ManagerAgent(BaseAgent):
                             exc_info=True
                         )
 
+                    # ── Landmark Accessibility Audit (independent fault-tolerant block) ──
+                    try:
+                        from app.skills.implementations.landmark import landmark_skill
+                        logger.info(f"[LANDMARK] Starting landmark accessibility audit on {target_url}...")
+                        lm_results = await landmark_skill.run_landmark_test(page)
+                        lm_violations = lm_results.get("violations", [])
+                        lm_passes = lm_results.get("passes", [])
+                        scan_data["violations"].extend(lm_violations)
+                        scan_data["passes"].extend(lm_passes)
+                        logger.info(
+                            f"[LANDMARK] Complete — {len(lm_violations)} violation(s), "
+                            f"{len(lm_passes)} pass(es) on {target_url}"
+                        )
+                    except Exception as lm_err:
+                        logger.error(
+                            f"[LANDMARK] FAILED on {target_url}: {lm_err}",
+                            exc_info=True
+                        )
+
                     # Delegate to Technical Auditor (passes pre-scanned data to avoid second scan)
                     violations = await self.auditor.audit_page(
                         page, target_url,
