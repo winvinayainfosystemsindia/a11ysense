@@ -179,6 +179,7 @@ STRICT OUTPUT RULES:
 3. DO NOT include any text before or after the JSON.
 4. All string values MUST be specific to the Rule ID "{violation.id}" — do NOT use generic image alt text examples for non-image rules.
 5. Ensure double quotes inside JSON string values are escaped with backslash (\").
+6. Base every field ONLY on the VIOLATION DATA above (Rule ID, Technical Description, Axe Help Text, Affected HTML). Do not invent contrast ratios, element counts, or page behavior that isn't shown. If no HTML nodes were captured, say so in "actual_result" instead of describing an element you were not given.
 
 REQUIRED JSON FIELDS (fill each based on the ACTUAL Rule ID and HTML above):
 {{
