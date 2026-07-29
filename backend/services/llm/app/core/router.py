@@ -12,12 +12,12 @@ from app.core.cache import get_redis_client
 logger = logging.getLogger(__name__)
 
 # Fallback sequence chain
-FALLBACK_CHAIN = ["claude", "gemini", "groq", "mock"]
+FALLBACK_CHAIN = ["gemini", "claude", "mock"]
 
 # Standard model names mapped per provider
 PROVIDER_MODELS = {
     "claude": "claude-3-haiku-20240307",
-    "gemini": "gemini-1.5-flash",
+    "gemini": "gemini-3.5-flash",
     "groq": "llama-3.1-8b-instant",
     "mock": "mock"
 }

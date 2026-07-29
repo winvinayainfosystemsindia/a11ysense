@@ -135,7 +135,7 @@ class BaseAgent:
 
     async def _call_gemini(self, prompt: str, system_message: str, use_vision: bool, image_data: str) -> str:
         genai.configure(api_key=self.gemini_key)
-        model_name = 'gemini-1.5-flash' if use_vision else 'gemini-1.5-pro'
+        model_name = 'gemini-3.5-flash'
         model = genai.GenerativeModel(model_name)
         
         parts = [system_message, prompt]
