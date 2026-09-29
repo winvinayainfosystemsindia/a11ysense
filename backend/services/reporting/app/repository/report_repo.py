@@ -361,18 +361,28 @@ class ReportRepository:
         output.seek(0)
         return output
 
-    def create_zip_archive(self, task_id: str, testcases: List[Dict[str, Any]], excel_file: io.BytesIO) -> io.BytesIO:
-        """Compiles Excel, JSON, and screenshots into a single ZIP archive buffer."""
+    def create_zip_archive(
+        self,
+        task_id: str,
+        testcases: List[Dict[str, Any]],
+        excel_file: io.BytesIO,
+        certificate_file: Optional[io.BytesIO] = None,
+    ) -> io.BytesIO:
+        """Compiles Excel, JSON, the conformance certificate, and screenshots into a single ZIP archive buffer."""
         reports_dir = get_audit_storage_path(task_id)
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             # 1. Add json file (formatted for readability)
             json_content = json.dumps(testcases, indent=2, ensure_ascii=False)
             zip_file.writestr("report.json", json_content.encode("utf-8"))
-            
+
             # 2. Add excel file
             zip_file.writestr("report.xlsx", excel_file.getvalue())
-            
+
+            # 2b. Add the accessibility conformance certificate, if generated
+            if certificate_file is not None:
+                zip_file.writestr("Accessibility_Conformance_Certificate.docx", certificate_file.getvalue())
+
             # 3. Add screenshots folder
             screenshots_added = set()
             for tc in testcases:

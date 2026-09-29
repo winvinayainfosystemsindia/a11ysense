@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, Streamin
 from app.services.allure_manager import AllureManager
 from app.schemas.audit import AuditResult
 from app.repository.report_repo import report_repo
+from app.repository.certificate_repo import certificate_repo
 from common.config import get_audit_storage_path
 
 logger = logging.getLogger(__name__)
@@ -250,6 +251,7 @@ class ReportService:
         Generates and exports a ZIP archive containing:
           - report.json: Full audit report JSON
           - report.xlsx: Styled Excel sheet with Test Cases & Defects tabs
+          - Accessibility_Conformance_Certificate.docx: WCAG conformance certificate
           - screenshots/: Folder of referenced screenshot files
         """
         testcases = report_repo.load_report_json(task_id)
@@ -263,7 +265,13 @@ class ReportService:
             return JSONResponse(status_code=500, content={"detail": f"Error generating Excel report: {str(e)}"})
 
         try:
-            zip_buffer = report_repo.create_zip_archive(task_id, testcases, excel_file)
+            certificate_file = certificate_repo.generate_certificate_docx(task_id, testcases)
+        except Exception as e:
+            logger.exception("Failed to generate accessibility conformance certificate; continuing without it")
+            certificate_file = None
+
+        try:
+            zip_buffer = report_repo.create_zip_archive(task_id, testcases, excel_file, certificate_file)
         except Exception as e:
             logger.exception("Failed to compile ZIP archive")
             return JSONResponse(status_code=500, content={"detail": f"Error compiling ZIP: {str(e)}"})

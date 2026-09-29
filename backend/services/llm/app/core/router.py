@@ -17,7 +17,7 @@ FALLBACK_CHAIN = ["gemini", "claude", "mock"]
 # Standard model names mapped per provider
 PROVIDER_MODELS = {
     "claude": "claude-3-haiku-20240307",
-    "gemini": "gemini-3.5-flash",
+    "gemini": "gemini-3.5-flash-lite",
     "groq": "llama-3.1-8b-instant",
     "mock": "mock"
 }
@@ -161,8 +161,9 @@ class CentralLLMRouter:
         text = response.text
         
         # Read usage stats
-        in_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
-        out_tokens = getattr(response.usage_metadata, "candidates_token_count", 0)
+        usage = getattr(response, "usage_metadata", None)
+        in_tokens = getattr(usage, "prompt_token_count", 0) if usage else 0
+        out_tokens = getattr(usage, "candidates_token_count", 0) if usage else 0
         
         # Heuristics fallback if metadata count fails
         if in_tokens == 0:

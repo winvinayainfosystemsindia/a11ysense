@@ -109,7 +109,7 @@ class AgentIntelligence:
 
     async def _call_gemini(self, prompt: str) -> Dict[str, str]:
         genai.configure(api_key=self.gemini_key)
-        model = genai.GenerativeModel('gemini-3.5-flash')
+        model = genai.GenerativeModel('gemini-3.5-flash-lite')
         response = model.generate_content(prompt)
         return self._parse_json_from_text(response.text)
 

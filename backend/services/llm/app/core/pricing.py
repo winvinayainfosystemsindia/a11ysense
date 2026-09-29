@@ -8,6 +8,7 @@ PRICING_MATRIX: Dict[str, Dict[str, float]] = {
     
     # Gemini Models (Google GenAI)
     "gemini-3.5-flash": {"input": 0.075, "output": 0.30},
+    "gemini-3.5-flash-lite": {"input": 0.05, "output": 0.20},
     "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
     "gemini-1.5-pro": {"input": 1.25, "output": 5.00},
     
