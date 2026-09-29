@@ -27,7 +27,7 @@ class AgentIntelligence:
         self.groq_key = os.getenv("GROQ_API_KEY")
         self.anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
-        self.provider = os.getenv("LLM_PROVIDER", "mock").lower()
+        self.provider = os.getenv("LLM_PROVIDER", "claude").lower()
 
     async def analyze_violations(self, result: AuditResult) -> AuditResult:
         """
@@ -54,14 +54,24 @@ class AgentIntelligence:
     async def get_ai_remediation(self, violation: Violation) -> Dict[str, str]:
         prompt = self._build_prompt(violation)
         
-        if self.provider == "groq" and self.groq_key and Groq:
-            return await self._call_groq(prompt)
-        elif self.provider == "claude" and self.anthropic_key and anthropic:
-            return await self._call_claude(prompt)
-        elif self.provider == "gemini" and self.gemini_key and genai:
-            return await self._call_gemini(prompt)
+        providers_to_try = [self.provider]
+        for p in ["claude", "gemini", "groq"]:
+            if p not in providers_to_try:
+                providers_to_try.append(p)
+
+        for prov in providers_to_try:
+            try:
+                if prov == "claude" and self.anthropic_key and anthropic:
+                    return await self._call_claude(prompt)
+                elif prov == "gemini" and self.gemini_key and genai:
+                    return await self._call_gemini(prompt)
+                elif prov == "groq" and self.groq_key and Groq:
+                    return await self._call_groq(prompt)
+            except Exception as e:
+                logger.warning(f"Agent intelligence provider {prov} failed: {e}")
+                continue
         
-        # Fallback to mock if no keys are provided
+        # Fallback to mock if no keys are provided or all calls fail
         return self._mock_remediation(violation)
 
     def _build_prompt(self, violation: Violation) -> str:
@@ -99,8 +109,8 @@ class AgentIntelligence:
     async def _call_claude(self, prompt: str) -> Dict[str, str]:
         client = anthropic.Anthropic(api_key=self.anthropic_key)
         message = client.messages.create(
-            model="claude-3-opus-20240229",
-            max_tokens=1024,
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
             messages=[{"role": "user", "content": prompt}]
         )
         # Claude doesn't always guarantee JSON unless forced, so we parse carefully

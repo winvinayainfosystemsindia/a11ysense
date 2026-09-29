@@ -26,7 +26,7 @@ class BaseAgent:
     def __init__(self, name: str, role: str):
         self.name = name
         self.role = role
-        self.provider = os.getenv("LLM_PROVIDER", "mock").lower()
+        self.provider = os.getenv("LLM_PROVIDER", "claude").lower()
         self.prompts_dir = Path(__file__).parent.parent / "prompts"
         self.skills_dir = Path(__file__).parent.parent / "skills"
         self.last_input_tokens = 0
@@ -79,13 +79,23 @@ class BaseAgent:
         except Exception as e:
             logger.warning(f"Centralized LLM service call failed ({str(e)}). Falling back to direct local SDK clients...")
 
-        # Local direct fallback
-        if self.provider == "claude" and self.anthropic_key and anthropic:
-            return await self._call_claude(prompt, system_message, use_vision, image_data)
-        elif self.provider == "groq" and self.groq_key and Groq:
-            return await self._call_groq(prompt, system_message)
-        elif self.provider == "gemini" and self.gemini_key and genai:
-            return await self._call_gemini(prompt, system_message, use_vision, image_data)
+        # Local direct fallback chain (claude -> gemini -> groq)
+        providers_to_try = [self.provider]
+        for p in ["claude", "gemini", "groq"]:
+            if p not in providers_to_try:
+                providers_to_try.append(p)
+
+        for prov in providers_to_try:
+            try:
+                if prov == "claude" and self.anthropic_key and anthropic:
+                    return await self._call_claude(prompt, system_message, use_vision, image_data)
+                elif prov == "gemini" and self.gemini_key and genai:
+                    return await self._call_gemini(prompt, system_message, use_vision, image_data)
+                elif prov == "groq" and self.groq_key and Groq:
+                    return await self._call_groq(prompt, system_message)
+            except Exception as direct_err:
+                logger.warning(f"Direct local client for {prov} failed: {direct_err}")
+                continue
         
         self.last_input_tokens = 50
         self.last_output_tokens = 100
@@ -106,12 +116,15 @@ class BaseAgent:
             })
         content.append({"type": "text", "text": prompt})
         
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20240620" if use_vision else "claude-3-haiku-20240307",
-            max_tokens=4096,
-            system=system_message,
-            messages=[{"role": "user", "content": content}]
-        )
+        kwargs = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 4096,
+            "messages": [{"role": "user", "content": content}]
+        }
+        if system_message and system_message.strip():
+            kwargs["system"] = system_message
+
+        message = client.messages.create(**kwargs)
         self.last_input_tokens = getattr(message.usage, "input_tokens", 0)
         self.last_output_tokens = getattr(message.usage, "output_tokens", 0)
         return message.content[0].text

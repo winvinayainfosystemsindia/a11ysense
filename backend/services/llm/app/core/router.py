@@ -12,11 +12,11 @@ from app.core.cache import get_redis_client
 logger = logging.getLogger(__name__)
 
 # Fallback sequence chain
-FALLBACK_CHAIN = ["gemini", "claude", "mock"]
+FALLBACK_CHAIN = ["claude", "gemini", "mock"]
 
 # Standard model names mapped per provider
 PROVIDER_MODELS = {
-    "claude": "claude-3-haiku-20240307",
+    "claude": "claude-sonnet-4-6",
     "gemini": "gemini-3.5-flash-lite",
     "groq": "llama-3.1-8b-instant",
     "mock": "mock"
@@ -36,7 +36,7 @@ class CentralLLMRouter:
         self.groq_key = os.getenv("GROQ_API_KEY")
         self.anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
-        self.default_provider = os.getenv("LLM_PROVIDER", "mock").lower()
+        self.default_provider = os.getenv("LLM_PROVIDER", "claude").lower()
 
     async def execute_generate(self, request: GenerateRequest) -> GenerateResponse:
         """
@@ -46,7 +46,7 @@ class CentralLLMRouter:
         # Determine initial provider
         primary_provider = request.provider or self.default_provider
         if primary_provider not in FALLBACK_CHAIN:
-            primary_provider = "mock"
+            primary_provider = "claude" if "claude" in FALLBACK_CHAIN else "mock"
             
         # Re-arrange chain to start with primary provider
         chain = [primary_provider] + [p for p in FALLBACK_CHAIN if p != primary_provider]
@@ -56,13 +56,21 @@ class CentralLLMRouter:
         
         for idx, provider in enumerate(chain):
             try:
+                # Check provider key availability before attempting API call
+                if provider == "claude" and not self.anthropic_key:
+                    raise ValueError("Anthropic API key is not configured")
+                if provider == "gemini" and not self.gemini_key:
+                    raise ValueError("Gemini API key is not configured")
+                if provider == "groq" and not self.groq_key:
+                    raise ValueError("Groq API key is not configured")
+
                 # Resolve model name
-                model = request.model or PROVIDER_MODELS[provider]
+                model = request.model or PROVIDER_MODELS.get(provider, "mock")
                 
                 # Perform call
                 logger.info(f"Router calling provider: {provider} using model: {model}")
                 text, in_tok, out_tok = await self._call_provider(
-                    provider, model, request.prompt, request.system_message, request.temperature, request.max_tokens
+                    provider, model, request.prompt, request.system_message or "", request.temperature, request.max_tokens
                 )
                 
                 # Calculate cost
@@ -85,7 +93,7 @@ class CentralLLMRouter:
                     cached=False
                 )
             except Exception as e:
-                logger.exception(f"Provider {provider} failed. Attempting next backup...")
+                logger.warning(f"Provider {provider} failed ({str(e)}). Attempting next backup in chain...")
                 fallback_occurred = True
                 last_error = str(e)
                 
@@ -111,7 +119,7 @@ class CentralLLMRouter:
         import httpx
         client = Groq(api_key=self.groq_key, http_client=httpx.Client())
         
-        sys_msg = system + "\nYou are a technical auditor. Return ONLY raw JSON data. No markdown, no preamble."
+        sys_msg = (system + "\n" if system else "") + "You are a technical auditor. Return ONLY raw JSON data. No markdown, no preamble."
         
         completion = client.chat.completions.create(
             model=model,
@@ -131,16 +139,19 @@ class CentralLLMRouter:
         import anthropic
         client = anthropic.Anthropic(api_key=self.anthropic_key)
         
-        message = client.messages.create(
-            model=model,
-            max_tokens=max_tok,
-            system=system,
-            temperature=temp,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        kwargs = {
+            "model": model,
+            "max_tokens": max_tok,
+            "temperature": temp,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        if system and system.strip():
+            kwargs["system"] = system
+
+        message = client.messages.create(**kwargs)
         text = message.content[0].text
-        in_tokens = message.usage.input_tokens
-        out_tokens = message.usage.output_tokens
+        in_tokens = getattr(message.usage, "input_tokens", 0)
+        out_tokens = getattr(message.usage, "output_tokens", 0)
         return text, in_tokens, out_tokens
 
     async def _call_gemini(self, model: str, prompt: str, system: str, temp: float, max_tok: int) -> tuple[str, int, int]:

@@ -5,10 +5,10 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(..., description="Prompt payload for LLM completion")
     system_message: Optional[str] = Field(default="", description="Optional system role description")
     session_id: Optional[str] = Field(default=None, description="Correlation ID for token usage tracking")
-    provider: Optional[str] = Field(default=None, description="Specific LLM provider override (groq|claude|gemini|mock)")
+    provider: Optional[str] = Field(default=None, description="Specific LLM provider override (claude|gemini|groq|mock)")
     model: Optional[str] = Field(default=None, description="Specific model override")
     temperature: float = Field(default=0.1, ge=0.0, le=2.0, description="Sampling temperature")
-    max_tokens: int = Field(default=2048, ge=1, le=4096, description="Max response length limit")
+    max_tokens: int = Field(default=4096, ge=1, le=64000, description="Max response length limit")
     agent_type: Optional[str] = Field(default=None, description="The agent type making the request (e.g., manager, auditor)")
 
 class GenerateResponse(BaseModel):
