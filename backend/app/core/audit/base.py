@@ -217,43 +217,39 @@ class BaseAgent:
             logger.error(f"Unexpected error in parse_json: {str(e)}")
             return {"error": "Internal parser error", "raw": raw_text}
 
-    def _extract_fields_via_regex(self, text: str) -> Dict[str, str]:
+    def _extract_fields_via_regex(self, text: str) -> Dict[str, Any]:
         """
         Fallback Regex parser to extract fields directly from malformed or truncated JSON.
+        Supports both string fields and list fields (steps_to_reproduce, fix_steps, verify_steps).
         """
         import re
-        fields = [
-            "friendly_name", "description", "help", "wcag_criteria", "wcag_level", "severity", 
-            "business_impact", "expected_result", "actual_result", 
-            "steps_to_reproduce", "ai_fix_suggestion", "element_html_snippet",
-            "remediation_plan"
+        string_fields = [
+            "description", "expected_result", "actual_result",
+            "friendly_name", "business_impact", "code_before",
+            "code_after", "false_positive_note", "help", "remediation_plan"
         ]
+        list_fields = ["steps_to_reproduce", "fix_steps", "verify_steps"]
+
         extracted = {}
-        for field in fields:
-            # Search for standard "field": "value"
+
+        # 1. Extract string fields
+        for field in string_fields:
             pattern = rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)"'
             match = re.search(pattern, text, re.DOTALL)
             if match:
-                val = match.group(1)
-                val = val.replace('\\"', '"')
+                val = match.group(1).replace('\\"', '"')
                 extracted[field] = val
-            else:
-                # Search for truncated "field": "value...
-                pattern_trunc = rf'"{field}"\s*:\s*"(.*)'
-                match_trunc = re.search(pattern_trunc, text, re.DOTALL)
-                if match_trunc:
-                    val = match_trunc.group(1)
-                    # Stop at the next field name key
-                    for other_field in fields:
-                        if f'"{other_field}"' in val:
-                            val = val.split(f'"{other_field}"')[0].strip()
-                            val = re.sub(r'[\s",:]+$', '', val)
-                            break
-                    val = val.strip().rstrip('"').lstrip('"')
-                    extracted[field] = val
-                    
-        # Return dict only if we successfully found some key fields
-        if len(extracted) >= 2:
-            return extracted
-        return {}
+
+        # 2. Extract list fields
+        for field in list_fields:
+            list_pattern = rf'"{field}"\s*:\s*\[(.*?)\]'
+            list_match = re.search(list_pattern, text, re.DOTALL)
+            if list_match:
+                inner = list_match.group(1)
+                item_pattern = r'"((?:[^"\\]|\\.)*)"'
+                items = [m.replace('\\"', '"') for m in re.findall(item_pattern, inner, re.DOTALL) if m.strip()]
+                if items:
+                    extracted[field] = items
+
+        return extracted
 
