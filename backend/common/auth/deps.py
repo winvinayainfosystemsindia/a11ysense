@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from common.database.connection import get_db
-from common.database.models import User, ApiKey
+from common.database.models import User
 from common.auth.jwt_utils import decode_access_token
 
 security = HTTPBearer(auto_error=False)
@@ -12,44 +12,19 @@ security = HTTPBearer(auto_error=False)
 def get_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     db: Session = Depends(get_db)
 ) -> User:
     """
     Unified security dependency supporting:
     1. JWT Bearer Tokens in Authorization Header (Browser / GUI)
-    2. API Keys in 'X-API-Key' Header (CI/CD Pipelines)
-    3. Checked downstream context headers (X-User-ID etc.) for trusted inter-service calls.
+    2. Checked downstream context headers (X-User-ID etc.) for internal calls.
     """
-    # 1. Check if we have downstream context propagated from gateway
+    # 1. Check if we have downstream context
     user_id_hdr = request.headers.get("X-User-ID")
     if user_id_hdr:
         user = db.query(User).filter(User.id == user_id_hdr).first()
         if user:
             return user
-
-    # 2. Check X-API-Key first (for API/CI/CD integrations)
-    if x_api_key:
-        # Key format: 'a11y_key_...'
-        key_hash = hashlib.sha256(x_api_key.strip().encode()).hexdigest()
-        api_key_record = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
-        if api_key_record:
-            # Check expiration if set
-            from datetime import datetime
-            if api_key_record.expires_at and api_key_record.expires_at < datetime.utcnow():
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="API Key has expired"
-                )
-            
-            # Fetch user associated with key
-            user = db.query(User).filter(User.id == api_key_record.user_id).first()
-            if user:
-                return user
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API Key"
-        )
 
     # 3. Check JWT Bearer token
     token = None

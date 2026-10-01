@@ -14,9 +14,6 @@ import { SuccessPage, MaintenancePage, NotFoundPage } from '../pages/common';
 import AgentsConsole from '../pages/agents/AgentsConsole';
 import AuditsPage from '../pages/audits/AuditsPage';
 import AuditDetailsPage from '../pages/audits/AuditDetailsPage';
-import ApiKeysPage from '../pages/api-keys/ApiKeysPage';
-import BillingPage from '../pages/billing/BillingPage';
-import CreditsPage from '../pages/credits/CreditsPage';
 import UserManagementPage from '../pages/users/UserManagementPage';
 import CredentialsPage from '../pages/credentials/CredentialsPage';
 import ProjectsPage from '../pages/projects/ProjectsPage';
@@ -119,8 +116,6 @@ const dashboardRoute = createRoute({
   component: Dashboard,
 });
 
-
-
 const agentsRoute = createRoute({
   getParentRoute: () => tenantLayout,
   path: '/agents',
@@ -137,24 +132,6 @@ const auditDetailsRoute = createRoute({
   getParentRoute: () => tenantLayout,
   path: '/audits/$taskId',
   component: AuditDetailsPage,
-});
-
-const billingRoute = createRoute({
-  getParentRoute: () => tenantLayout,
-  path: '/billing',
-  component: BillingPage,
-});
-
-const creditsRoute = createRoute({
-  getParentRoute: () => tenantLayout,
-  path: '/credits',
-  component: CreditsPage,
-});
-
-const apiKeysRoute = createRoute({
-  getParentRoute: () => tenantLayout,
-  path: '/api-keys',
-  component: ApiKeysPage,
 });
 
 const usersRoute = createRoute({
@@ -189,7 +166,7 @@ const routeTree = rootRoute.addChildren([
   maintenanceRoute,
   publicLayout.addChildren([loginRoute, registerRoute]),
   protectedLayout.addChildren([
-    tenantLayout.addChildren([dashboardRoute, agentsRoute, auditsRoute, auditDetailsRoute, billingRoute, creditsRoute, apiKeysRoute, usersRoute, credentialsRoute, projectsRoute])
+    tenantLayout.addChildren([dashboardRoute, agentsRoute, auditsRoute, auditDetailsRoute, usersRoute, credentialsRoute, projectsRoute])
   ]),
   notFoundRoute
 ]);
@@ -203,3 +180,4 @@ declare module '@tanstack/react-router' {
     router: typeof router;
   }
 }
+

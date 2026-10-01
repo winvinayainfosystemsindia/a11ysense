@@ -1,3 +1,0 @@
-# Gateway service dependencies are centrally managed.
-# Edit: backend/requirements.txt
--r ../../requirements.txt
