@@ -24,6 +24,7 @@ from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_M
 from common.constants.rule_catalog import resolve_rule, normalize_severity, principle_for
 from common.constants.sc_catalog import SC_CATALOG
 from backend.app.core.reporting.narrative import fallback_narrative
+from backend.app.core.reporting.quality_gate import check_report
 
 logger = logging.getLogger(__name__)
 manager_agent = ManagerAgent()
@@ -1101,9 +1102,22 @@ class AuditOrchestrator:
         try:
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(all_testcases, f, separators=(',', ':'), ensure_ascii=False)
-            logger.info(f"JSON Testcase report saved to {json_path} ({len(all_testcases)} testcases)")
         except Exception as e:
             logger.error(f"Failed to write JSON testcase report: {str(e)}")
+
+        # ── 6. Run Quality Gate Validation ───────────────────────────────────
+        try:
+            qg_issues = check_report(all_testcases)
+            if qg_issues:
+                error_issues = [i for i in qg_issues if i.severity == "ERROR"]
+                if error_issues:
+                    logger.warning(f"Quality Gate found {len(error_issues)} ERRORs in testcase report {task_id}: {[i.message for i in error_issues[:3]]}")
+                else:
+                    logger.info(f"Quality Gate passed with {len(qg_issues)} warnings for task {task_id}")
+            else:
+                logger.info(f"Quality Gate passed with 0 issues for task {task_id}")
+        except Exception as qg_err:
+            logger.error(f"Quality Gate execution failed for task {task_id}: {str(qg_err)}")
 
         return all_testcases
 
