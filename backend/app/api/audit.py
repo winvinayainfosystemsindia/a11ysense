@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from common.database.connection import get_db
-from common.database.models import User, AuditProgress, CrawlProgress, AuditSession
+from common.database.models import User, AuditProgress, CrawlProgress, AuditSession, Project
 from common.auth.deps import get_current_user
 from common.schemas.audit import AuditRequest, CrawlDiscoveryRequest
 from backend.app.task_queue import task_queue
@@ -30,10 +30,11 @@ async def list_audits(
     for s in sessions:
         summary = s.summary or {}
         project_name = s.project.name if s.project else "Default Project"
+        dt = s.timestamp or s.created_at
         result.append({
             "task_id": s.task_id,
             "url": s.url,
-            "timestamp": s.timestamp.isoformat() if s.timestamp else "",
+            "timestamp": dt.isoformat() if dt else "",
             "status": s.status,
             "accessibility_score": summary.get("accessibility_score", 100.0),
             "total_violations": summary.get("total_violations", 0),
@@ -112,10 +113,28 @@ async def start_audit(
 ):
     """Starts WCAG 2.2 Level A+AA accessibility audit run."""
     task_id = f"task-{uuid.uuid4().hex[:12]}"
+
+    eff_proj_id = project_id
+    if not eff_proj_id:
+        p = db.query(Project).filter(Project.organization_id == current_user.organization_id).first()
+        eff_proj_id = p.id if p else None
+
+    # Bootstraps AuditSession so the running audit immediately displays in the Audits History table
+    session_rec = AuditSession(
+        task_id=task_id,
+        url=req.url,
+        status="auditing",
+        depth=req.depth,
+        project_id=eff_proj_id,
+        organization_id=current_user.organization_id,
+        summary={"accessibility_score": 100, "total_violations": 0}
+    )
+    db.add(session_rec)
+
     progress = AuditProgress(
         task_id=task_id,
         url=req.url,
-        status="processing",
+        status="auditing",
         depth=req.depth
     )
     db.add(progress)
@@ -138,32 +157,31 @@ async def get_audit_status(
 ):
     """Poll audit run status and progress counters."""
     rec = db.query(AuditProgress).filter(AuditProgress.task_id == task_id).first()
-    if not rec:
-        session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
-        if not session:
-            raise HTTPException(status_code=404, detail="Audit task not found")
-        return {
-            "task_id": session.task_id,
-            "status": session.status,
-            "url": session.url,
-            "pages_found": 1,
-            "pages_completed": 1,
-            "pages_total": 1,
-            "pages_scanned": [session.url],
-            "report_url": f"/api/reports/excel/{task_id}",
-            "error": None
-        }
+    session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
+
+    if not rec and not session:
+        raise HTTPException(status_code=404, detail="Audit task not found")
+
+    status_val = rec.status if rec else (session.status if session else "completed")
+    url_val = rec.url if rec else (session.url if session else "")
+    pages_scanned = (rec.pages_scanned if rec else None) or ([url_val] if url_val else [])
+    pages_discovered = (rec.pages_discovered if rec else None) or pages_scanned
+    error_val = rec.error if rec else None
+    report_url = (rec.report_url if rec else None) or f"/api/reports/excel/{task_id}"
 
     return {
-        "task_id": rec.task_id,
-        "status": rec.status,
-        "url": rec.url,
-        "pages_found": rec.pages_found,
-        "pages_completed": rec.pages_completed,
-        "pages_total": rec.pages_total,
-        "pages_scanned": rec.pages_scanned or [],
-        "report_url": rec.report_url,
-        "error": rec.error
+        "task_id": task_id,
+        "status": status_val,
+        "url": url_val,
+        "depth": rec.depth if rec else (session.depth if session else 1),
+        "pages_found": rec.pages_found if rec else 1,
+        "pages_completed": rec.pages_completed if rec else 1,
+        "pages_total": rec.pages_total if rec else 1,
+        "pages_scanned": pages_scanned,
+        "pages_discovered": pages_discovered,
+        "report_url": report_url,
+        "error": error_val,
+        "summary": session.summary if session else None
     }
 
 @router.get("/task/{task_id}/token_usage")
