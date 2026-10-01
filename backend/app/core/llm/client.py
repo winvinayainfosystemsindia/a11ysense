@@ -44,11 +44,27 @@ class LLMClient:
         self.groq_key = os.getenv("GROQ_API_KEY")
         self.cache = LLMCache()
 
+    def _sync_keys(self):
+        """Syncs keys from environment variables dynamically."""
+        env_claude = os.getenv("ANTHROPIC_API_KEY")
+        if env_claude is not None:
+            self.anthropic_key = env_claude
+        env_gemini = os.getenv("GEMINI_API_KEY")
+        if env_gemini is not None:
+            self.gemini_key = env_gemini
+        env_groq = os.getenv("GROQ_API_KEY")
+        if env_groq is not None:
+            self.groq_key = env_groq
+        env_provider = os.getenv("LLM_PROVIDER")
+        if env_provider is not None:
+            self.default_provider = env_provider.lower()
+
     def health(self) -> Dict[str, str]:
         """Returns health status for each provider based on SDK installation and API key presence."""
+        self._sync_keys()
         status = {}
         # Claude
-        if not anthropic:
+        if not anthropic and not self.anthropic_key:
             status["claude"] = "SDK_MISSING"
         elif not self.anthropic_key:
             status["claude"] = "NO_KEY"
@@ -87,6 +103,7 @@ class LLMClient:
         Returns dict with: { "text": str, "input_tokens": int, "output_tokens": int, "model": str, "provider": str, "cached": bool }
         Raises LLMUnavailableError if all providers fail.
         """
+        self._sync_keys()
         target_provider = (provider or self.default_provider).lower()
 
         # Check Cache
