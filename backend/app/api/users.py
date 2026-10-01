@@ -7,14 +7,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from common.database.connection import get_db
-from common.database.models import User
+from common.database.models import User, Organization
 from common.auth.deps import get_current_user, require_role
 from backend.app.schemas.user import UserCreate, UserUpdate, UserResponse
 from backend.app.services.user_service import user_service
 
-router = APIRouter(prefix="/api/users", tags=["Users"])
+router = APIRouter(tags=["Users"])
 
-@router.get("", response_model=List[UserResponse])
+@router.get("/api/users", response_model=List[UserResponse])
 async def list_users(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -22,7 +22,7 @@ async def list_users(
     """List all users in the current organization."""
     return user_service.get_users_by_org(db, current_user.organization_id)
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/api/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     req: UserCreate,
     current_user: User = Depends(require_role(["Admin"])),
@@ -31,7 +31,7 @@ async def create_user(
     """Create a new user within the organization (Admin only)."""
     return user_service.create_user(db, req, current_user.organization_id)
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/api/users/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: UUID,
     current_user: User = Depends(get_current_user),
@@ -43,7 +43,7 @@ async def get_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@router.put("/{user_id}", response_model=UserResponse)
+@router.put("/api/users/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: UUID,
     req: UserUpdate,
@@ -56,7 +56,7 @@ async def update_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: UUID,
     current_user: User = Depends(require_role(["Admin"])),
@@ -66,3 +66,12 @@ async def delete_user(
     success = user_service.delete_user(db, user_id, current_user.organization_id)
     if not success:
         raise HTTPException(status_code=404, detail="User not found")
+
+@router.get("/api/organizations")
+async def list_organizations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List organizations for user administration."""
+    orgs = db.query(Organization).all()
+    return [{"id": str(o.id), "name": o.name, "created_at": o.created_at.isoformat()} for o in orgs]

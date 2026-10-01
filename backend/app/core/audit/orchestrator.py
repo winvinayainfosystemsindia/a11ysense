@@ -29,6 +29,61 @@ REPORTING_SERVICE_URL = get_service_url("REPORTING_SERVICE_URL", "http://reporti
 
 class AuditOrchestrator:
 
+    async def run_crawl_discovery_flow(
+        self,
+        crawl_task_id: str,
+        request: Any,
+        org_id: Optional[str] = None,
+        proj_id: Optional[str] = None
+    ):
+        """Runs page discovery crawl and updates CrawlProgress DB record."""
+        from common.schemas.crawl import CrawlRequest
+        from backend.app.core.crawler.crawler import WebCrawler
+
+        try:
+            crawl_progress_repo.set_status(crawl_task_id, "crawling")
+            
+            crawl_req = CrawlRequest(
+                url=request.url,
+                depth=3,
+                max_pages=50,
+                credential_config=getattr(request, "credential_config", None)
+            )
+            crawler = WebCrawler(crawl_req)
+            result = await crawler.crawl()
+
+            pages_discovered = result.pages_discovered or [request.url]
+            pages_depth_map = result.pages_depth_map or {request.url: 1}
+            url_to_menu_text = result.url_to_menu_text or {}
+            sitemaps_found = result.sitemaps_found or []
+
+            unauth = []
+            auth = []
+            if result.pages_with_depth:
+                for pd in result.pages_with_depth:
+                    if pd.is_authenticated:
+                        auth.append(pd.url)
+                    else:
+                        unauth.append(pd.url)
+            else:
+                unauth = pages_discovered
+
+            crawl_progress_repo.set_result(
+                crawl_task_id,
+                pages_discovered=pages_discovered,
+                pages_depth_map=pages_depth_map,
+                url_to_menu_text=url_to_menu_text,
+                sitemaps_found=sitemaps_found,
+                unauth_pages_discovered=unauth,
+                auth_pages_discovered=auth,
+                storage_state=result.storage_state,
+                auth_headers=result.auth_headers
+            )
+            logger.info(f"Crawl discovery task {crawl_task_id} completed successfully ({len(pages_discovered)} pages discovered).")
+        except Exception as e:
+            logger.error(f"Crawl discovery task {crawl_task_id} failed: {e}")
+            crawl_progress_repo.mark_failed(crawl_task_id, str(e))
+
     async def fetch_and_format_token_usage(self, task_id: str) -> dict:
         """Fetch token usage from the LLM service for the given task."""
         progress = audit_progress_repo.get(task_id)
