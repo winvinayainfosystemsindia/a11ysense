@@ -197,7 +197,8 @@ async def test_p4_reports_loads_json(tmp_path, monkeypatch):
     monkeypatch.setattr(audit_orchestrator, "get_testcase_report", mock_get_testcase_report)
 
     db_mock = MagicMock()
-    # Should not query DB when JSON report exists
+    db_mock.query.return_value.filter.return_value.first.return_value = None
+    # Should not need DB records when JSON report exists
     response = await download_excel_report(task_id, db=db_mock)
     assert response.status_code == 200
     assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
