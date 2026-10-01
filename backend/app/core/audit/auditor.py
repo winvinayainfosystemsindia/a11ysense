@@ -249,18 +249,27 @@ class AuditorAgent(BaseAgent):
                 "element_html_snippet": tc_data.get("element_html_snippet", nodes_html),
             }
 
+        from backend.common.constants.rule_catalog import resolve_rule
+        rule_facts = resolve_rule(
+            rule_id=violation.id,
+            tags=getattr(violation, "tags", []),
+            impact=violation.impact,
+            existing_metadata=violation.metadata
+        )
+
         # Build clean metadata structure maintaining separated testcase and defect records
-        # plus backwards-compatible top-level keys
+        # plus backwards-compatible top-level keys.
+        # WCAG criteria, level, principle, severity, status come ONLY from resolve_rule!
         violation.metadata = {
             "testcase": {
                 "description": tc_data.get("description") or def_data.get("description", violation.description),
                 "expected_result": tc_data.get("expected_result") or def_data.get("expected_result", ""),
                 "actual_result": tc_data.get("actual_result") or def_data.get("actual_result", ""),
                 "steps_to_reproduce": tc_data.get("steps_to_reproduce") or def_data.get("steps_to_reproduce", ""),
-                "wcag_criteria": tc_data.get("wcag_criteria") or def_data.get("wcag_criteria", "N/A"),
-                "wcag_level": tc_data.get("wcag_level") or def_data.get("wcag_level", "AA"),
-                "wcag_principle": tc_data.get("wcag_principle") or def_data.get("wcag_principle", "Perceivable"),
-                "severity": tc_data.get("severity") or def_data.get("severity", violation.impact or "Moderate"),
+                "wcag_criteria": rule_facts["criteria"],
+                "wcag_level": rule_facts["level"],
+                "wcag_principle": rule_facts["principle"],
+                "severity": rule_facts["severity"],
                 "status": "FAIL",
                 "element_html_snippet": tc_data.get("element_html_snippet") or nodes_html,
             },
@@ -271,10 +280,10 @@ class AuditorAgent(BaseAgent):
                 "actual_result": def_data.get("actual_result") or tc_data.get("actual_result", ""),
                 "steps_to_reproduce": def_data.get("steps_to_reproduce") or tc_data.get("steps_to_reproduce", ""),
                 "ai_fix_suggestion": def_data.get("ai_fix_suggestion", ""),
-                "wcag_criteria": def_data.get("wcag_criteria") or tc_data.get("wcag_criteria", "N/A"),
-                "wcag_level": def_data.get("wcag_level") or tc_data.get("wcag_level", "AA"),
-                "wcag_principle": def_data.get("wcag_principle") or tc_data.get("wcag_principle", "Perceivable"),
-                "severity": def_data.get("severity") or tc_data.get("severity", violation.impact or "Moderate"),
+                "wcag_criteria": rule_facts["criteria"],
+                "wcag_level": rule_facts["level"],
+                "wcag_principle": rule_facts["principle"],
+                "severity": rule_facts["severity"],
                 "business_impact": def_data.get("business_impact", ""),
                 "status": "Open",
                 "element_html_snippet": def_data.get("element_html_snippet") or nodes_html,
@@ -283,9 +292,10 @@ class AuditorAgent(BaseAgent):
             "friendly_name": def_data.get("friendly_name", violation.help),
             "description": tc_data.get("description") or def_data.get("description", violation.description),
             "help": violation.help,
-            "wcag_criteria": tc_data.get("wcag_criteria") or def_data.get("wcag_criteria", "N/A"),
-            "wcag_level": tc_data.get("wcag_level") or def_data.get("wcag_level", "AA"),
-            "severity": def_data.get("severity") or tc_data.get("severity", violation.impact or "Moderate"),
+            "wcag_criteria": rule_facts["criteria"],
+            "wcag_level": rule_facts["level"],
+            "wcag_principle": rule_facts["principle"],
+            "severity": rule_facts["severity"],
             "business_impact": def_data.get("business_impact", ""),
             "expected_result": tc_data.get("expected_result") or def_data.get("expected_result", ""),
             "actual_result": tc_data.get("actual_result") or def_data.get("actual_result", ""),

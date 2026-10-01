@@ -560,7 +560,7 @@ class ScreenReaderSkill:
                         "friendly_name": "Label in Name Mismatch",
                         "wcag_criteria": "2.5.3 Label in Name",
                         "wcag_level": "A",
-                        "severity": "Medium",
+                        "severity": "Moderate",
                         "business_impact": "Speech-input users who say the visible label will fail to activate the button, and screen reader users will experience a disconnect between visual and spoken UI labels.",
                         "expected_result": "The programmatic accessible name (e.g. from aria-label) MUST contain the visible text label of the control.",
                         "actual_result": f"Visible text is '{visible_text}' but the computed accessible name is '{name}'.",
