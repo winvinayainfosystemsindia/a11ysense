@@ -1,4 +1,5 @@
-import hashlib
+import uuid
+import logging
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -7,6 +8,7 @@ from common.database.connection import get_db
 from common.database.models import User
 from common.auth.jwt_utils import decode_access_token
 
+logger = logging.getLogger("a11ysense.auth.deps")
 security = HTTPBearer(auto_error=False)
 
 def get_current_user(
@@ -15,18 +17,20 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Unified security dependency supporting:
-    1. JWT Bearer Tokens in Authorization Header (Browser / GUI)
-    2. Checked downstream context headers (X-User-ID etc.) for internal calls.
+    Multi-tenant security dependency:
+    Decodes JWT token and resolves user by User ID or Email, ensuring tenant context (organization_id) is bound.
     """
-    # 1. Check if we have downstream context
+    # 1. Check if downstream context header exists
     user_id_hdr = request.headers.get("X-User-ID")
     if user_id_hdr:
-        user = db.query(User).filter(User.id == user_id_hdr).first()
-        if user:
-            return user
+        try:
+            user = db.query(User).filter(User.id == uuid.UUID(user_id_hdr)).first()
+            if user:
+                return user
+        except Exception:
+            pass
 
-    # 3. Check JWT Bearer token
+    # 2. Check JWT Bearer token
     token = None
     if credentials:
         token = credentials.credentials
@@ -36,11 +40,19 @@ def get_current_user(
     if token:
         payload = decode_access_token(token)
         if payload:
-            email = payload.get("sub")
-            if email:
-                user = db.query(User).filter(User.email == email).first()
+            sub = payload.get("sub")
+            if sub:
+                user = None
+                try:
+                    user_uuid = uuid.UUID(sub)
+                    user = db.query(User).filter(User.id == user_uuid).first()
+                except (ValueError, TypeError):
+                    user = db.query(User).filter(User.email == str(sub)).first()
+
                 if user:
                     return user
+
+        logger.warning(f"Failed to authenticate JWT token for payload: {payload}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired authentication token"
@@ -53,23 +65,16 @@ def get_current_user(
 
 def require_role(allowed_roles: list[str]):
     """
-    RBAC dependency factory that validates the user's role.
-    Role hierarchy/privilege validation can also be performed.
+    RBAC dependency factory that validates user's role.
     """
     def dependency(current_user: User = Depends(get_current_user)):
         role = current_user.role.capitalize()
-        # Normalise list
         normalised_allowed = [r.capitalize() for r in allowed_roles]
         
-        # Superadmin bypasses all checks
-        if role == "Superadmin":
-            return current_user
-            
-        # Admin can do anything if Admin is allowed
-        if "Admin" in normalised_allowed and role == "Admin":
+        if role in ["Superadmin", "Admin"]:
             return current_user
         
-        if role not in normalised_allowed and role != "Admin":
+        if role not in normalised_allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required role: one of {allowed_roles}"
