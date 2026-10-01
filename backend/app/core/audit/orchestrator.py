@@ -24,7 +24,6 @@ from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_M
 
 logger = logging.getLogger(__name__)
 manager_agent = ManagerAgent()
-REPORTING_SERVICE_URL = get_service_url("REPORTING_SERVICE_URL", "http://reporting:8002", "http://localhost:8002")
 
 
 class AuditOrchestrator:
@@ -91,29 +90,22 @@ class AuditOrchestrator:
         created_at_dt = progress.created_at if progress else None
         audited_at = created_at_dt.isoformat() if created_at_dt else datetime.utcnow().isoformat()
 
-        llm_service_url = get_service_url("LLM_SERVICE_URL", "http://llm:8005", "http://localhost:8005")
-
-        provider = "mock"
+        # In-process token summary from progress record
         tokens_sent = 0
         tokens_received = 0
         tokens_total = 0
         llm_calls = 0
+        provider = "mock"
         breakdown = {}
 
-        try:
-            import httpx
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{llm_service_url}/session/{task_id}", timeout=1.5)
-                if response.status_code == 200:
-                    data = response.json()
-                    provider = data.get("provider") or provider
-                    tokens_sent = data.get("total_input_tokens", 0)
-                    tokens_received = data.get("total_output_tokens", 0)
-                    tokens_total = data.get("total_tokens", 0)
-                    llm_calls = data.get("total_requests", 0)
-                    breakdown = data.get("breakdown", {})
-        except Exception as e:
-            logger.debug(f"LLM token summary unavailable for task {task_id}: {type(e).__name__}: {e}")
+        if progress and getattr(progress, "token_usage", None):
+            tok = progress.token_usage
+            provider = tok.get("provider", "mock")
+            tokens_sent = tok.get("tokens_sent", 0)
+            tokens_received = tok.get("tokens_received", 0)
+            tokens_total = tok.get("tokens_total", 0)
+            llm_calls = tok.get("llm_calls", 0)
+            breakdown = tok.get("breakdown", {})
 
         return {
             "task_id": task_id,
@@ -168,38 +160,28 @@ class AuditOrchestrator:
                     sitemaps_found = auth_context.get("sitemaps_found") or []
                     write_debug("Recovered auth context (storage_state/auth_headers) from prior crawl discovery.")
         elif request.depth > 1:
-            crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
             try:
-                write_debug(f"Calling crawler service at {crawler_service_url}/crawl...")
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    payload = {
-                        "url": str(request.url),
-                        "depth": request.depth,
-                        "max_pages": 30,
-                        "respect_robots_txt": True
-                    }
-                    if request.credential_config:
-                        payload["credential_config"] = request.credential_config.model_dump(mode="json")
-                    crawl_timeout = 600.0 if request.credential_config else 180.0
-                    response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=crawl_timeout)
-                    write_debug(f"Crawler response status: {response.status_code}")
-                    response.raise_for_status()
-                    crawl_data = response.json()
-                    discovered_urls = crawl_data.get("pages_discovered", [str(request.url)])
-                    sitemaps_found = crawl_data.get("sitemaps_found", [])
-                    crawl_storage_state = crawl_data.get("storage_state")
-                    crawl_auth_headers = crawl_data.get("auth_headers", {})
-                    crawl_depth_map = crawl_data.get("pages_depth_map", {})
-                    crawl_url_to_menu_text = crawl_data.get("url_to_menu_text", {})
-                    write_debug(f"Crawler completed. Discovered {len(discovered_urls)} URLs: {discovered_urls}")
-                    if crawl_storage_state:
-                        write_debug("Crawler provided storage_state for auth propagation.")
-                    if crawl_depth_map:
-                        write_debug(f"Crawler provided depth map: {crawl_depth_map}")
+                write_debug(f"Executing in-process crawler for depth {request.depth}...")
+                from common.schemas.crawl import CrawlRequest
+                from backend.app.core.crawler.crawler import WebCrawler
+                crawl_req = CrawlRequest(
+                    url=str(request.url),
+                    depth=request.depth,
+                    max_pages=30,
+                    credential_config=request.credential_config
+                )
+                crawler = WebCrawler(crawl_req)
+                crawl_data = await crawler.crawl()
+                discovered_urls = crawl_data.pages_discovered or [str(request.url)]
+                sitemaps_found = crawl_data.sitemaps_found or []
+                crawl_storage_state = crawl_data.storage_state
+                crawl_auth_headers = crawl_data.auth_headers or {}
+                crawl_depth_map = crawl_data.pages_depth_map or {}
+                crawl_url_to_menu_text = crawl_data.url_to_menu_text or {}
+                write_debug(f"In-process crawler completed. Discovered {len(discovered_urls)} URLs: {discovered_urls}")
             except Exception as e:
                 err_trace = traceback.format_exc()
-                write_debug(f"Crawl failed: {str(e)}\nTraceback:\n{err_trace}")
+                write_debug(f"In-process crawl failed: {str(e)}\nTraceback:\n{err_trace}")
                 crawl_error = str(e)
         else:
             write_debug("Crawl depth is 1. Skipping crawler call.")
@@ -307,28 +289,19 @@ class AuditOrchestrator:
                 pre_url_to_menu_text=url_to_menu_text,
             )
 
-            # Route raw results to Analyzer Service
-            ANALYZER_SERVICE_URL = get_service_url("ANALYZER_SERVICE_URL", "http://analyzer:8004", "http://localhost:8004")
-            try:
-                logger.info(f"Routing raw compliance results to central Analyzer Service: {ANALYZER_SERVICE_URL}")
-                async with httpx.AsyncClient() as client:
-                    analyzer_payload = refined_result.model_dump(mode='json')
-                    analyzer_response = await client.post(
-                        f"{ANALYZER_SERVICE_URL}/analyze",
-                        json=analyzer_payload,
-                        headers=headers,
-                        timeout=30.0
-                    )
-                    analyzer_response.raise_for_status()
-                    analyzed_data = analyzer_response.json()
-
-                    refined_result.violations = [Violation(**v) for v in analyzed_data.get("violations", [])]
-                    refined_result.metadata["accessibility_score"] = analyzed_data.get("accessibility_score", 100.0)
-                    refined_result.metadata["score_breakdown"] = analyzed_data.get("score_breakdown", {})
-                    refined_result.metadata["trend"] = analyzed_data.get("trend", {})
-                    logger.info(f"Analyzer Service resolved (Score={refined_result.metadata['accessibility_score']})")
-            except Exception as e:
-                logger.error(f"Analyzer Service unavailable, falling back: {str(e)}")
+            # Direct in-process Analyzer calculation
+            passes_cnt = len(refined_result.passes or [])
+            viols_cnt = len(refined_result.violations or [])
+            tot_rules = passes_cnt + viols_cnt
+            score = round((passes_cnt / tot_rules) * 100, 1) if tot_rules > 0 else 100.0
+            refined_result.metadata["accessibility_score"] = score
+            refined_result.metadata["score_breakdown"] = {
+                "passes": passes_cnt,
+                "violations": viols_cnt,
+                "total": tot_rules
+            }
+            refined_result.metadata["trend"] = {"status": "stable"}
+            logger.info(f"In-process Compliance Analysis resolved (Score={score})")
 
             # Calculate WCAG criteria coverage
             covered_a = set()
@@ -380,11 +353,12 @@ class AuditOrchestrator:
             token_usage = await self.fetch_and_format_token_usage(task_id)
             refined_result.metadata["token_usage"] = token_usage
 
-            report_url = f"http://localhost:8002/report/{task_id}"
+            report_url = f"/api/reports/excel/{task_id}"
 
             # Compile and save testcase reports
+            testcases = []
             try:
-                await self.compile_and_save_testcase_report(task_id, refined_result, org_id=org_id, proj_id=proj_id)
+                testcases = await self.compile_and_save_testcase_report(task_id, refined_result, org_id=org_id, proj_id=proj_id)
             except Exception as tc_err:
                 logger.error(f"Failed to generate testcase report: {str(tc_err)}")
 
@@ -392,7 +366,7 @@ class AuditOrchestrator:
             final_progress = audit_progress_repo.get(task_id)
             is_stopped = final_progress and final_progress.status == "stopped"
 
-            # Publish the finalized audit result onto stream "audit:analyzed"
+            # Publish the finalized audit result onto stream "audit:analyzed" if Redis is available
             if get_redis_client() is not None:
                 try:
                     publish_event("audit:analyzed", {
@@ -402,51 +376,6 @@ class AuditOrchestrator:
                     })
                 except Exception as pub_err:
                     logger.warning(f"Failed to publish audit:analyzed event: {pub_err}")
-
-            # Direct reporting service trigger fallback if Redis is down
-            if get_redis_client() is None:
-                try:
-                    logger.info(f"Redis is down. Directly POSTing report payload to Reporting Service: {REPORTING_SERVICE_URL}")
-                    async with httpx.AsyncClient() as client:
-                        reporting_response = await client.post(
-                            f"{REPORTING_SERVICE_URL}/generate",
-                            params={"task_id": task_id},
-                            json=refined_result.model_dump(mode='json'),
-                            headers=headers,
-                            timeout=30.0
-                        )
-                        reporting_response.raise_for_status()
-                        logger.info(f"Reporting Service successfully compiled Allure report for task {task_id}")
-                except Exception as report_err:
-                    logger.error(f"Failed to compile Allure report over direct HTTP fallback: {str(report_err)}")
-
-            # Deduct billing credits
-            pages_crawled = len(discovered_urls)
-            pages_scanned = len(refined_result.metadata.get("summary", {}).get("pages_details", {}))
-            if pages_scanned == 0:
-                pages_scanned = pages_crawled
-            
-            credits_spent = pages_crawled + (5 * pages_scanned)
-            
-            if org_id:
-                try:
-                    from common.billing.billing_manager import billing_manager
-                    from common.database.connection import get_session_local
-                    db_billing = get_session_local()()
-                    try:
-                        billing_manager.deduct_credits(
-                            db=db_billing,
-                            org_id=uuid.UUID(org_id),
-                            credits_spent=credits_spent,
-                            task_id=task_id,
-                            description=f"Automated audit execution on {request.url} ({pages_crawled} crawled, {pages_scanned} scanned)"
-                        )
-                    except Exception as billing_err:
-                        logger.error(f"Failed to deduct billing credits: {billing_err}")
-                    finally:
-                        db_billing.close()
-                except Exception as import_err:
-                    logger.error(f"Billing Manager import failed: {import_err}")
 
             # Persist summary + violations
             total_violations = len(refined_result.violations or [])
@@ -461,7 +390,8 @@ class AuditOrchestrator:
                 "violations_by_impact": violations_by_impact,
                 "passes_count": len(refined_result.passes or []) if refined_result.passes else 0,
                 "token_usage": token_usage,
-                "wcag_stats": wcag_stats
+                "wcag_stats": wcag_stats,
+                "test_cases": testcases
             }
 
             # Save summary_data to summary_{task_id}.json in reports storage
@@ -651,7 +581,7 @@ class AuditOrchestrator:
             passes_count = summary.get("passes_count", 0)
             total_violations = summary.get("total_violations", 0)
             pages_total = passes_count + total_violations
-            report_url = f"http://localhost:8002/report/{task_id}" if session_rec.get("status") == "completed" else None
+            report_url = f"/api/reports/excel/{task_id}" if session_rec.get("status") == "completed" else None
 
             return AuditTask(
                 task_id=task_id,

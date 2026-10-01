@@ -198,6 +198,9 @@ async def get_task_testcases(
     db: Session = Depends(get_db)
 ):
     """Get generated test cases for a task."""
+    tc = await orchestrator.get_testcase_report(task_id)
+    if tc:
+        return tc
     session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
     if not session:
         return []

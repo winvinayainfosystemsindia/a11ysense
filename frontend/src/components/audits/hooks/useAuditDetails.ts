@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { auditService } from '../../../service/auditService';
 import type { AuditTaskDetail } from '../../../service/auditService';
+import { ENV } from '../../../config/env';
 
 export const useAuditDetails = () => {
   const { orgId, taskId } = useParams({ strict: false }) as any;
@@ -47,14 +48,14 @@ export const useAuditDetails = () => {
     fetchInFlight.current = true;
     if (showLoading) setLoading(true);
     try {
-      const [taskData] = await Promise.all([
-        auditService.getTaskStatus(taskId)
-      ]);
+      const taskData = await auditService.getTaskStatus(taskId);
       setTaskDetail(taskData);
 
       if (isTerminal(taskData.status)) {
         const tcData = await auditService.getTaskTestcases(taskId).catch(() => []);
-        setTestcases(tcData);
+        if (tcData && tcData.length > 0) {
+          setTestcases(tcData);
+        }
       }
     } catch (err: any) {
       console.error('Error fetching audit details:', err);
@@ -70,13 +71,17 @@ export const useAuditDetails = () => {
     
     fetchData(true);
 
-    // Dynamic Polling for active audits
+    // Dynamic Polling for active audits or until testcases load
     const interval = setInterval(() => {
-      setTaskDetail(prev => {
-        if (prev && !isTerminal(prev.status)) {
-          fetchData(false);
-        }
-        return prev;
+      setTaskDetail(prevTask => {
+        setTestcases(prevTc => {
+          const needsFetch = !prevTask || !isTerminal(prevTask.status) || prevTc.length === 0;
+          if (needsFetch) {
+            fetchData(false);
+          }
+          return prevTc;
+        });
+        return prevTask;
       });
     }, 3000);
 
@@ -88,11 +93,11 @@ export const useAuditDetails = () => {
   };
 
   const handleOpenReport = () => {
-    window.open(`http://localhost:8002/report/${taskId}`, '_blank');
+    window.open(`${ENV.BASE_URL}/report/${taskId}`, '_blank');
   };
 
   const handleExportReport = () => {
-    window.open(`http://localhost:8002/report/${taskId}/export`, '_blank');
+    window.open(`${ENV.BASE_URL}/report/${taskId}/export`, '_blank');
   };
 
   const handlePause = async () => {
@@ -200,23 +205,29 @@ export const useAuditDetails = () => {
 
   // KPI Calculations
   // Pass-rate score: the % of accessibility checks (testcases) that passed.
-  // This mirrors how compliance is communicated to stakeholders (e.g. "82% of
-  // checks passed") instead of an opaque penalty formula.
   const calculatedScore = useMemo(() => {
-    if (testcases.length === 0) return 100;
+    if (testcases.length === 0) return taskDetail?.summary?.accessibility_score ?? 100;
     const passedCount = testcases.filter(tc => tc.status === 'PASS').length;
     return parseFloat(((passedCount / testcases.length) * 100).toFixed(1));
-  }, [testcases]);
+  }, [testcases, taskDetail]);
 
-  // Always derive the score from the loaded testcases when available, so it
-  // stays consistent with the Test Case/Defects counts shown on this same
-  // page. Falls back to the persisted summary score only when testcases
-  // haven't loaded yet (e.g. audit still in progress).
   const accessibilityScore = testcases.length > 0
     ? calculatedScore
-    : (taskDetail?.summary?.accessibility_score ?? 0);
-  const criticalCount = useMemo(() => violations.filter(v => v.severity?.toLowerCase() === 'critical').length, [violations]);
-  const totalIssuesCount = violations.length;
+    : (taskDetail?.summary?.accessibility_score ?? 100);
+
+  const criticalCount = useMemo(() => {
+    if (testcases.length > 0) {
+      return violations.filter(v => v.severity?.toLowerCase() === 'critical').length;
+    }
+    return taskDetail?.summary?.violations_by_impact?.critical ?? 0;
+  }, [testcases, violations, taskDetail]);
+
+  const totalIssuesCount = useMemo(() => {
+    if (testcases.length > 0) {
+      return violations.length;
+    }
+    return taskDetail?.summary?.total_violations ?? 0;
+  }, [testcases, violations, taskDetail]);
   const pagesScannedCount = taskDetail?.pages_scanned?.length ?? taskDetail?.pages_completed ?? 0;
   const pagesDiscoveredCount = taskDetail?.pages_discovered?.length ?? taskDetail?.pages_found ?? pagesScannedCount;
 

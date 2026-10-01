@@ -5,6 +5,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CodeIcon from '@mui/icons-material/Code';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { ViolationMockup } from './ViolationMockup';
+import { ENV } from '../../../config/env';
 
 interface InteractiveExplorerTabProps {
   taskId: string;
@@ -167,7 +168,7 @@ export const InteractiveExplorerTab: React.FC<InteractiveExplorerTabProps> = ({
                   alignItems: 'center'
                 }}>
                   <img
-                    src={`http://localhost:8002/report/${taskId}/screenshot/${selectedViolation.screenshot}`}
+                    src={`${ENV.BASE_URL}/report/${taskId}/screenshot/${selectedViolation.screenshot}`}
                     alt="Visual Evidence of Defect"
                     style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
                   />

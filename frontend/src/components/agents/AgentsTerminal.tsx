@@ -16,6 +16,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { ENV } from '../../config/env';
 import type { LogItem } from './types';
 
 interface AgentsTerminalProps {
@@ -210,7 +211,7 @@ const AgentsTerminal: React.FC<AgentsTerminalProps> = ({
                 {/* Context Link */}
                 {log.task_id && (
                   <Box
-                    onClick={() => window.open(`http://localhost:8002/report/${log.task_id}`, '_blank')}
+                    onClick={() => window.open(`${ENV.BASE_URL}/report/${log.task_id}`, '_blank')}
                     sx={{
                       display: 'flex',
                       alignItems: 'center',

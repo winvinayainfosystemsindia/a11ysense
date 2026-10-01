@@ -227,15 +227,28 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
     
     for idx, (sc_code, details) in enumerate(wcag_items, start=1):
         principle = build_wcag_principle(sc_code)
+        if isinstance(details, dict):
+            title = details.get("title", f"Criterion {sc_code}")
+            level = details.get("level", "A")
+            guideline = details.get("guideline", "WCAG 2.2")
+            description = details.get("description", "WCAG 2.2 Success Criterion")
+            url = details.get("url", f"https://www.w3.org/WAI/WCAG22/Understanding/{details.get('slug', sc_code)}")
+        else:
+            title = str(details)
+            level = "A"
+            guideline = f"Guideline {sc_code.rsplit('.', 1)[0]}" if "." in sc_code else "WCAG 2.2"
+            description = f"WCAG 2.2 Success Criterion {title}"
+            url = f"https://www.w3.org/WAI/WCAG22/Understanding/{sc_code}"
+
         row_data = [
             idx,
             sc_code,
-            details.get("title", f"Criterion {sc_code}"),
-            details.get("level", "A"),
+            title,
+            level,
             principle,
-            details.get("guideline", "WCAG 2.2"),
-            details.get("description", "WCAG 2.2 Success Criterion"),
-            details.get("url", f"https://www.w3.org/WAI/WCAG22/Understanding/{details.get('slug', sc_code)}")
+            guideline,
+            description,
+            url
         ]
         ws_wcag.append(row_data)
 

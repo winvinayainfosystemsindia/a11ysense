@@ -14,6 +14,7 @@ import LaunchIcon from '@mui/icons-material/Launch';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DataTable from '../../common/table/DataTable';
 import type { ColumnDefinition } from '../../common/table/DataTable';
+import { ENV } from '../../../config/env';
 
 interface DefectsTableTabProps {
   violations: any[];
@@ -223,7 +224,7 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
               <IconButton
                 size="small"
                 component="a"
-                href={`http://localhost:8002/report/${taskId}/screenshot/${v.screenshot}`}
+                href={`${ENV.BASE_URL}/report/${taskId}/screenshot/${v.screenshot}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Open full screenshot in new tab"
@@ -232,7 +233,7 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
               </IconButton>
               <Box
                 component="img"
-                src={`http://localhost:8002/report/${taskId}/screenshot/${v.screenshot}`}
+                src={`${ENV.BASE_URL}/report/${taskId}/screenshot/${v.screenshot}`}
                 alt="Thumbnail"
                 sx={{
                   width: 48,
@@ -243,7 +244,7 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
                   cursor: 'pointer'
                 }}
                 onClick={() => {
-                  window.open(`http://localhost:8002/report/${taskId}/screenshot/${v.screenshot}`, '_blank');
+                  window.open(`${ENV.BASE_URL}/report/${taskId}/screenshot/${v.screenshot}`, '_blank');
                 }}
               />
             </Box>

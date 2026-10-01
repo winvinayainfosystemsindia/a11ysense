@@ -81,37 +81,31 @@ class ManagerAgent(BaseAgent):
                 audit_progress_repo.set_status(task_id, "crawling")
 
             discovered_urls = [str(request.url)]
-            from common.config import get_service_url
-            crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
 
             if request.depth > 1:
-                logger.info(f"Calling crawler service at {crawler_service_url} to discover site structure...")
+                logger.info("Executing in-process crawler to discover site structure...")
                 try:
-                    async with httpx.AsyncClient() as client:
-                        payload = {
-                            "url": str(request.url),
-                            "depth": request.depth,
-                            "max_pages": 30,
-                            "respect_robots_txt": True
-                        }
-                        if request.credential_config:
-                            payload["credential_config"] = request.credential_config.model_dump(mode="json")
-                        # Authenticated Playwright crawls can take several minutes; allow up to 10 minutes
-                        crawl_timeout = 600.0 if request.credential_config else 180.0
-                        response = await client.post(f"{crawler_service_url}/crawl", json=payload, timeout=crawl_timeout)
-                        response.raise_for_status()
-                        crawl_data = response.json()
-                        discovered_urls = crawl_data.get("pages_discovered", [str(request.url)])
-                        sitemaps_found = crawl_data.get("sitemaps_found", [])
-                        crawl_storage_state = crawl_data.get("storage_state")
-                        crawl_auth_headers = crawl_data.get("auth_headers", {})
-                        pages_depth_map = crawl_data.get("pages_depth_map", {})
-                        url_to_menu_text = crawl_data.get("url_to_menu_text", {})
-                        logger.info(f"Crawler returned {len(discovered_urls)} pages: {discovered_urls}")
+                    from common.schemas.crawl import CrawlRequest
+                    from backend.app.core.crawler.crawler import WebCrawler
+                    crawl_req = CrawlRequest(
+                        url=str(request.url),
+                        depth=request.depth,
+                        max_pages=30,
+                        credential_config=request.credential_config
+                    )
+                    crawler = WebCrawler(crawl_req)
+                    crawl_res = await crawler.crawl()
+                    discovered_urls = crawl_res.pages_discovered or [str(request.url)]
+                    sitemaps_found = crawl_res.sitemaps_found or []
+                    crawl_storage_state = crawl_res.storage_state
+                    crawl_auth_headers = crawl_res.auth_headers or {}
+                    pages_depth_map = crawl_res.pages_depth_map or {}
+                    url_to_menu_text = crawl_res.url_to_menu_text or {}
+                    logger.info(f"In-process crawler returned {len(discovered_urls)} pages: {discovered_urls}")
                 except Exception as e:
-                    logger.error(f"Crawler Service failed, defaulting to start URL: {str(e)}")
+                    logger.error(f"In-process Crawler failed, defaulting to start URL: {str(e)}")
             else:
-                logger.info("Crawl depth is 1. Skipping crawler service for single page audit.")
+                logger.info("Crawl depth is 1. Skipping crawler for single page audit.")
 
         if task_id:
             audit_progress_repo.set_status(task_id, "auditing")
@@ -127,24 +121,20 @@ class ManagerAgent(BaseAgent):
         storage_state = pre_storage_state or crawl_storage_state
         auth_headers = pre_auth_headers or crawl_auth_headers or {}
         if request.credential_config and not storage_state:
-            # Fallback: if the crawler didn't provide storage_state, perform a login
-            from common.config import get_service_url
-            crawler_service_url = get_service_url("CRAWLER_SERVICE_URL", "http://crawler:8003", "http://localhost:8003")
-            logger.info("No pre-fetched storage_state. Falling back to /login for audit context...")
+            # Fallback: if the crawler didn't provide storage_state, perform a login in-process
+            logger.info("No pre-fetched storage_state. Running in-process login fallback for audit context...")
             try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{crawler_service_url}/login",
-                        json=request.credential_config.model_dump(mode="json"),
-                        timeout=30.0
-                    )
-                    response.raise_for_status()
-                    login_data = response.json()
-                    storage_state = login_data.get("storage_state")
-                    auth_headers = login_data.get("headers", {})
-                    logger.info("Successfully retrieved storage state from login fallback.")
+                from backend.app.core.crawler.login_service import LoginService
+                login_svc = LoginService()
+                success, cookies, headers, error_detail, landed_url = await login_svc.perform_login(request.credential_config)
+                if success:
+                    storage_state = {"cookies": cookies}
+                    auth_headers = headers
+                    logger.info("Successfully retrieved storage state from in-process login fallback.")
+                else:
+                    logger.warning(f"In-process login fallback did not succeed: {error_detail}")
             except Exception as e:
-                logger.error(f"Failed to perform login fallback for audit context: {e}")
+                logger.error(f"Failed to perform in-process login fallback for audit context: {e}")
         elif storage_state:
             logger.info("Using pre-fetched storage_state from crawler response (no second login needed).")
 
