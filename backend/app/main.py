@@ -21,6 +21,9 @@ if BASE_DIR not in sys.path:
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+from common.config import setup_environment
+setup_environment()
+
 import logging
 from typing import Optional
 from contextlib import asynccontextmanager

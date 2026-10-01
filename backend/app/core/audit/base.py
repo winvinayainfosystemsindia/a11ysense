@@ -116,29 +116,45 @@ class BaseAgent:
 
     async def _call_gemini(self, prompt: str, system_message: str, use_vision: bool, image_data: str) -> str:
         genai.configure(api_key=self.gemini_key)
-        model_name = 'gemini-3.5-flash-lite'
-        model = genai.GenerativeModel(model_name)
-        
+        models = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
+        last_err = None
+
         parts = [system_message, prompt]
         if use_vision and image_data:
-            parts.append({"mime_type": "image/png", "data": image_data})
-            
-        response = model.generate_content(parts)
-        text = response.text
-        
-        # Read usage stats
-        in_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
-        out_tokens = getattr(response.usage_metadata, "candidates_token_count", 0)
-        
-        # Heuristics fallback if metadata count fails
-        if in_tokens == 0:
-            in_tokens = len(prompt) // 4
-        if out_tokens == 0:
-            out_tokens = len(text) // 4
-            
-        self.last_input_tokens = in_tokens
-        self.last_output_tokens = out_tokens
-        return text
+            import base64
+            if isinstance(image_data, str):
+                try:
+                    img_bytes = base64.b64decode(image_data)
+                    parts.append({"mime_type": "image/png", "data": img_bytes})
+                except Exception:
+                    parts.append({"mime_type": "image/png", "data": image_data})
+            else:
+                parts.append({"mime_type": "image/png", "data": image_data})
+
+        for model_name in models:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(parts)
+                text = response.text or ""
+
+                # Read usage stats
+                in_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
+                out_tokens = getattr(response.usage_metadata, "candidates_token_count", 0)
+
+                # Heuristics fallback if metadata count fails
+                if in_tokens == 0:
+                    in_tokens = len(prompt) // 4
+                if out_tokens == 0:
+                    out_tokens = len(text) // 4
+
+                self.last_input_tokens = in_tokens
+                self.last_output_tokens = out_tokens
+                return text
+            except Exception as e:
+                logger.warning(f"Gemini model {model_name} in base.py failed: {e}. Trying fallback...")
+                last_err = e
+
+        raise last_err or RuntimeError("All Gemini models failed")
 
     def parse_json(self, text: str) -> Dict[str, Any]:
         """

@@ -83,8 +83,11 @@ def setup_environment():
     # Assuming the services are run from their own directories or project root
     root_env_path = os.path.join(os.path.dirname(__file__), "../../", env_file)
     default_env_path = os.path.join(os.path.dirname(__file__), "../../.env")
+    backend_env_path = os.path.join(os.path.dirname(__file__), "../.env")
 
-    if os.path.exists(root_env_path):
+    if os.path.exists(backend_env_path):
+        load_dotenv(backend_env_path)
+    elif os.path.exists(root_env_path):
         load_dotenv(root_env_path)
     elif os.path.exists(default_env_path):
         load_dotenv(default_env_path)

@@ -157,7 +157,13 @@ class LLMClient:
     async def _generate_claude(
         self, prompt: str, system_message: str, use_vision: bool, image_data: Optional[str]
     ) -> Dict[str, Any]:
-        client = anthropic.Anthropic(api_key=self.anthropic_key)
+        """
+        Calls Claude via Anthropic API (https://api.anthropic.com/v1/messages)
+        using model 'claude-sonnet-4-6' with max_tokens 20000 and streaming support.
+        """
+        import httpx
+        import json
+
         content = []
         if use_vision and image_data:
             content.append({
@@ -170,50 +176,117 @@ class LLMClient:
             })
         content.append({"type": "text", "text": prompt})
 
-        kwargs = {
+        url = "https://api.anthropic.com/v1/messages"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.anthropic_key,
+            "anthropic-version": "2023-06-01"
+        }
+        payload = {
             "model": "claude-sonnet-4-6",
-            "max_tokens": 4096,
-            "messages": [{"role": "user", "content": content}]
+            "max_tokens": 20000,
+            "messages": [{"role": "user", "content": content}],
+            "stream": True
         }
         if system_message and system_message.strip():
-            kwargs["system"] = system_message
+            payload["system"] = system_message
 
-        message = await asyncio.to_thread(client.messages.create, **kwargs)
-        text = message.content[0].text if message.content else ""
-        return {
-            "text": text,
-            "input_tokens": getattr(message.usage, "input_tokens", 0),
-            "output_tokens": getattr(message.usage, "output_tokens", 0),
-            "model": "claude-sonnet-4-6",
-            "provider": "claude"
-        }
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as http_client:
+                async with http_client.stream("POST", url, headers=headers, json=payload) as response:
+                    if response.status_code != 200:
+                        error_body = await response.aread()
+                        error_msg = error_body.decode("utf-8", errors="ignore")
+                        raise RuntimeError(f"Anthropic API error (HTTP {response.status_code}): {error_msg}")
+
+                    full_text = []
+                    in_tokens = 0
+                    out_tokens = 0
+
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            try:
+                                evt = json.loads(data_str)
+                                evt_type = evt.get("type")
+                                if evt_type == "content_block_delta":
+                                    delta = evt.get("delta", {})
+                                    if delta.get("type") == "text_delta":
+                                        full_text.append(delta.get("text", ""))
+                                elif evt_type == "message_start":
+                                    in_tokens = evt.get("message", {}).get("usage", {}).get("input_tokens", 0)
+                                elif evt_type == "message_delta":
+                                    out_tokens = evt.get("usage", {}).get("output_tokens", 0)
+                            except Exception:
+                                pass
+
+                    text = "".join(full_text)
+                    return {
+                        "text": text,
+                        "input_tokens": in_tokens or (len(prompt) // 4),
+                        "output_tokens": out_tokens or (len(text) // 4),
+                        "model": "claude-sonnet-4-6",
+                        "provider": "claude"
+                    }
+        except Exception as e:
+            logger.warning(f"Anthropic API call to https://api.anthropic.com/v1/messages failed: {e}")
+            raise
 
     async def _generate_gemini(
         self, prompt: str, system_message: str, use_vision: bool, image_data: Optional[str]
     ) -> Dict[str, Any]:
+        """
+        Calls Google Gemini with failure and fallback mechanism:
+        Primary: gemini-3.5-flash-lite -> Fallback: gemini-3.5-flash
+        """
         genai.configure(api_key=self.gemini_key)
-        model_name = "gemini-3.5-flash-lite"
-        model = genai.GenerativeModel(model_name)
+        models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash"]
+        last_gemini_error = None
 
         parts = []
         if system_message:
             parts.append(system_message)
         parts.append(prompt)
         if use_vision and image_data:
-            parts.append({"mime_type": "image/png", "data": image_data})
+            import base64
+            if isinstance(image_data, str):
+                try:
+                    img_bytes = base64.b64decode(image_data)
+                    parts.append({"mime_type": "image/png", "data": img_bytes})
+                except Exception:
+                    parts.append({"mime_type": "image/png", "data": image_data})
+            else:
+                parts.append({"mime_type": "image/png", "data": image_data})
 
-        response = await asyncio.to_thread(model.generate_content, parts)
-        text = response.text or ""
-        in_tokens = getattr(response.usage_metadata, "prompt_token_count", len(prompt) // 4)
-        out_tokens = getattr(response.usage_metadata, "candidates_token_count", len(text) // 4)
+        for model_name in models_to_try:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = await asyncio.to_thread(model.generate_content, parts)
+                text = response.text or ""
+                in_tokens = len(prompt) // 4
+                out_tokens = len(text) // 4
+                try:
+                    if hasattr(response, "_result") and hasattr(response._result, "usage_metadata"):
+                        um = response._result.usage_metadata
+                        in_tokens = getattr(um, "prompt_token_count", in_tokens)
+                        out_tokens = getattr(um, "candidates_token_count", out_tokens)
+                except Exception:
+                    pass
 
-        return {
-            "text": text,
-            "input_tokens": in_tokens,
-            "output_tokens": out_tokens,
-            "model": model_name,
-            "provider": "gemini"
-        }
+                return {
+                    "text": text,
+                    "input_tokens": in_tokens,
+                    "output_tokens": out_tokens,
+                    "model": model_name,
+                    "provider": "gemini"
+                }
+            except Exception as e:
+                logger.warning(f"Gemini model '{model_name}' failed: {e}. Trying fallback model...")
+                last_gemini_error = e
+
+        raise last_gemini_error or RuntimeError("All configured Gemini models failed")
 
     async def _generate_groq(self, prompt: str, system_message: str) -> Dict[str, Any]:
         import httpx
