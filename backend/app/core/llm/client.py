@@ -1,11 +1,12 @@
 """
 Unified Resilient LLM Client for A11ySense Monolith Backend.
-Fallback hierarchy: Claude (Primary) -> Gemini (Fallback) -> Groq (Fallback) -> Mock (Emergency).
+Fallback hierarchy: Claude (Primary) -> Gemini (Fallback) -> Groq (Fallback).
 Integrated with DiskCache for performance & token efficiency.
 """
 import os
+import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from backend.app.core.llm.cache import LLMCache
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,14 @@ except ImportError:
     Groq = None
 
 
+class LLMUnavailableError(Exception):
+    """Raised when all configured LLM providers fail or no API keys are available."""
+    def __init__(self, last_error: Optional[str] = None, tried_providers: Optional[List[str]] = None):
+        self.last_error = last_error
+        self.tried_providers = tried_providers or []
+        super().__init__(f"All LLM providers failed. Tried: {self.tried_providers}. Last error: {self.last_error}")
+
+
 class LLMClient:
     def __init__(self):
         self.default_provider = os.getenv("LLM_PROVIDER", "claude").lower()
@@ -34,6 +43,35 @@ class LLMClient:
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         self.groq_key = os.getenv("GROQ_API_KEY")
         self.cache = LLMCache()
+
+    def health(self) -> Dict[str, str]:
+        """Returns health status for each provider based on SDK installation and API key presence."""
+        status = {}
+        # Claude
+        if not anthropic:
+            status["claude"] = "SDK_MISSING"
+        elif not self.anthropic_key:
+            status["claude"] = "NO_KEY"
+        else:
+            status["claude"] = "OK"
+
+        # Gemini
+        if not genai:
+            status["gemini"] = "SDK_MISSING"
+        elif not self.gemini_key:
+            status["gemini"] = "NO_KEY"
+        else:
+            status["gemini"] = "OK"
+
+        # Groq
+        if not Groq:
+            status["groq"] = "SDK_MISSING"
+        elif not self.groq_key:
+            status["groq"] = "NO_KEY"
+        else:
+            status["groq"] = "OK"
+
+        return status
 
     async def generate(
         self,
@@ -47,6 +85,7 @@ class LLMClient:
         """
         Generates text completion using the specified or fallback provider chain.
         Returns dict with: { "text": str, "input_tokens": int, "output_tokens": int, "model": str, "provider": str, "cached": bool }
+        Raises LLMUnavailableError if all providers fail.
         """
         target_provider = (provider or self.default_provider).lower()
 
@@ -63,16 +102,43 @@ class LLMClient:
                 providers_to_try.append(p)
 
         last_error = None
+        attempted_providers = []
+
         for prov in providers_to_try:
-            try:
-                if prov == "claude" and self.anthropic_key and anthropic:
-                    result = await self._generate_claude(prompt, system_message, use_vision, image_data)
-                elif prov == "gemini" and self.gemini_key and genai:
-                    result = await self._generate_gemini(prompt, system_message, use_vision, image_data)
-                elif prov == "groq" and self.groq_key and Groq:
-                    result = await self._generate_groq(prompt, system_message)
-                else:
+            # Check availability and log reasons
+            if prov == "claude":
+                if not anthropic:
+                    logger.warning("LLM Provider 'claude' skipped: SDK missing (anthropic package not installed)")
                     continue
+                if not self.anthropic_key:
+                    logger.warning("LLM Provider 'claude' skipped: API key missing (ANTHROPIC_API_KEY not set)")
+                    continue
+            elif prov == "gemini":
+                if not genai:
+                    logger.warning("LLM Provider 'gemini' skipped: SDK missing (google.generativeai not installed)")
+                    continue
+                if not self.gemini_key:
+                    logger.warning("LLM Provider 'gemini' skipped: API key missing (GEMINI_API_KEY not set)")
+                    continue
+            elif prov == "groq":
+                if not Groq:
+                    logger.warning("LLM Provider 'groq' skipped: SDK missing (groq package not installed)")
+                    continue
+                if not self.groq_key:
+                    logger.warning("LLM Provider 'groq' skipped: API key missing (GROQ_API_KEY not set)")
+                    continue
+            else:
+                logger.warning(f"LLM Provider '{prov}' skipped: unknown provider")
+                continue
+
+            attempted_providers.append(prov)
+            try:
+                if prov == "claude":
+                    result = await self._generate_claude(prompt, system_message, use_vision, image_data)
+                elif prov == "gemini":
+                    result = await self._generate_gemini(prompt, system_message, use_vision, image_data)
+                elif prov == "groq":
+                    result = await self._generate_groq(prompt, system_message)
 
                 result["cached"] = False
                 if use_cache and result.get("text"):
@@ -84,17 +150,9 @@ class LLMClient:
                 last_error = str(e)
                 continue
 
-        # Emergency Mock Fallback
-        logger.error(f"All LLM providers failed. Last error: {last_error}")
-        return {
-            "text": self._mock_fallback(prompt),
-            "input_tokens": 50,
-            "output_tokens": 100,
-            "model": "mock-fallback",
-            "provider": "mock",
-            "cached": False,
-            "error": last_error
-        }
+        # All providers failed or were skipped
+        logger.error(f"All LLM providers failed. Tried: {attempted_providers or providers_to_try}. Last error: {last_error}")
+        raise LLMUnavailableError(last_error=last_error, tried_providers=attempted_providers or providers_to_try)
 
     async def _generate_claude(
         self, prompt: str, system_message: str, use_vision: bool, image_data: Optional[str]
@@ -120,7 +178,7 @@ class LLMClient:
         if system_message and system_message.strip():
             kwargs["system"] = system_message
 
-        message = client.messages.create(**kwargs)
+        message = await asyncio.to_thread(client.messages.create, **kwargs)
         text = message.content[0].text if message.content else ""
         return {
             "text": text,
@@ -144,7 +202,7 @@ class LLMClient:
         if use_vision and image_data:
             parts.append({"mime_type": "image/png", "data": image_data})
 
-        response = model.generate_content(parts)
+        response = await asyncio.to_thread(model.generate_content, parts)
         text = response.text or ""
         in_tokens = getattr(response.usage_metadata, "prompt_token_count", len(prompt) // 4)
         out_tokens = getattr(response.usage_metadata, "candidates_token_count", len(text) // 4)
@@ -165,11 +223,13 @@ class LLMClient:
             messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": prompt})
 
-        completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            max_tokens=4096
-        )
+        kwargs = {
+            "model": "llama-3.1-8b-instant",
+            "messages": messages,
+            "max_tokens": 4096
+        }
+
+        completion = await asyncio.to_thread(client.chat.completions.create, **kwargs)
         text = completion.choices[0].message.content or ""
         in_tokens = getattr(completion.usage, "prompt_tokens", 0)
         out_tokens = getattr(completion.usage, "completion_tokens", 0)
@@ -181,9 +241,6 @@ class LLMClient:
             "model": "llama-3.1-8b-instant",
             "provider": "groq"
         }
-
-    def _mock_fallback(self, prompt: str) -> str:
-        return '{"friendly_name": "Accessibility Compliance Check", "wcag_criteria": "1.1.1", "wcag_level": "A", "severity": "Medium", "business_impact": "Users with screen readers may struggle to understand missing labels.", "expected_result": "All interactive elements have accessible names.", "actual_result": "Element lacks accessible label.", "remediation_plan": "Add aria-label or visible text node."}'
 
 
 _llm_client_instance = None

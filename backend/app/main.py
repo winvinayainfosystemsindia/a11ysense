@@ -47,6 +47,11 @@ async def lifespan(app: FastAPI):
     init_db()
     # Initialize DiskCache
     get_cache()
+    # Log LLM Provider Health
+    from backend.app.core.llm.client import get_llm_client
+    llm_health = get_llm_client().health()
+    health_str = " ".join(f"{p}={status}" for p, status in llm_health.items())
+    logger.info(f"LLM providers: {health_str}")
     logger.info("Monolith Backend successfully started.")
     yield
     logger.info("Shutting down A11ySense AI Monolith Backend...")

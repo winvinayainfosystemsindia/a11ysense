@@ -55,25 +55,19 @@ class BaseAgent:
         """
         Generic LLM call dispatcher using unified in-process LLMClient.
         """
-        try:
-            from backend.app.core.llm.client import get_llm_client
-            client = get_llm_client()
-            res = await client.generate(
-                prompt=prompt,
-                system_message=system_message,
-                use_vision=use_vision,
-                image_data=image_data,
-                provider=self.provider
-            )
-            self.last_input_tokens = res.get("input_tokens", 0)
-            self.last_output_tokens = res.get("output_tokens", 0)
-            logger.info(f"LLM Client resolved successfully (provider={res.get('provider')}, model={res.get('model')}, cached={res.get('cached')})")
-            return res.get("text", "")
-        except Exception as e:
-            logger.error(f"Unified LLM Client generation failed: {e}")
-            self.last_input_tokens = 50
-            self.last_output_tokens = 100
-            return "LLM Provider not configured correctly or Mock provider active."
+        from backend.app.core.llm.client import get_llm_client
+        client = get_llm_client()
+        res = await client.generate(
+            prompt=prompt,
+            system_message=system_message,
+            use_vision=use_vision,
+            image_data=image_data,
+            provider=self.provider
+        )
+        self.last_input_tokens = res.get("input_tokens", 0)
+        self.last_output_tokens = res.get("output_tokens", 0)
+        logger.info(f"LLM Client resolved successfully (provider={res.get('provider')}, model={res.get('model')}, cached={res.get('cached')})")
+        return res.get("text", "")
 
     async def _call_claude(self, prompt: str, system_message: str, use_vision: bool, image_data: str) -> str:
         client = anthropic.Anthropic(api_key=self.anthropic_key)
