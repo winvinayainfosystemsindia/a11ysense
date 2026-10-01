@@ -591,7 +591,12 @@ class AuditOrchestrator:
                 """Run the async audit in its own event loop, isolated from the Uvicorn event loop.
                 This prevents a hung Playwright call from blocking the /status/{task_id} endpoint.
                 """
-                loop = asyncio.new_event_loop()
+                import sys
+                if sys.platform == "win32":
+                    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+                    loop = asyncio.ProactorEventLoop()
+                else:
+                    loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
                     loop.run_until_complete(
