@@ -25,18 +25,3 @@
     3. Do not reuse generic examples (e.g., stock "missing alt text on logo" language) for a rule that isn't actually about that pattern — every field must be specific to the actual Rule ID given.
 </grounding_rules>
 
-<output_format>
-    Return a JSON object with:
-    - friendly_name: A clear, simple, and professional title/description of the issue. It must be easy for both developers and non-technical stakeholders to understand, while keeping a highly professional tone (e.g., "Information Hidden from Screen Readers - Missing Alternative Text").
-    - description: A professional, clear technical description of the accessibility barrier observed.
-    - help: A short, actionable description of how to resolve the issue or what the rule aims to verify.
-    - wcag_criteria: The WCAG 2.2 Success Criteria ID and Name.
-    - wcag_level: The compliance level (A, AA, or AAA).
-    - severity: The impact severity (Critical, Serious, Moderate, or Minor).
-    - business_impact: Describe exactly how a blind user would experience this failure.
-    - expected_result: Specify exactly what the conformant state is ("what it is actually") and how it must behave ("how it has to be"). Describe what the element/component should announce, display, or how it should respond to keyboard interactions under standard compliance.
-    - actual_result: Specify exactly what was found on the page ("what was actually found") and how the element is currently behaving under testing. Refer directly to the affected element or HTML structure and describe the observed failure/barrier.
-    - steps_to_reproduce: Clear, precise, and simple numbered steps so that a developer can easily navigate, locate the exact element on the page, perform the interaction (e.g., keyboard tab, screen reader navigation, DOM inspection), and observe the failure.
-    - remediation_plan: A technical fix using semantic HTML and ARIA best practices.
-</output_format>
-

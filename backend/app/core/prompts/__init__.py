@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 PROMPTS_ROOT = Path(__file__).parent
+PROMPT_VERSION = "2"
 
 
 def load_prompt_template(relative_path: str) -> str:
@@ -20,30 +21,57 @@ def load_prompt_template(relative_path: str) -> str:
 
 
 def get_testcase_prompt(context: Dict[str, Any]) -> str:
-    """Renders the test case prompt template with violation context."""
+    """
+    Renders the testcase prompt template, filling ALL placeholders with defaults '(not captured)'.
+    Placeholders:
+      rule_summary, technical_description, sc_code, sc_name, level, principle,
+      page_url, page_title, current_announcement, element_context,
+      screen_reader_quick_key, repeat_count, element_html
+    """
     template = load_prompt_template("testcases/testcase_prompt.xml")
-    return template.format(
-        rule_id=context.get("rule_id", "unknown"),
-        impact=context.get("impact", "unknown"),
-        description=context.get("description", ""),
-        help=context.get("help", ""),
-        help_url=context.get("help_url", ""),
-        element_selector=context.get("element_selector", "(not available)"),
-        page_url=context.get("page_url", ""),
-        nodes_html=context.get("nodes_html", "(no HTML nodes captured)")
-    )
+    defaults = {
+        "rule_summary": "(not captured)",
+        "technical_description": "(not captured)",
+        "sc_code": "(not captured)",
+        "sc_name": "(not captured)",
+        "level": "(not captured)",
+        "principle": "(not captured)",
+        "page_url": "(not captured)",
+        "page_title": "(not captured)",
+        "current_announcement": "(not captured)",
+        "element_context": "(not captured)",
+        "screen_reader_quick_key": "Tab",
+        "repeat_count": "1",
+        "element_html": "(not captured)",
+    }
+    merged = {**defaults, **{k: str(v) if v is not None and str(v).strip() else defaults[k] for k, v in context.items() if k in defaults}}
+    return template.format(**merged)
 
 
 def get_defect_prompt(context: Dict[str, Any]) -> str:
-    """Renders the defect prompt template with violation context."""
+    """
+    Renders the defect prompt template, filling ALL placeholders with defaults '(not captured)'.
+    Placeholders:
+      rule_summary, technical_description, sc_code, sc_name, level, principle,
+      severity, page_url, current_announcement, element_context, help_url,
+      testcase_description, testcase_actual_result, element_html
+    """
     template = load_prompt_template("defects/defect_prompt.xml")
-    return template.format(
-        rule_id=context.get("rule_id", "unknown"),
-        impact=context.get("impact", "unknown"),
-        description=context.get("description", ""),
-        help=context.get("help", ""),
-        help_url=context.get("help_url", ""),
-        element_selector=context.get("element_selector", "(not available)"),
-        page_url=context.get("page_url", ""),
-        nodes_html=context.get("nodes_html", "(no HTML nodes captured)")
-    )
+    defaults = {
+        "rule_summary": "(not captured)",
+        "technical_description": "(not captured)",
+        "sc_code": "(not captured)",
+        "sc_name": "(not captured)",
+        "level": "(not captured)",
+        "principle": "(not captured)",
+        "severity": "(not captured)",
+        "page_url": "(not captured)",
+        "current_announcement": "(not captured)",
+        "element_context": "(not captured)",
+        "help_url": "(not captured)",
+        "testcase_description": "(not captured)",
+        "testcase_actual_result": "(not captured)",
+        "element_html": "(not captured)",
+    }
+    merged = {**defaults, **{k: str(v) if v is not None and str(v).strip() else defaults[k] for k, v in context.items() if k in defaults}}
+    return template.format(**merged)
