@@ -14,6 +14,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 import logging
+from typing import Optional
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +71,27 @@ app.mount("/static/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 async def health_check():
     """Health check endpoint for monitoring."""
     return {"status": "healthy", "service": "a11ysense-monolith", "version": "2.0.0"}
+
+@app.get("/metrics", tags=["Metrics"])
+@app.get("/v1/metrics", tags=["Metrics"])
+async def metrics_stub():
+    """Legacy metrics stub endpoint."""
+    return {"status": "ok"}
+
+from fastapi.responses import StreamingResponse
+import json
+import asyncio
+
+@app.get("/v1/agents/telemetry/stream", tags=["Telemetry"])
+@app.get("/agents/telemetry/stream", tags=["Telemetry"])
+async def telemetry_stream_stub(token: Optional[str] = None):
+    """Server-Sent Events telemetry stream stub."""
+    async def _event_generator():
+        yield f"data: {json.dumps({'event': 'ping', 'status': 'connected'})}\n\n"
+        await asyncio.sleep(15)
+        yield f"data: {json.dumps({'event': 'ping', 'status': 'alive'})}\n\n"
+
+    return StreamingResponse(_event_generator(), media_type="text/event-stream")
 
 # Register API Routers
 from backend.app.api.auth import router as auth_router
