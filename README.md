@@ -1,19 +1,20 @@
-# A11ySense AI: OpenClaw Powered Accessibility Auditing
+# A11ySense AI — Accessibility Test Automation Platform
 
-A11ySense AI is an enterprise-grade, microservices-based accessibility testing platform. It leverages **OpenClaw** for autonomous agentic auditing, **FastAPI** for high-performance backend services, and **React + Vite** for a modern, responsive user interface.
+**A11ySense AI** is an enterprise-grade accessibility test automation platform built for testing Web Pages and Web Applications against **WCAG 2.2 Level A and AA** compliance standards.
 
-## Tech Stack & Architecture
+Powered by a unified **FastAPI Monolith** backend, **Playwright** browser automation, **Claude + Gemini AI** auditing agents, and a modern **React + Vite** dashboard.
 
-A11ySense AI is designed around a distributed microservices architecture to ensure scalability, fault isolation, and component reusability:
+---
 
-- **Gateway Service (Port `8000`)**: The centralized entrypoint that routes requests, handles JWT authentication, and manages user/organization profiles.
-- **Agent Service (Port `8001`)**: The OpenClaw-powered agentic orchestrator that conducts autonomous, page-by-page accessibility audits using Playwright.
-- **Reporting Service (Port `8002`)**: Compiles raw accessibility issues, manages reports, and serves Allure-compatible report data.
-- **Crawler Service (Port `8003`)**: Traverses and maps target website domains to automatically discover pages for audit campaigns.
-- **Analyzer Service (Port `8004`)**: De-duplicates violations, runs false-positive heuristics, computes 0-100 scores, and tracks historical regression trends.
-- **LLM Service (Port `8005`)**: Centralized LLM gateway managing prompt compression, token pricing estimation, response caching, and model fallbacks (configured for Groq by default).
-- **Frontend (Port `5173` / `3000`)**: A premium React dashboard built with TypeScript and Vite.
-- **Database & Storage**: PostgreSQL (metadata store), Redis (task queuing), and local file-system reports storage.
+## Tech Stack & Monolith Architecture
+
+A11ySense AI operates as a unified, high-performance monolith architecture designed for maximum execution speed, zero microservice latency, and cross-platform compatibility (Windows & Linux).
+
+- **Backend Monolith (`backend/app/main.py`)**: Unified FastAPI server handling Authentication, Project Management, Credential Encryption, Web Crawling, WCAG 2.2 Auditing, and Excel Report Generation.
+- **Frontend Dashboard (`frontend/`)**: Modern React dashboard built with TypeScript, Vite, Material UI (MUI), and TanStack Router.
+- **AI Audit Router**: Primary LLM: **Claude** (`anthropic` SDK), Fallback LLM: **Gemini** (`google.generativeai` SDK).
+- **Caching & Queue**: Cross-platform `diskcache` (SQLite-backed) for persistent state management without Redis dependencies.
+- **Database**: PostgreSQL metadata store (SQLAlchemy ORM + automatic table creation).
 
 ---
 
@@ -21,26 +22,25 @@ A11ySense AI is designed around a distributed microservices architecture to ensu
 
 ```text
 a11ysense/
-├── backend/                  # Server-side microservices
-│   ├── common/               # Shared Pydantic schemas, database configurations, and utils
-│   ├── services/             # Independent FastAPI microservices
-│   │   ├── gateway/
-│   │   ├── agent/
-│   │   ├── reporting/
-│   │   ├── crawler/
-│   │   ├── analyzer/
-│   │   └── llm/
-│   ├── requirements.txt      # Master requirements file for the backend services
-│   ├── install.ps1           # Windows dependency installer script
-│   └── install.sh            # Unix dependency installer script
-├── frontend/                 # React + TypeScript Vite dashboard
-├── deploy/                   # Production deployment helper scripts
-├── docs/                     # Comprehensive architecture and deployment guides
-├── nginx/                    # Configuration files for reverse proxy setup
-├── docker-compose.yml        # Multi-container local orchestration configuration
-├── ecosystem.config.js       # PM2 process file for local execution
-├── start_all.bat             # Single-click Windows start script (uses PM2)
-└── stop_all.bat              # Single-click Windows stop script
+├── backend/                  # Server-side FastAPI Monolith Application
+│   ├── app/                  # Main application source
+│   │   ├── api/              # API Endpoints (auth, projects, credentials, audit, reports, dashboard)
+│   │   ├── core/             # Core Engine (crawler, auditor agents, skills, LLM router, reporting)
+│   │   ├── repository/       # Database repositories
+│   │   ├── main.py           # Single FastAPI application entry point
+│   │   ├── cache.py          # DiskCache wrapper (Windows & Linux compatible)
+│   │   └── task_queue.py     # In-process async background task runner
+│   ├── common/               # Shared database models, connection, auth deps & schemas
+│   ├── requirements.txt      # Python dependencies
+│   ├── .env.example          # Backend environment variables template
+│   └── .env                  # Backend active environment configuration
+├── frontend/                 # React + TypeScript Vite Dashboard
+│   ├── src/                  # React components, pages, routes, and state store
+│   ├── .env.example          # Frontend environment variables template
+│   └── .env                  # Frontend active environment configuration
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
 
 ---
@@ -51,69 +51,94 @@ a11ysense/
 - **Python 3.10+**
 - **Node.js 18+**
 - **PostgreSQL 15+**
-- **Redis**
-- **Java 11+** (Optional, required to view Allure reports)
 
 ---
 
-### Option A: Local Run via PM2 (Recommended for Windows)
+### Step 1: Database Setup
+Ensure PostgreSQL is running locally on port `5432` with a database named `a11ysense`:
+```sql
+CREATE DATABASE a11ysense;
+```
 
-This project includes pre-configured utility scripts to run all services concurrently using **PM2**.
+---
 
-1. **Configure Environment Variables**:
-   Copy `.env.dev.example` into a new `.env` file in the root folder and add your LLM API Key:
+### Step 2: Backend Setup & Execution
+
+1. **Navigate to the `backend/` directory**:
    ```bash
-   copy .env.dev.example .env
+   cd backend
    ```
-   *Make sure your PostgreSQL details are correctly specified in your `.env`.*
 
-2. **Install Backend Dependencies**:
-   Open a terminal in the `backend/` folder and run:
-   ```powershell
+2. **Configure Environment Variables**:
+   Copy `.env.example` to `.env`:
+   ```bash
+   copy .env.example .env
+   ```
+   Edit `.env` and set your API keys and PostgreSQL credentials:
+   ```env
+   LLM_PROVIDER=claude
+   ANTHROPIC_API_KEY=sk-ant-api03-...
+   GEMINI_API_KEY=AIzaSy...
+
+   POSTGRES_SERVER=localhost
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=12345
+   POSTGRES_DB=a11ysense
+   POSTGRES_PORT=5432
+   ```
+
+3. **Install Dependencies & Playwright Browsers**:
+   ```bash
    pip install -r requirements.txt
-   playwright install
+   playwright install chromium
    ```
 
-3. **Install Frontend Dependencies**:
-   Open a terminal in the `frontend/` folder and run:
+4. **Run the Monolith Backend**:
+   ```bash
+   python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+   *The backend API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).*
+
+---
+
+### Step 3: Frontend Setup & Execution
+
+1. **Navigate to the `frontend/` directory**:
+   ```bash
+   cd frontend
+   ```
+
+2. **Configure Environment Variables**:
+   Copy `.env.example` to `.env`:
+   ```bash
+   copy .env.example .env
+   ```
+
+3. **Install Dependencies & Launch Dev Server**:
    ```bash
    npm install
+   npm run dev
    ```
-
-4. **Start All Services**:
-   Simply run the start batch file in the project root:
-   ```bash
-   .\start_all.bat
-   ```
-   *This automatically installs PM2 globally and launches the gateway, microservices, and frontend.*
-
-5. **Stop All Services**:
-   ```bash
-   .\stop_all.bat
-   ```
+   *Access the web application at [http://localhost:5173](http://localhost:5173).*
 
 ---
 
-### Option B: Local Run via Docker Compose
+## Application Workflow
 
-If you have Docker and Docker Compose installed:
-
-1. Build and spin up the microservices, frontend, PostgreSQL, and Redis:
-   ```bash
-   docker-compose up --build
-   ```
+1. **Authentication**: Sign up or log in securely (`admin@a11y.com` / `password` seeded by default).
+2. **Project Creation**: Create a project and select target type:
+   - 🌐 **Web Page**: Public domain website crawl and audit.
+   - 💻 **Web Application**: Public + Auth-protected portal audit with saved test credentials.
+3. **Crawl & Discovery**: Page discovery engine maps public and authenticated routes.
+4. **WCAG 2.2 Audit Execution**: Scans for 56 success criteria across Level A and AA using automated Axe-core + Screen Reader persona AI refinement.
+5. **Executive Reports**: Download 3-sheet formatted `.xlsx` report containing:
+   - **Sheet 1: Defect Report** (Dark Red header `#8B0000`)
+   - **Sheet 2: Test Case Report** (Dark Blue header `#1A237E`)
+   - **Sheet 3: WCAG Criteria Reference** (Light Blue header `#1565C0`)
 
 ---
-
-## Further Documentation
-
-Detailed architecture analysis and guides can be found in the `docs/` folder:
-- [Architecture Analysis](file:///c:/External-projects/WinVinaya/a11ysense/docs/architecture_analysis.md)
-- [Local Deployment Guide](file:///c:/External-projects/WinVinaya/a11ysense/docs/local_deployment_guide.md)
-- [EC2 Deployment Guide](file:///c:/External-projects/WinVinaya/a11ysense/docs/ec2-deployment-guide.md)
-- [CI/CD Workflow Guide](file:///c:/External-projects/WinVinaya/a11ysense/docs/cicd-workflow-guide.md)
 
 ## License
-This project is licensed under a proprietary **Corporate License Agreement**. See the [LICENSE](file:///c:/External-projects/WinVinaya/a11ysense/LICENSE) file for the full terms and restrictions.
+Proprietary Corporate License Agreement. See [LICENSE](LICENSE) for full terms.
 
 Copyright (c) 2026 WinVinaya InfoSystems India. All rights reserved.
