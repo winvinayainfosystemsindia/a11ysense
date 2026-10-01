@@ -53,53 +53,27 @@ class BaseAgent:
 
     async def call_llm(self, prompt: str, system_message: str = "", use_vision: bool = False, image_data: str = None, session_id: str = None, agent_type: str = None) -> str:
         """
-        Generic LLM call dispatcher with centralized service routing and direct local fallback.
+        Generic LLM call dispatcher using unified in-process LLMClient.
         """
-        # Try routing to centralized LLM service
-        llm_service_url = os.getenv("LLM_SERVICE_URL", "http://localhost:8005")
         try:
-            import httpx
-            async with httpx.AsyncClient() as client:
-                payload = {
-                    "prompt": prompt,
-                    "system_message": system_message,
-                    "session_id": session_id,
-                    "provider": self.provider,
-                    "agent_type": agent_type
-                }
-                from common.utils.correlation import get_correlation_headers
-                headers = get_correlation_headers()
-                response = await client.post(f"{llm_service_url}/generate", json=payload, headers=headers, timeout=60.0)
-                response.raise_for_status()
-                res_data = response.json()
-                self.last_input_tokens = res_data.get("input_tokens", 0)
-                self.last_output_tokens = res_data.get("output_tokens", 0)
-                logger.info(f"Centralized LLM Service resolved successfully (model={res_data.get('model')}, cost=${res_data.get('estimated_cost_usd')}, cached={res_data.get('cached')})")
-                return res_data["text"]
+            from backend.app.core.llm.client import get_llm_client
+            client = get_llm_client()
+            res = await client.generate(
+                prompt=prompt,
+                system_message=system_message,
+                use_vision=use_vision,
+                image_data=image_data,
+                provider=self.provider
+            )
+            self.last_input_tokens = res.get("input_tokens", 0)
+            self.last_output_tokens = res.get("output_tokens", 0)
+            logger.info(f"LLM Client resolved successfully (provider={res.get('provider')}, model={res.get('model')}, cached={res.get('cached')})")
+            return res.get("text", "")
         except Exception as e:
-            logger.warning(f"Centralized LLM service call failed ({str(e)}). Falling back to direct local SDK clients...")
-
-        # Local direct fallback chain (claude -> gemini -> groq)
-        providers_to_try = [self.provider]
-        for p in ["claude", "gemini", "groq"]:
-            if p not in providers_to_try:
-                providers_to_try.append(p)
-
-        for prov in providers_to_try:
-            try:
-                if prov == "claude" and self.anthropic_key and anthropic:
-                    return await self._call_claude(prompt, system_message, use_vision, image_data)
-                elif prov == "gemini" and self.gemini_key and genai:
-                    return await self._call_gemini(prompt, system_message, use_vision, image_data)
-                elif prov == "groq" and self.groq_key and Groq:
-                    return await self._call_groq(prompt, system_message)
-            except Exception as direct_err:
-                logger.warning(f"Direct local client for {prov} failed: {direct_err}")
-                continue
-        
-        self.last_input_tokens = 50
-        self.last_output_tokens = 100
-        return "LLM Provider not configured correctly or Mock provider active."
+            logger.error(f"Unified LLM Client generation failed: {e}")
+            self.last_input_tokens = 50
+            self.last_output_tokens = 100
+            return "LLM Provider not configured correctly or Mock provider active."
 
     async def _call_claude(self, prompt: str, system_message: str, use_vision: bool, image_data: str) -> str:
         client = anthropic.Anthropic(api_key=self.anthropic_key)
