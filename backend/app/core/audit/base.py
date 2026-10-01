@@ -40,7 +40,7 @@ class BaseAgent:
     def load_prompt(self, filename: str) -> str:
         prompt_path = self.prompts_dir / filename
         if not prompt_path.exists():
-            logger.warning(f"Prompt file {filename} not found, using default.")
+            logger.warning(f"Prompt file {filename} not found at {prompt_path}, using default.")
             return f"You are a {self.role} agent named {self.name}."
         return prompt_path.read_text(encoding="utf-8")
 

@@ -13,6 +13,8 @@ class AuditorAgent(BaseAgent):
     def __init__(self):
         super().__init__(name="TechnicalAuditor", role="Accessibility Technical Auditor")
         self.system_prompt = self.load_prompt("auditor.xml")
+        self.testcase_prompt_template = self.load_prompt("testcases/testcase_prompt.xml")
+        self.defect_prompt_template = self.load_prompt("defects/defect_prompt.xml")
 
     async def audit_page(
         self,
@@ -146,6 +148,36 @@ class AuditorAgent(BaseAgent):
 
         return refined_violations
 
+    async def evaluate_testcase(self, context: dict, session_id: str = None) -> dict:
+        """Evaluates testcase documentation using the testcase prompt template from testcases/testcase_prompt.xml."""
+        prompt = self.testcase_prompt_template.format(**context)
+        for attempt in range(1, 3):
+            try:
+                ai_response = await self.call_llm(prompt, system_message=self.system_prompt, session_id=session_id, agent_type="auditor")
+                parsed = self.parse_json(ai_response)
+                if "error" not in parsed:
+                    return parsed
+            except Exception as e:
+                logger.warning(f"Testcase prompt evaluation attempt {attempt} failed: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(1.0)
+        return {}
+
+    async def evaluate_defect(self, context: dict, session_id: str = None) -> dict:
+        """Evaluates defect documentation and remediation using the defect prompt template from defects/defect_prompt.xml."""
+        prompt = self.defect_prompt_template.format(**context)
+        for attempt in range(1, 3):
+            try:
+                ai_response = await self.call_llm(prompt, system_message=self.system_prompt, session_id=session_id, agent_type="auditor")
+                parsed = self.parse_json(ai_response)
+                if "error" not in parsed:
+                    return parsed
+            except Exception as e:
+                logger.warning(f"Defect prompt evaluation attempt {attempt} failed: {e}")
+                if attempt < 2:
+                    await asyncio.sleep(1.0)
+        return {}
+
     async def refine_violation(self, violation: Violation, session_id: str = None) -> Violation:
         # Build an HTML snippet from the first 3 nodes for context
         nodes_html = ""
@@ -165,82 +197,102 @@ class AuditorAgent(BaseAgent):
                     element_selector = targets[0] if isinstance(targets[0], str) else str(targets[0])
             nodes_html = "\n".join(snippets)
 
-        prompt = f"""You are a senior Web Accessibility Auditor writing a professional WCAG 2.2 compliance report for a client.
+        context = {
+            "rule_id": violation.id,
+            "impact": violation.impact or "unknown",
+            "description": violation.description or "",
+            "help": violation.help or "",
+            "help_url": violation.helpUrl or "",
+            "element_selector": element_selector or "(not available)",
+            "page_url": getattr(violation, "page_url", "") or "",
+            "nodes_html": nodes_html if nodes_html else "(no HTML nodes captured)"
+        }
 
-TASK: Analyse the violation below and produce ALL report fields. Your audience includes non-technical stakeholders and screen-reader users — keep the language simple, clear, and jargon-free.
+        # Concurrently evaluate both testcase and defect perspectives using their separated prompts
+        tc_res, def_res = await asyncio.gather(
+            self.evaluate_testcase(context, session_id=session_id),
+            self.evaluate_defect(context, session_id=session_id),
+            return_exceptions=True
+        )
 
-VIOLATION DATA:
-- Rule ID: {violation.id}
-- Impact Level: {violation.impact or "unknown"}
-- Technical Description: {violation.description}
-- Axe Help Text: {violation.help}
-- Help URL: {violation.helpUrl}
-- Element Selector: {element_selector or "(not available)"}
-- Affected HTML Element(s):
-{nodes_html if nodes_html else "(no HTML nodes captured)"}
+        tc_data = tc_res if isinstance(tc_res, dict) else {}
+        def_data = def_res if isinstance(def_res, dict) else {}
 
-STRICT OUTPUT RULES:
-1. Return ONLY a single raw JSON object — no markdown, no code blocks, no extra text.
-2. All field values MUST be specific to this exact Rule ID "{violation.id}" and the HTML shown.
-3. Do NOT invent information not supported by the data above.
-4. Escape double quotes inside values with backslash.
-5. "description" — Write in plain English that a non-technical person can understand. Do NOT use developer jargon. Example: instead of "Missing alt attribute on img element" write "An image on this page has no text description, so people who cannot see the image will not know what it shows."
-6. "expected_result" — Tell the reader what the correct behaviour SHOULD be. Example: "Every image should have a short text description (called alt text) that explains what the image shows. When a screen reader reaches this image, it should read out this description so the user knows what the image is about."
-7. "actual_result" — Tell the reader what is ACTUALLY happening right now. Example: "This image has no text description at all. When a screen reader user reaches this image, the screen reader either skips it completely or reads out the file name, which does not help the user understand the content."
-8. "steps_to_reproduce" — Write numbered steps FROM THE PERSPECTIVE OF A SCREEN READER USER (NVDA / JAWS). Guide them step-by-step to find the element and observe the problem. Each step should be short and simple.
-9. "ai_fix_suggestion" — Provide a step-by-step guide for the developer to fix this issue. Number each step. Include specific code changes where applicable.
-10. "severity" — Must be one of: Critical, Serious, Moderate, Minor.
+        # Cross-populate fallbacks if one succeeded and one was empty
+        if not tc_data and def_data:
+            tc_data = {
+                "description": def_data.get("description", violation.description),
+                "expected_result": def_data.get("expected_result", ""),
+                "actual_result": def_data.get("actual_result", ""),
+                "steps_to_reproduce": def_data.get("steps_to_reproduce", ""),
+                "wcag_criteria": def_data.get("wcag_criteria", "N/A"),
+                "wcag_level": def_data.get("wcag_level", "AA"),
+                "wcag_principle": def_data.get("wcag_principle", "Perceivable"),
+                "severity": def_data.get("severity", violation.impact or "Moderate"),
+                "status": "FAIL",
+                "element_html_snippet": def_data.get("element_html_snippet", nodes_html),
+            }
+        elif not def_data and tc_data:
+            def_data = {
+                "friendly_name": violation.help,
+                "description": tc_data.get("description", violation.description),
+                "expected_result": tc_data.get("expected_result", ""),
+                "actual_result": tc_data.get("actual_result", ""),
+                "steps_to_reproduce": tc_data.get("steps_to_reproduce", ""),
+                "ai_fix_suggestion": "",
+                "wcag_criteria": tc_data.get("wcag_criteria", "N/A"),
+                "wcag_level": tc_data.get("wcag_level", "AA"),
+                "wcag_principle": tc_data.get("wcag_principle", "Perceivable"),
+                "severity": tc_data.get("severity", violation.impact or "Moderate"),
+                "business_impact": "",
+                "status": "Open",
+                "element_html_snippet": tc_data.get("element_html_snippet", nodes_html),
+            }
 
-REQUIRED JSON FIELDS:
-{{
-    "friendly_name": "<Clear, simple title for this issue — understandable by anyone>",
-    "description": "<Simple, non-technical explanation of what the accessibility problem is and why it matters for people with disabilities>",
-    "wcag_criteria": "<Exact WCAG 2.2 Success Criteria ID and Name, e.g. '1.1.1 Non-text Content'>",
-    "wcag_level": "<A or AA or AAA>",
-    "severity": "<Critical, Serious, Moderate, or Minor>",
-    "expected_result": "<What SHOULD happen — describe the correct, accessible behaviour in simple terms so a non-technical person understands what the element is supposed to do>",
-    "actual_result": "<What IS happening right now — describe the actual barrier a user with a disability would face, referencing the specific HTML element shown above>",
-    "steps_to_reproduce": "<Numbered steps (1. 2. 3. ...) written for a screen reader user (NVDA/JAWS) to navigate to the element and observe the issue. Keep each step simple and short. Start with opening the URL, then guide through keyboard/screen reader navigation to the exact element.>",
-    "ai_fix_suggestion": "<Step-by-step numbered guide for the developer on how to fix this issue. Include specific HTML/ARIA code changes. Each step should be actionable.>",
-    "business_impact": "<How this issue affects real users with disabilities in their daily experience>",
-    "element_html_snippet": "<The exact HTML snippet of the affected element, copied from the violation data above>",
-    "help": "<Short actionable guidance on what to check or fix>"
-}}"""
-        data = None
-        for attempt in range(1, 3):
-            try:
-                ai_response = await self.call_llm(prompt, system_message=self.system_prompt, session_id=session_id, agent_type="auditor")
-                parsed = self.parse_json(ai_response)
-                
-                if "error" in parsed:
-                    raise ValueError(f"JSON Parse error: {parsed.get('error')}")
-                
-                data = parsed
-                break
-            except Exception as e:
-                logger.warning(f"LLM refinement attempt {attempt} failed for {violation.id}: {str(e)}")
-                if attempt < 2:
-                    logger.info(f"Retrying LLM refinement for {violation.id} in 1 second...")
-                    await asyncio.sleep(1.0)
-                else:
-                    logger.error(f"LLM refinement failed after {attempt} attempts for {violation.id}. Using fallback.")
-                    return violation
-        
-        # Merge AI data into metadata — these fields map 1:1 to the Excel report columns
+        # Build clean metadata structure maintaining separated testcase and defect records
+        # plus backwards-compatible top-level keys
         violation.metadata = {
-            "friendly_name": data.get("friendly_name", violation.help),
-            "description": data.get("description", violation.description),
-            "help": data.get("help", violation.help),
-            "wcag_criteria": data.get("wcag_criteria", "N/A"),
-            "wcag_level": data.get("wcag_level", "AA"),
-            "severity": data.get("severity", violation.impact or "Moderate"),
-            "business_impact": data.get("business_impact", ""),
-            "expected_result": data.get("expected_result", ""),
-            "actual_result": data.get("actual_result", ""),
-            "steps_to_reproduce": data.get("steps_to_reproduce", ""),
-            "ai_fix_suggestion": data.get("ai_fix_suggestion", ""),
-            "element_html_snippet": data.get("element_html_snippet", nodes_html),
-            "remediation": data.get("ai_fix_suggestion", data.get("remediation_plan", "")),
+            "testcase": {
+                "description": tc_data.get("description") or def_data.get("description", violation.description),
+                "expected_result": tc_data.get("expected_result") or def_data.get("expected_result", ""),
+                "actual_result": tc_data.get("actual_result") or def_data.get("actual_result", ""),
+                "steps_to_reproduce": tc_data.get("steps_to_reproduce") or def_data.get("steps_to_reproduce", ""),
+                "wcag_criteria": tc_data.get("wcag_criteria") or def_data.get("wcag_criteria", "N/A"),
+                "wcag_level": tc_data.get("wcag_level") or def_data.get("wcag_level", "AA"),
+                "wcag_principle": tc_data.get("wcag_principle") or def_data.get("wcag_principle", "Perceivable"),
+                "severity": tc_data.get("severity") or def_data.get("severity", violation.impact or "Moderate"),
+                "status": "FAIL",
+                "element_html_snippet": tc_data.get("element_html_snippet") or nodes_html,
+            },
+            "defect": {
+                "friendly_name": def_data.get("friendly_name") or violation.help,
+                "description": def_data.get("description") or tc_data.get("description", violation.description),
+                "expected_result": def_data.get("expected_result") or tc_data.get("expected_result", ""),
+                "actual_result": def_data.get("actual_result") or tc_data.get("actual_result", ""),
+                "steps_to_reproduce": def_data.get("steps_to_reproduce") or tc_data.get("steps_to_reproduce", ""),
+                "ai_fix_suggestion": def_data.get("ai_fix_suggestion", ""),
+                "wcag_criteria": def_data.get("wcag_criteria") or tc_data.get("wcag_criteria", "N/A"),
+                "wcag_level": def_data.get("wcag_level") or tc_data.get("wcag_level", "AA"),
+                "wcag_principle": def_data.get("wcag_principle") or tc_data.get("wcag_principle", "Perceivable"),
+                "severity": def_data.get("severity") or tc_data.get("severity", violation.impact or "Moderate"),
+                "business_impact": def_data.get("business_impact", ""),
+                "status": "Open",
+                "element_html_snippet": def_data.get("element_html_snippet") or nodes_html,
+            },
+            # Top-level backward compatibility fields
+            "friendly_name": def_data.get("friendly_name", violation.help),
+            "description": tc_data.get("description") or def_data.get("description", violation.description),
+            "help": violation.help,
+            "wcag_criteria": tc_data.get("wcag_criteria") or def_data.get("wcag_criteria", "N/A"),
+            "wcag_level": tc_data.get("wcag_level") or def_data.get("wcag_level", "AA"),
+            "severity": def_data.get("severity") or tc_data.get("severity", violation.impact or "Moderate"),
+            "business_impact": def_data.get("business_impact", ""),
+            "expected_result": tc_data.get("expected_result") or def_data.get("expected_result", ""),
+            "actual_result": tc_data.get("actual_result") or def_data.get("actual_result", ""),
+            "steps_to_reproduce": tc_data.get("steps_to_reproduce") or def_data.get("steps_to_reproduce", ""),
+            "ai_fix_suggestion": def_data.get("ai_fix_suggestion", ""),
+            "element_html_snippet": nodes_html,
+            "remediation": def_data.get("ai_fix_suggestion", ""),
             "refined_by": "AuditorAgent",
             "input_tokens": self.last_input_tokens,
             "output_tokens": self.last_output_tokens

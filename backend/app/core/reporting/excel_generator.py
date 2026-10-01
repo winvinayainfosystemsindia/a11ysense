@@ -185,11 +185,13 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
         violation_tc_map[idx] = tc_id
 
         meta = _get_meta(v)
-        criteria = meta.get("wcag_criteria", v.get("wcag_criteria", ""))
+        tc_meta = meta.get("testcase") if isinstance(meta.get("testcase"), dict) else meta
+
+        criteria = tc_meta.get("wcag_criteria") or meta.get("wcag_criteria", v.get("wcag_criteria", ""))
         sc_num = _extract_sc_number(criteria)
-        principle = _wcag_principle(sc_num)
-        level = meta.get("wcag_level", v.get("wcag_level", ""))
-        snippet = meta.get("element_html_snippet", "")
+        principle = tc_meta.get("wcag_principle") or _wcag_principle(sc_num)
+        level = tc_meta.get("wcag_level") or meta.get("wcag_level", v.get("wcag_level", ""))
+        snippet = tc_meta.get("element_html_snippet") or meta.get("element_html_snippet", "")
         if not snippet:
             # Fallback: extract from nodes
             nodes = v.get("nodes")
@@ -205,12 +207,12 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
             level,
             principle,
             snippet,
-            meta.get("description", v.get("description", "")),
-            meta.get("expected_result", v.get("expected_result", "")),
-            meta.get("actual_result", v.get("actual_result", "")),
-            meta.get("steps_to_reproduce", v.get("steps_to_reproduce", "")),
+            tc_meta.get("description") or meta.get("description", v.get("description", "")),
+            tc_meta.get("expected_result") or meta.get("expected_result", v.get("expected_result", "")),
+            tc_meta.get("actual_result") or meta.get("actual_result", v.get("actual_result", "")),
+            tc_meta.get("steps_to_reproduce") or meta.get("steps_to_reproduce", v.get("steps_to_reproduce", "")),
             "FAIL",
-            meta.get("severity", v.get("impact", "")),
+            tc_meta.get("severity") or meta.get("severity", v.get("impact", "")),
             "",  # Remarks — intentionally blank for auditor to fill
         ]
         ws_tc.append(row_data)
@@ -284,11 +286,13 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
         linked_tc = violation_tc_map.get(idx, "")
 
         meta = _get_meta(v)
-        criteria = meta.get("wcag_criteria", v.get("wcag_criteria", ""))
+        def_meta = meta.get("defect") if isinstance(meta.get("defect"), dict) else meta
+
+        criteria = def_meta.get("wcag_criteria") or meta.get("wcag_criteria", v.get("wcag_criteria", ""))
         sc_num = _extract_sc_number(criteria)
-        principle = _wcag_principle(sc_num)
-        level = meta.get("wcag_level", v.get("wcag_level", ""))
-        snippet = meta.get("element_html_snippet", "")
+        principle = def_meta.get("wcag_principle") or _wcag_principle(sc_num)
+        level = def_meta.get("wcag_level") or meta.get("wcag_level", v.get("wcag_level", ""))
+        snippet = def_meta.get("element_html_snippet") or meta.get("element_html_snippet", "")
         if not snippet:
             nodes = v.get("nodes")
             if isinstance(nodes, list) and nodes:
@@ -304,13 +308,13 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
             level,
             principle,
             snippet,
-            meta.get("description", v.get("description", "")),
-            meta.get("expected_result", v.get("expected_result", "")),
-            meta.get("actual_result", v.get("actual_result", "")),
-            meta.get("steps_to_reproduce", v.get("steps_to_reproduce", "")),
+            def_meta.get("description") or meta.get("description", v.get("description", "")),
+            def_meta.get("expected_result") or meta.get("expected_result", v.get("expected_result", "")),
+            def_meta.get("actual_result") or meta.get("actual_result", v.get("actual_result", "")),
+            def_meta.get("steps_to_reproduce") or meta.get("steps_to_reproduce", v.get("steps_to_reproduce", "")),
             "Open",
-            meta.get("severity", v.get("impact", "")),
-            meta.get("ai_fix_suggestion", meta.get("remediation", v.get("remediation_plan", ""))),
+            def_meta.get("severity") or meta.get("severity", v.get("impact", "")),
+            def_meta.get("ai_fix_suggestion") or meta.get("ai_fix_suggestion", meta.get("remediation", v.get("remediation_plan", ""))),
             "",  # Remarks — blank for auditor
         ]
         ws_def.append(row_data)

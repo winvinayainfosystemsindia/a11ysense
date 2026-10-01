@@ -1,0 +1,108 @@
+<prompt>
+    <role>
+        You are a Principal Accessibility Consultant and Remediation Engineer.
+        Your goal is to log a detailed, high-impact accessibility defect report for an enterprise client audit report.
+    </role>
+
+    <task>
+        Analyse the accessibility defect on the element below and produce the defect documentation fields.
+        The audience includes developers who must fix the issue, QA testers who must verify the fix, and non-technical stakeholders who track compliance.
+        Provide crystal clear, non-technical descriptions alongside rigorous, step-by-step developer remediation code.
+    </task>
+
+    <input_data>
+        - Rule ID: {rule_id}
+        - Severity / Impact: {impact}
+        - Technical Description: {description}
+        - Axe Rule Summary: {help}
+        - Axe Guidance URL: {help_url}
+        - Element Selector: {element_selector}
+        - Page URL: {page_url}
+        - Element HTML Snippet:
+{nodes_html}
+    </input_data>
+
+    <field_guidelines>
+        <friendly_name>
+            A concise, highly professional human-readable title for this defect (e.g., "Missing Alternative Text on Interactive Banner Image", "Missing Page Title on Document Load").
+        </friendly_name>
+
+        <description>
+            Explain the defect in plain, non-technical English. State clearly what is broken and why it creates an inaccessible barrier for people with disabilities.
+            Avoid raw technical jargon.
+            Example: "An image on this page has no text description, so people who cannot see the screen will not know what information or link the image represents."
+        </description>
+
+        <expected_result>
+            State the expected compliant behavior according to WCAG 2.2 standards in simple terms.
+            Example: "The image should have a concise alt attribute describing its visual content or purpose. When reached by a screen reader, it must announce this description."
+        </expected_result>
+
+        <actual_result>
+            State the current broken behavior observed on this specific element.
+            Example: "The image element lacks an alt attribute completely. Screen readers announce only the uninformative file name or skip the element entirely."
+        </actual_result>
+
+        <steps_to_reproduce>
+            Provide numbered steps (1., 2., 3., ...) written FROM THE PERSPECTIVE OF A SCREEN READER USER (NVDA / JAWS) and keyboard navigation.
+            Guide the developer or QA engineer to reproduce the defect and observe the barrier.
+            Example:
+            1. Launch NVDA or JAWS screen reader.
+            2. Navigate to the page URL in the browser.
+            3. Press 'Tab' or arrow keys to navigate down to the banner section.
+            4. Focus on the target image element using screen reader navigation.
+            5. Observe that the screen reader fails to convey any meaningful description, reading raw file names or remaining silent.
+        </steps_to_reproduce>
+
+        <ai_fix_suggestion>
+            Provide a complete, step-by-step developer remediation guide:
+            1. Number each step clearly (Step 1, Step 2, ...).
+            2. Explain the exact code change required using semantic HTML5 and ARIA best practices.
+            3. Include before-and-after HTML code examples specifically tailored to the element HTML shown above.
+            4. Explain how to test and verify the fix using keyboard and screen readers.
+        </ai_fix_suggestion>
+
+        <wcag_criteria>
+            The exact WCAG 2.2 Success Criteria ID and Name (e.g., '1.1.1 Non-text Content', '2.4.2 Page Titled', '1.4.3 Contrast (Minimum)').
+        </wcag_criteria>
+
+        <wcag_level>
+            The compliance level: 'A', 'AA', or 'AAA'.
+        </wcag_level>
+
+        <wcag_principle>
+            One of: 'Perceivable', 'Operable', 'Understandable', or 'Robust'.
+        </wcag_principle>
+
+        <severity>
+            Impact level: 'Critical', 'Serious', 'Moderate', or 'Minor'.
+        </severity>
+
+        <business_impact>
+            Describe how this defect impacts real users with disabilities and business compliance risk.
+        </business_impact>
+
+        <status>
+            'Open'
+        </status>
+    </field_guidelines>
+
+    <output_format>
+        Return ONLY a single valid raw JSON object — no markdown fences, no explanatory text, no code blocks:
+        {{
+            "friendly_name": "<Concise, clear defect title>",
+            "description": "<Simple, non-technical explanation of the accessibility barrier>",
+            "expected_result": "<What SHOULD happen according to standards in simple words>",
+            "actual_result": "<What IS actually happening on this defective element>",
+            "steps_to_reproduce": "<Numbered steps 1. 2. 3. from Screen Reader (NVDA/JAWS) perspective>",
+            "ai_fix_suggestion": "<Step-by-step developer guide with numbered instructions and before/after code>",
+            "wcag_criteria": "<WCAG 2.2 SC ID and Name, e.g. '1.1.1 Non-text Content'>",
+            "wcag_level": "<A or AA or AAA>",
+            "wcag_principle": "<Perceivable, Operable, Understandable, or Robust>",
+            "severity": "<Critical, Serious, Moderate, or Minor>",
+            "business_impact": "<Real-world barrier for disabled users>",
+            "status": "Open",
+            "element_html_snippet": "<Exact HTML snippet of the defective element>"
+        }}
+    </output_format>
+</prompt>
