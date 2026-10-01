@@ -37,10 +37,13 @@ class ManagerAgent(BaseAgent):
         """
         logger.info(f"ManagerAgent starting audit for {request.url}")
 
-        # 1. Thought Process
-        thought_prompt = f"I need to audit {request.url}. What is the plan?"
-        thought_response = await self.call_llm(thought_prompt, system_message=self.full_system_prompt, session_id=task_id, agent_type="manager")
-        logger.info(f"Manager Thought: {thought_response}")
+        # 1. Thought Process (best-effort; audit continues if LLM is unavailable)
+        try:
+            thought_prompt = f"I need to audit {request.url}. What is the plan?"
+            thought_response = await self.call_llm(thought_prompt, system_message=self.full_system_prompt, session_id=task_id, agent_type="manager")
+            logger.info(f"Manager Thought: {thought_response}")
+        except Exception as e:
+            logger.info(f"Manager thought skipped (LLM unavailable): {e}")
 
         # 2. Discover crawlable pages or reuse pre-discovered lists
         sitemaps_found = pre_sitemaps_found or []
