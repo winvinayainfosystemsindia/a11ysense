@@ -38,6 +38,7 @@ class ManagerAgent(BaseAgent):
         logger.info(f"ManagerAgent starting audit for {request.url}")
 
         # 1. Thought Process (best-effort; audit continues if LLM is unavailable)
+        thought_response = "Deterministic audit plan: scan pages, run accessibility tools, collect and refine violations."
         try:
             thought_prompt = f"I need to audit {request.url}. What is the plan?"
             thought_response = await self.call_llm(thought_prompt, system_message=self.full_system_prompt, session_id=task_id, agent_type="manager")
