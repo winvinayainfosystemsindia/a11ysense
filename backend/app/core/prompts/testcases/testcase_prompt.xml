@@ -36,6 +36,7 @@
         5. Never invent anything: no page behaviour, no text, no numbers that are not in the facts.
            If "What the screen reader says today" is "(not captured)", say "will most likely hear ..." instead of stating it as fact.
         6. Do not repeat the same sentence across the fields. Each field adds something new.
+        7. For menu items, submenu links, and interactive controls inside menus or tabs: Explain that these controls are often designed to be accessed using Arrow keys after opening the parent menu. For actual_result and steps_to_reproduce, guide the tester to test Arrow key navigation to evaluate whether it is Version A (Expected menu behavior / False Positive if reachable with Arrow keys) or Version B (Accessibility Issue if unreachable by both Tab and Arrow keys).
     </writing_rules>
 
     <field_guidelines>
@@ -56,7 +57,7 @@
             2 to 4 sentences. Always include all three parts:
             (a) what is really on this element today (quote the real text or say what is missing);
             (b) what the screen reader user hears or cannot do because of it;
-            (c) how that feels for them.
+            (c) how that feels for them, or how to test if it is intentional (Version A vs Version B).
         </actual_result>
 
         <steps_to_reproduce>
@@ -66,17 +67,32 @@
             Required shape:
               - Step 1: open the page URL.
               - Step 2: start the screen reader (NVDA or JAWS on Windows, VoiceOver on Mac).
-              - Middle steps: reach the element the way a screen reader user would. Use the landmark and heading from the facts first
-                (jump to the section, then the heading, then press Tab or the quick key until you hear the element's name).
-                If the location is "(not captured)", open the screen reader's list of links/buttons/form fields and find the element by its name.
-              - Second to last step: say what to listen for.
-              - Last step: say what the tester will notice that proves the problem.
+              - Middle steps: reach the element the way a screen reader user would. Use the landmark, heading, or parent menu from the facts.
+                For menu items: tab to the menu trigger, press Enter or Space to open it, and press Down Arrow to navigate items.
+              - Second to last step: say what to listen for (e.g. quote the element name and type).
+              - Last step: say what the tester will notice that proves the problem or confirms the expected behavior.
             Allowed keys only: Tab, Shift+Tab, Enter, Space, arrow keys, H (next heading), K (next link), B (next button), F (next form field),
             G (next picture), D in NVDA or R in JAWS (next page section), NVDA+F7 (NVDA elements list), Insert+F7 (JAWS links list), Insert+F5 (JAWS form fields list).
         </steps_to_reproduce>
     </field_guidelines>
 
     <examples note="Style only. Do NOT copy these facts into your answer.">
+        <example name="menu link arrow key navigation check">
+            {{
+                "description": "The 'F&O' link in the main menu cannot be reached using the Tab key alone. Users must test whether opening the menu and navigating with Arrow keys allows reaching and activating this link.",
+                "expected_result": "Keyboard and screen reader users should be able to open the menu and use the Arrow keys or Tab key to move to 'F&O'. The screen reader should announce 'F&O, link', and the user should be able to press Enter to open it.",
+                "actual_result": "The 'F&O' link cannot be reached using the Tab key. Check whether pressing Down Arrow in the open menu announces 'F&O, link' (Version A: Expected menu behavior / False Positive) or if the link is completely skipped (Version B: Accessibility Issue).",
+                "steps_to_reproduce": [
+                    "Open https://lemonn.co.in/ in a browser.",
+                    "Start NVDA or JAWS.",
+                    "Press Tab until you hear 'Trade & Invest, dropdown' or reach the menu.",
+                    "Press Enter to open the menu.",
+                    "Press the Down Arrow key to move through the menu items.",
+                    "Listen for 'F&O, link'.",
+                    "Check whether you can reach the F&O link: If you can reach it using the Arrow keys -> Version A / False Positive. If the link is skipped completely -> Version B / Accessibility Issue."
+                ]
+            }}
+        </example>
         <example name="missing page title">
             {{
                 "description": "This page has no title. The title is the name a screen reader reads out first, so people know which page they are on.",

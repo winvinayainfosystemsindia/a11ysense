@@ -204,3 +204,68 @@ async def test_p4_reports_loads_json(tmp_path, monkeypatch):
     assert response.media_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     assert len(response.body) > 0
 
+
+@pytest.mark.asyncio
+async def test_menuitem_arrow_navigation_narrative(tmp_path, monkeypatch):
+    task_id = "test-menuitem-task-001"
+    monkeypatch.setattr(
+        "backend.app.core.audit.orchestrator.get_audit_storage_path",
+        lambda *args, **kwargs: str(tmp_path)
+    )
+
+    menu_html = '<a role="menuitem" aria-label="F&amp;O, link" tabindex="-1" target="_blank" rel="noopener noreferrer" href="/futures-and-options">F&amp;O</a>'
+    v = Violation(
+        id="keyboard-non-focusable-interactive",
+        impact="serious",
+        description="Interactive control <a> with role='menuitem' cannot be focused via keyboard.",
+        help="Ensure keyboard accessibility",
+        nodes=[{
+            "html": menu_html,
+            "target": ['a[role="menuitem"]'],
+            "page_url": "https://lemonn.co.in/",
+            "page_title": "Lemonn",
+            "context": {
+                "visible_text": "F&O",
+                "accessible_name": "F&O, link",
+                "role": "menuitem",
+                "parent_menu": "Trade & Invest"
+            }
+        }]
+    )
+
+    result = AuditResult(
+        task_id=task_id,
+        url="https://lemonn.co.in/",
+        status="completed",
+        violations=[v],
+        passes=[],
+        metadata={"page_title": "Lemonn"}
+    )
+
+    testcases = await audit_orchestrator.compile_and_save_testcase_report(task_id, result)
+    tc = next(t for t in testcases if t["rule_id"] == "keyboard-non-focusable-interactive")
+
+    # Verify tailored name and description
+    assert "F&O" in tc["description"]
+    assert "Tab key" in tc["description"]
+    assert "Arrow keys" in tc["description"]
+
+    # Verify expected result
+    assert "F&O" in tc["expected_result"]
+    assert "Arrow keys" in tc["expected_result"]
+
+    # Verify actual result (Version A vs Version B evaluation)
+    assert "Version A" in tc["actual_result"]
+    assert "Version B" in tc["actual_result"]
+
+    # Verify steps to reproduce
+    assert "Trade & Invest" in tc["steps_to_reproduce"]
+    assert "Down Arrow" in tc["steps_to_reproduce"]
+    assert "F&O, link" in tc["steps_to_reproduce"]
+    assert "Version A / False Positive" in tc["steps_to_reproduce"]
+    assert "Version B / Accessibility Issue" in tc["steps_to_reproduce"]
+
+    # Verify remarks and false positive note
+    assert "Menu items are designed to be accessed using Arrow keys" in tc["remarks"]
+
+

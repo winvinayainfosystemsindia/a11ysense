@@ -36,12 +36,48 @@ class KeyboardNavSkill:
                     const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
                     
                     return isExcluded && isVisible;
-                }).map(el => ({
-                    tagName: el.tagName.toLowerCase(),
-                    id: el.id,
-                    html: el.outerHTML.substring(0, 300),
-                    role: el.getAttribute("role")
-                }));
+                }).map(el => {
+                    const tag = el.tagName.toLowerCase();
+                    const text = (el.innerText || el.textContent || '').trim().substring(0, 80);
+                    const label = el.getAttribute('aria-label') || el.getAttribute('title') || '';
+                    const role = el.getAttribute('role') || '';
+                    const href = el.getAttribute('href') || '';
+                    const tabindex = el.getAttribute('tabindex') || '';
+                    
+                    let parentMenu = '';
+                    try {
+                        const menuParent = el.closest('[role="menu"], [role="menubar"], nav, .menu, .dropdown');
+                        if (menuParent) {
+                            const prevBtn = menuParent.previousElementSibling || menuParent.parentElement?.querySelector('button, [aria-expanded], [aria-haspopup]');
+                            if (prevBtn) {
+                                parentMenu = (prevBtn.innerText || prevBtn.getAttribute('aria-label') || '').trim();
+                            }
+                        }
+                    } catch(e) {}
+
+                    let target = tag;
+                    if (el.id) {
+                        target = `#${el.id}`;
+                    } else if (href) {
+                        target = `${tag}[href="${href.replace(/"/g, '\\"')}"]`;
+                    } else if (role && label) {
+                        target = `${tag}[role="${role}"][aria-label="${label.replace(/"/g, '\\"')}"]`;
+                    } else if (role) {
+                        target = `${tag}[role="${role}"]`;
+                    }
+
+                    return {
+                        tagName: tag,
+                        id: el.id,
+                        html: el.outerHTML.substring(0, 400),
+                        role: role,
+                        visibleText: text,
+                        accessibleName: label || text,
+                        targetSelector: target,
+                        parentMenu: parentMenu,
+                        tabindex: tabindex
+                    };
+                });
             }""")
             for item in non_focusable_interactive:
                 violations.append(Violation(
@@ -50,18 +86,26 @@ class KeyboardNavSkill:
                     description=f"Interactive control <{item['tagName']}> with role='{item['role']}' cannot be focused via keyboard.",
                     help="Add tabindex='0' to ensure keyboard-only and screen reader users can navigate to this element.",
                     helpUrl="https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/",
-                    nodes=[{"html": item["html"], "target": [f"{item['tagName']}{'#' + item['id'] if item['id'] else ''}"]}],
+                    nodes=[{
+                        "html": item["html"],
+                        "target": [item.get("targetSelector") or item["tagName"]],
+                        "context": {
+                            "tag": item["tagName"],
+                            "role": item["role"],
+                            "visible_text": item.get("visibleText", ""),
+                            "accessible_name": item.get("accessibleName", ""),
+                            "parent_menu": item.get("parentMenu", ""),
+                            "tabindex": item.get("tabindex", ""),
+                        }
+                    }],
                     metadata={
-                        "friendly_name": "Interactive Control Excluded from Tab Order",
-                        "wcag_criteria": "2.1.1 Keyboard",
-                        "wcag_level": "A",
-                        "severity": "Serious",
-                        "business_impact": "Keyboard-only and assistive technology users will not be able to navigate to, focus on, or interact with this custom control.",
-                        "expected_result": "Any element with an interactive ARIA role MUST be focusable (e.g. have tabindex='0' or be a semantic button/link).",
-                        "actual_result": f"Element has role='{item['role']}' but lacks a tab index, making it unreachable via keyboard.",
-                        "steps_to_reproduce": "1. Scan the page using keyboard navigation.\n2. Observe that this interactive control is skipped.",
-                        "remediation": "Add tabindex=\"0\" to the element.",
-                        "refined_by": "KeyboardNavSkill"
+                        "rule_id": "keyboard-non-focusable-interactive",
+                        "raw_context": {
+                            "visible_text": item.get("visibleText", ""),
+                            "accessible_name": item.get("accessibleName", ""),
+                            "parent_menu": item.get("parentMenu", ""),
+                            "role": item["role"],
+                        }
                     }
                 ))
         except Exception as e:

@@ -79,24 +79,46 @@
     </field_guidelines>
 
     <example note="Style only. Do NOT copy these facts into your answer.">
-        {{
-            "friendly_name": "Filter icon button has no accessible label",
-            "business_impact": "Screen reader users cannot tell what this button does, so they cannot use the filters on their own. This is a Level A failure and a common cause of accessibility complaints.",
-            "fix_steps": [
-                "Search the project for the class 'filter-btn' or the id 'filter-toggle' to find the button.",
-                "Add aria-label=\"Open filters\" to the button so a screen reader announces its purpose. If the page can show text next to the icon, visible text is better than aria-label.",
-                "The same button is used in the product list header, so make the change once in the shared component instead of on each page.",
-                "Do not use title=\"Open filters\" as the only fix; screen readers do not announce it reliably."
-            ],
-            "code_before": "<button id=\"filter-toggle\" class=\"filter-btn\"><svg ...></svg></button>",
-            "code_after": "<button id=\"filter-toggle\" class=\"filter-btn\" aria-label=\"Open filters\"><svg ... aria-hidden=\"true\"></svg></button>",
-            "verify_steps": [
-                "Press Tab until the button is focused and check that the focus outline is visible.",
-                "With NVDA or JAWS running, confirm it now announces 'Open filters, button'.",
-                "Re-run A11ySense or axe DevTools on the page and confirm this defect is gone."
-            ],
-            "false_positive_note": ""
-        }}
+        <example name="menu link arrow navigation check">
+            {{
+                "friendly_name": "'F&O' menu link keyboard access check",
+                "business_impact": "If the link cannot be reached using keyboard navigation, users who cannot use a mouse cannot access the F&O page from the menu.",
+                "fix_steps": [
+                    "Search the project for 'futures-and-options' or 'F&O' to locate the menu item in the navigation component.",
+                    "Confirm whether the menu follows the arrow key navigation pattern (roving tabindex).",
+                    "If it is an arrow-navigated menu, confirm that pressing Arrow Down focuses this item and Enter activates it.",
+                    "If it is meant to be a standard tab-navigated link, remove tabindex=\"-1\" or set tabindex=\"0\"."
+                ],
+                "code_before": "<a role=\"menuitem\" aria-label=\"F&O, link\" tabindex=\"-1\" href=\"/futures-and-options\">F&O</a>",
+                "code_after": "<a role=\"menuitem\" aria-label=\"F&O, link\" tabindex=\"-1\" href=\"/futures-and-options\">F&O</a>",
+                "verify_steps": [
+                    "Open the menu and press Down Arrow to navigate to the link.",
+                    "With NVDA or JAWS running, confirm the screen reader announces 'F&O, link'.",
+                    "Press Enter and verify that the page opens without needing a mouse."
+                ],
+                "false_positive_note": "Menu items are designed to be accessed using Arrow keys. Therefore, skipping them with the Tab key is expected behavior if reachable with Arrow keys."
+            }}
+        </example>
+        <example name="button missing label">
+            {{
+                "friendly_name": "Filter icon button has no accessible label",
+                "business_impact": "Screen reader users cannot tell what this button does, so they cannot use the filters on their own. This is a Level A failure and a common cause of accessibility complaints.",
+                "fix_steps": [
+                    "Search the project for the class 'filter-btn' or the id 'filter-toggle' to find the button.",
+                    "Add aria-label=\"Open filters\" to the button so a screen reader announces its purpose. If the page can show text next to the icon, visible text is better than aria-label.",
+                    "The same button is used in the product list header, so make the change once in the shared component instead of on each page.",
+                    "Do not use title=\"Open filters\" as the only fix; screen readers do not announce it reliably."
+                ],
+                "code_before": "<button id=\"filter-toggle\" class=\"filter-btn\"><svg ...></svg></button>",
+                "code_after": "<button id=\"filter-toggle\" class=\"filter-btn\" aria-label=\"Open filters\"><svg ... aria-hidden=\"true\"></svg></button>",
+                "verify_steps": [
+                    "Press Tab until the button is focused and check that the focus outline is visible.",
+                    "With NVDA or JAWS running, confirm it now announces 'Open filters, button'.",
+                    "Re-run A11ySense or axe DevTools on the page and confirm this defect is gone."
+                ],
+                "false_positive_note": ""
+            }}
+        </example>
     </example>
 
     <output_format>

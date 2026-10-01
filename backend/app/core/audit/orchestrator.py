@@ -807,15 +807,24 @@ class AuditOrchestrator:
                         existing["remarks"] = f"Same problem found {existing['repeat_count']} times on this page."
                         continue
 
-                    # Retrieve narrative: prefer refined metadata if complete, else fallback_narrative
+                    # Retrieve narrative: ensure narrative is specific to this individual node
                     has_refined = bool(
                         v_meta.get("description")
                         and v_meta.get("expected_result")
                         and v_meta.get("actual_result")
                         and v_meta.get("steps_to_reproduce")
                     )
+                    v_code = v_meta.get("code_before", "") or ""
+                    v_refined_by = v_meta.get("refined_by", "")
 
-                    if has_refined:
+                    is_node_match = False
+                    if has_refined and v_refined_by not in ("KeyboardNavSkill", "rule_catalog"):
+                        if len(raw_nodes) == 1:
+                            is_node_match = True
+                        elif v_code and (v_code[:40] in raw_html or raw_html[:40] in v_code):
+                            is_node_match = True
+
+                    if is_node_match:
                         desc = v_meta.get("description", "")
                         expected = v_meta.get("expected_result", "")
                         actual = v_meta.get("actual_result", "")
@@ -826,14 +835,23 @@ class AuditOrchestrator:
                         business_impact = v_meta.get("business_impact", "")
                         fix_steps = v_meta.get("fix_steps") or []
                         remediation = v_meta.get("remediation") or ("\n".join(fix_steps) if fix_steps else "")
-                        code_before = v_meta.get("code_before", "")
-                        code_after = v_meta.get("code_after", "")
+                        code_before = v_meta.get("code_before", "") or raw_html
+                        code_after = v_meta.get("code_after", "") or raw_html
                         verify_steps = v_meta.get("verify_steps") or []
                         false_pos = v_meta.get("false_positive_note", "")
+                        remarks = v_meta.get("remarks", "")
                         screenshot = v_meta.get("screenshot", "N/A")
-                        refined_by = v_meta.get("refined_by", "rule_catalog")
+                        refined_by = v_refined_by
                     else:
-                        fb = fallback_narrative(rule, raw_html)
+                        node_ctx_payload = {
+                            **node_dict,
+                            "element_html": raw_html,
+                            "page_url": node_page_url,
+                            "page_title": node_page_title,
+                        }
+                        if node_dict.get("context") and isinstance(node_dict["context"], dict):
+                            node_ctx_payload.update(node_dict["context"])
+                        fb = fallback_narrative(rule, node_ctx_payload)
                         desc = fb["description"]
                         expected = fb["expected_result"]
                         actual = fb["actual_result"]
@@ -846,6 +864,7 @@ class AuditOrchestrator:
                         code_after = fb["code_after"]
                         verify_steps = fb["verify_steps"]
                         false_pos = fb["false_positive_note"]
+                        remarks = fb.get("remarks", "")
                         screenshot = "N/A"
                         refined_by = "fallback_template"
 
@@ -873,7 +892,7 @@ class AuditOrchestrator:
                         "page_title": node_page_title,
                         "screenshot": screenshot,
                         "repeat_count": 1,
-                        "remarks": "",
+                        "remarks": remarks,
                         "fix_steps": fix_steps,
                         "code_before": code_before,
                         "code_after": code_after,

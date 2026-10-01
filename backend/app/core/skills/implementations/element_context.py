@@ -3,10 +3,98 @@ Element Context Capture Skill for A11ySense AI.
 Collects precise contextual facts about where an element sits on the page
 to generate accurate, step-by-step screen reader navigation instructions.
 """
+import html as html_lib
+import re
 from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def extract_context_from_html(html_str: str) -> Dict[str, Any]:
+    """
+    Parses an HTML snippet string directly without a browser DOM.
+    Accurately extracts:
+      tag, role, visible_text, aria_label, accessible_name,
+      clean_name, tabindex, href, is_menu_item, type_name, friendly_label
+    """
+    if not html_str or not isinstance(html_str, str):
+        return {}
+
+    snippet = html_str.strip()
+    tag_match = re.match(r"^<([a-zA-Z0-9]+)", snippet)
+    tag = tag_match.group(1).lower() if tag_match else ""
+
+    role_m = re.search(r'\brole=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    role = role_m.group(1).lower() if role_m else ""
+
+    aria_m = re.search(r'\baria-label=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    aria_label = html_lib.unescape(aria_m.group(1).strip()) if aria_m else ""
+
+    alt_m = re.search(r'\balt=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    alt = html_lib.unescape(alt_m.group(1).strip()) if alt_m else ""
+
+    title_m = re.search(r'\btitle=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    title = html_lib.unescape(title_m.group(1).strip()) if title_m else ""
+
+    tab_m = re.search(r'\btabindex=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    tabindex = tab_m.group(1).strip() if tab_m else ""
+
+    href_m = re.search(r'\bhref=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    href = href_m.group(1).strip() if href_m else ""
+
+    # Extract text content between opening and closing tags, stripping nested tags
+    inner = re.sub(r'<[^>]+>', ' ', snippet)
+    visible_text = html_lib.unescape(" ".join(inner.split())).strip()
+
+    # Determine best accessible name
+    accessible_name = aria_label or alt or title or visible_text
+
+    is_menu_item = (
+        role == "menuitem"
+        or "menuitem" in role
+        or (tag == "a" and tabindex == "-1" and ("menu" in href or "nav" in snippet.lower()))
+    )
+
+    if is_menu_item:
+        type_name = "link in the menu" if (tag == "a" or href) else "menu item"
+    elif role == "button" or tag == "button":
+        type_name = "button"
+    elif role == "link" or tag == "a":
+        type_name = "link"
+    elif role == "tab":
+        type_name = "tab"
+    elif tag in ("input", "select", "textarea"):
+        type_name = "form field"
+    elif tag == "img" or role == "img":
+        type_name = "picture"
+    elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+        type_name = "heading"
+    else:
+        type_name = "interactive control"
+
+    raw_name = visible_text or accessible_name or ""
+    # Clean up trailing ", link" or ", button" from screen-reader style labels (e.g. "F&O, link" -> "F&O")
+    clean_name = re.sub(r',\s*(link|button|menuitem|dropdown)\s*$', '', raw_name, flags=re.IGNORECASE).strip()
+
+    if clean_name:
+        friendly_label = f"the '{clean_name}' {type_name}"
+    else:
+        friendly_label = f"the {type_name}"
+
+    return {
+        "tag": tag,
+        "role": role,
+        "aria_label": aria_label,
+        "visible_text": visible_text,
+        "accessible_name": accessible_name,
+        "clean_name": clean_name,
+        "tabindex": tabindex,
+        "href": href,
+        "is_menu_item": is_menu_item,
+        "type_name": type_name,
+        "friendly_label": friendly_label,
+    }
 
 
 def quick_key_for(ctx: Optional[Dict[str, Any]]) -> str:
@@ -118,6 +206,11 @@ async def collect_element_context(page, selector: str) -> Dict[str, Any]:
     try:
         data = await page.evaluate("""(sel) => {
             try {
+                // Reject bare tag selectors without id, class, or attribute, as they wrongly match top-of-page elements
+                const trimmed = (sel || '').trim();
+                if (/^[a-zA-Z0-9]+$/.test(trimmed) && !['main', 'header', 'footer', 'nav'].includes(trimmed.toLowerCase())) {
+                    return {};
+                }
                 let el = null;
                 try {
                     el = document.querySelector(sel);
