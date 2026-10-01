@@ -1,5 +1,5 @@
 import logging
-from sqlalchemy import select
+from sqlalchemy import select, text
 from common.database.connection import get_engine, get_session_local
 from common.database.models import Base, Organization, User, Project
 from passlib.context import CryptContext
@@ -13,7 +13,8 @@ def hash_password(password: str) -> str:
 
 def init_db():
     """
-    Creates all database tables in PostgreSQL and seeds initial organization/user records.
+    Creates all database tables in PostgreSQL, applies auto-schema column additions,
+    and seeds initial organization/user records.
     """
     logger.info("Initializing database schema...")
     engine = get_engine()
@@ -21,6 +22,13 @@ def init_db():
     # 1. Create tables
     try:
         Base.metadata.create_all(bind=engine)
+        
+        # Ensure project_type and base_url columns exist on pre-existing projects table
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type VARCHAR DEFAULT 'web_page';"))
+            conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS base_url VARCHAR;"))
+            conn.commit()
+            
         logger.info("Database tables created/verified successfully.")
     except Exception as e:
         logger.error(f"Error creating database tables: {str(e)}")
@@ -40,7 +48,7 @@ def init_db():
         # Check if default project exists
         project = session.query(Project).filter_by(name="Default Project", organization_id=org.id).first()
         if not project:
-            project = Project(name="Default Project", organization_id=org.id)
+            project = Project(name="Default Project", project_type="web_page", organization_id=org.id)
             session.add(project)
             logger.info("Default Project created.")
 
