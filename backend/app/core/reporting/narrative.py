@@ -198,13 +198,30 @@ def render_fix(d: Dict[str, Any]) -> str:
     return "\n\n".join(sections)
 
 
-def fallback_narrative(rule_id: str, element_ctx: Dict[str, Any]) -> Dict[str, Any]:
+def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, Any]:
     """
     Builds a deterministic, high-quality fallback narrative for an element when LLM is unavailable.
     Specific to the rule and quotes the element's visible text or label if known. Never generic.
     """
-    rule_info = RULE_CATALOG.get(rule_id, {})
-    sc_code = rule_info.get("sc_code") or "1.1.1"
+    if isinstance(rule_or_id, dict):
+        rule_info = rule_or_id
+        rule_id = rule_info.get("id", "")
+    elif isinstance(rule_or_id, str):
+        rule_id = rule_or_id
+        rule_info = RULE_CATALOG.get(rule_id, {})
+    elif hasattr(rule_or_id, "id"):
+        rule_id = getattr(rule_or_id, "id")
+        rule_info = RULE_CATALOG.get(rule_id, {})
+    else:
+        rule_id = str(rule_or_id)
+        rule_info = RULE_CATALOG.get(rule_id, {})
+
+    if isinstance(element_ctx, str):
+        element_ctx = {"element_html": element_ctx}
+    elif not isinstance(element_ctx, dict):
+        element_ctx = {}
+
+    sc_code = rule_info.get("sc_code") or rule_info.get("wcag_sc") or "1.1.1"
     sc_entry = SC_CATALOG.get(sc_code, SC_CATALOG.get("1.1.1"))
 
     visible_text = element_ctx.get("visible_text") or element_ctx.get("accessible_name") or ""

@@ -21,6 +21,9 @@ from backend.app.repository.crawl_progress_repo import crawl_progress_repo
 from common.config import get_service_url, get_storage_path, get_audit_storage_path
 from common.utils.event_bus import publish_event, get_redis_client
 from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA, _AUDIT_SCOPE_CODES, WCAG_CRITERIA_MAP
+from common.constants.rule_catalog import resolve_rule, normalize_severity, principle_for
+from common.constants.sc_catalog import SC_CATALOG
+from backend.app.core.reporting.narrative import fallback_narrative
 
 logger = logging.getLogger(__name__)
 manager_agent = ManagerAgent()
@@ -762,223 +765,347 @@ class AuditOrchestrator:
         }
 
     async def compile_and_save_testcase_report(self, task_id: str, result, org_id: str = None, proj_id: str = None) -> list:
-        testcases = []
-        counter = 1
+        base_page_url = str(result.url) if result.url else ""
+        base_page_title = (result.metadata or {}).get("page_title", "Page") if hasattr(result, "metadata") and result.metadata else "Page"
+        pass_mode = os.getenv("REPORT_PASS_MODE", "per_criterion").lower()
 
-        # ── PASSED test cases ─────────────────────────────────────────────────────
-        if result.passes:
+        fail_testcases: list = []
+        seen_fail_cases: dict = {}
+
+        # ── 1. FAILED test cases (violations) ─────────────────────────────────
+        # 1 unique element = 1 testcase = (rule_id, normalized_element_html, page_url)
+        # Duplicate elements on the same page are merged with repeat_count and remarks
+        if getattr(result, "violations", None):
+            for v in result.violations:
+                v_id = v.get("id", "") if isinstance(v, dict) else getattr(v, "id", "")
+                rule = resolve_rule(v_id)
+                v_meta = v.get("metadata") if isinstance(v, dict) else getattr(v, "metadata", None)
+                v_meta = v_meta or {}
+
+                raw_nodes = v.get("nodes") if isinstance(v, dict) else getattr(v, "nodes", None)
+                if not raw_nodes:
+                    raw_nodes = [{"html": "", "target": []}]
+                elif not isinstance(raw_nodes, list):
+                    raw_nodes = [raw_nodes]
+
+                for nd in raw_nodes:
+                    node_dict = nd if isinstance(nd, dict) else (
+                        nd.model_dump(mode='json') if hasattr(nd, 'model_dump') else vars(nd)
+                    )
+                    raw_html = node_dict.get("html", "") or ""
+                    norm_html = " ".join(raw_html.strip().split())
+                    target_sel = node_dict.get("target", []) or []
+
+                    node_page_url = node_dict.get("page_url") or getattr(v, "page_url", None) or base_page_url
+                    node_page_title = node_dict.get("page_title") or base_page_title
+
+                    dedup_key = (v_id, norm_html, node_page_url)
+                    if dedup_key in seen_fail_cases:
+                        existing = seen_fail_cases[dedup_key]
+                        existing["repeat_count"] += 1
+                        existing["remarks"] = f"Same problem found {existing['repeat_count']} times on this page."
+                        continue
+
+                    # Retrieve narrative: prefer refined metadata if complete, else fallback_narrative
+                    has_refined = bool(
+                        v_meta.get("description")
+                        and v_meta.get("expected_result")
+                        and v_meta.get("actual_result")
+                        and v_meta.get("steps_to_reproduce")
+                    )
+
+                    if has_refined:
+                        desc = v_meta.get("description", "")
+                        expected = v_meta.get("expected_result", "")
+                        actual = v_meta.get("actual_result", "")
+                        steps = v_meta.get("steps_to_reproduce", "")
+                        if isinstance(steps, list):
+                            steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
+                        friendly_name = v_meta.get("friendly_name") or rule.title
+                        business_impact = v_meta.get("business_impact", "")
+                        fix_steps = v_meta.get("fix_steps") or []
+                        remediation = v_meta.get("remediation") or ("\n".join(fix_steps) if fix_steps else "")
+                        code_before = v_meta.get("code_before", "")
+                        code_after = v_meta.get("code_after", "")
+                        verify_steps = v_meta.get("verify_steps") or []
+                        false_pos = v_meta.get("false_positive_note", "")
+                        screenshot = v_meta.get("screenshot", "N/A")
+                        refined_by = v_meta.get("refined_by", "rule_catalog")
+                    else:
+                        fb = fallback_narrative(rule, raw_html)
+                        desc = fb["description"]
+                        expected = fb["expected_result"]
+                        actual = fb["actual_result"]
+                        steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(fb["steps_to_reproduce"])) if isinstance(fb["steps_to_reproduce"], list) else fb["steps_to_reproduce"]
+                        friendly_name = fb["friendly_name"]
+                        business_impact = fb["business_impact"]
+                        fix_steps = fb["fix_steps"]
+                        remediation = "\n".join(fix_steps)
+                        code_before = fb["code_before"]
+                        code_after = fb["code_after"]
+                        verify_steps = fb["verify_steps"]
+                        false_pos = fb["false_positive_note"]
+                        screenshot = "N/A"
+                        refined_by = "fallback_template"
+
+                    # Deterministic facts from rule_catalog
+                    criteria_str = rule.get("criteria", "N/A")
+                    rule_level = rule.get("level", "A")
+                    rule_principle = rule.get("principle", "N/A")
+                    rule_severity = rule.get("severity", "Serious")
+                    tc_record = {
+                        "rule_id": v_id,
+                        "testcase_name": friendly_name,
+                        "description": desc,
+                        "criteria": criteria_str,
+                        "level": rule_level,
+                        "principle": rule_principle,
+                        "severity": rule_severity,
+                        "expected_result": expected,
+                        "actual_result": actual,
+                        "steps_to_reproduce": steps,
+                        "remediation": remediation,
+                        "business_impact": business_impact,
+                        "html_snippet": raw_html[:500] if raw_html else "N/A",
+                        "status": "FAIL",
+                        "page_url": node_page_url,
+                        "page_title": node_page_title,
+                        "screenshot": screenshot,
+                        "repeat_count": 1,
+                        "remarks": "",
+                        "fix_steps": fix_steps,
+                        "code_before": code_before,
+                        "code_after": code_after,
+                        "verify_steps": verify_steps,
+                        "false_positive_note": false_pos,
+                        "input_tokens": v_meta.get("input_tokens", 0),
+                        "output_tokens": v_meta.get("output_tokens", 0),
+                        "help_url": getattr(v, "helpUrl", getattr(v, "help_url", "")),
+                        "refined_by": refined_by
+                    }
+                    seen_fail_cases[dedup_key] = tc_record
+                    fail_testcases.append(tc_record)
+
+        # ── 2. Determine criteria status for the 26 automated scope criteria ──
+        failed_sc_codes = {tc["criteria"].split(" ")[0] for tc in fail_testcases}
+
+        passed_sc_map: Dict[str, list] = {}
+        if getattr(result, "passes", None):
+            for p in result.passes:
+                p_id = p.get('id', '') if isinstance(p, dict) else getattr(p, 'id', '')
+                p_rule = resolve_rule(p_id)
+                sc_code = p_rule.get("sc_code")
+                if sc_code:
+                    passed_sc_map.setdefault(sc_code, []).append(p)
+
+        pass_testcases: list = []
+        na_testcases: list = []
+
+        if pass_mode == "per_element" and getattr(result, "passes", None):
+            # Per-element pass mode
             for p in result.passes:
                 p_id = p.get('id', 'Unknown') if isinstance(p, dict) else getattr(p, 'id', 'Unknown')
-                p_help = p.get('help', p_id) if isinstance(p, dict) else getattr(p, 'help', p_id)
-                p_desc = p.get('description', '') if isinstance(p, dict) else getattr(p, 'description', '')
-                p_tags = p.get('tags', []) if isinstance(p, dict) else getattr(p, 'tags', [])
-                p_help_url = p.get('helpUrl', p.get('help_url', '')) if isinstance(p, dict) else getattr(p, 'helpUrl', getattr(p, 'help_url', ''))
-                
-                p_metadata = p.get('metadata') if isinstance(p, dict) else getattr(p, 'metadata', None)
-                meta = self.resolve_passed_metadata(p_id, p_tags, p_desc, p_help, p_metadata)
-
+                p_rule = resolve_rule(p_id)
                 p_nodes = p.get('nodes', []) if isinstance(p, dict) else getattr(p, 'nodes', [])
                 if not isinstance(p_nodes, list):
                     p_nodes = [p_nodes]
+                if not p_nodes:
+                    p_nodes = [{"html": "", "target": []}]
 
-                normalized_p_nodes = [
-                    node if isinstance(node, dict) else (
-                        node.model_dump(mode='json') if hasattr(node, 'model_dump') else vars(node)
+                for nd in p_nodes:
+                    nd_dict = nd if isinstance(nd, dict) else (
+                        nd.model_dump(mode='json') if hasattr(nd, 'model_dump') else vars(nd)
                     )
-                    for node in p_nodes
-                ]
+                    raw_html = nd_dict.get("html", "") or ""
+                    p_url = nd_dict.get("page_url") or (p.get('page_url') if isinstance(p, dict) else getattr(p, 'page_url', None)) or base_page_url
+                    p_title = nd_dict.get("page_title") or (p.get('page_title') if isinstance(p, dict) else getattr(p, 'page_title', None)) or base_page_title
+                    sc_code = p_rule.get("sc_code") or "1.1.1"
+                    sc_info = SC_CATALOG.get(sc_code, {})
 
-                html_snippets = []
-                for nd in normalized_p_nodes[:2]:
-                    html_val = nd.get("html", "")
-                    if html_val:
-                        html_snippets.append(html_val[:500])
-                html_snippet = "\n".join(html_snippets) if html_snippets else "N/A"
+                    pass_testcases.append({
+                        "rule_id": p_id,
+                        "testcase_name": p_rule.get("criteria", p_id),
+                        "description": sc_info.get("what_we_check", f"Verify element meets {p_rule.get('criteria', 'accessibility')} requirements."),
+                        "criteria": p_rule.get("criteria", "N/A"),
+                        "level": p_rule.get("level", "A"),
+                        "principle": p_rule.get("principle", "N/A"),
+                        "severity": "N/A",
+                        "expected_result": sc_info.get("expected", f"Elements on the page should comply with WCAG {p_rule.wcag_sc} {p_rule.wcag_sc_name}."),
+                        "actual_result": "Verification passed: Element meets accessibility requirements.",
+                        "steps_to_reproduce": "1. Open webpage.\n2. Locate element.\n3. Verify element complies with accessibility requirements.",
+                        "remediation": "No remediation required. Element complies with accessibility requirements.",
+                        "business_impact": f"Ensures optimal user experience for {p_rule.wcag_sc_name}.",
+                        "html_snippet": raw_html[:500] if raw_html else "N/A",
+                        "status": "PASS",
+                        "page_url": p_url,
+                        "page_title": p_title,
+                        "screenshot": "N/A",
+                        "repeat_count": 1,
+                        "remarks": "",
+                        "fix_steps": [],
+                        "code_before": "",
+                        "code_after": "",
+                        "verify_steps": [],
+                        "false_positive_note": "",
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "help_url": getattr(p, "helpUrl", getattr(p, "help_url", "")),
+                        "refined_by": "rule_catalog"
+                    })
+        else:
+            # per_criterion pass mode (default)
+            for scope_crit in A11YSENSE_AUDIT_SCOPE:
+                code = scope_crit["code"]
+                if code in failed_sc_codes:
+                    continue  # Already represented by FAIL test case(s)
+                elif code in passed_sc_map:
+                    p_list = passed_sc_map[code]
+                    elem_count = 0
+                    for p in p_list:
+                        nds = p.get('nodes', []) if isinstance(p, dict) else getattr(p, 'nodes', [])
+                        elem_count += len(nds) if isinstance(nds, list) else 1
+                    elem_count = max(elem_count, 1)
 
-                page_url = (p.get('page_url') if isinstance(p, dict) else getattr(p, 'page_url', None)) or str(result.url)
-                page_title = (p.get('page_title') if isinstance(p, dict) else getattr(p, 'page_title', None)) or result.metadata.get("page_title", "Page")
-                custom_id = self.generate_tc_custom_id(page_url, page_title, counter)
-                testcases.append({
-                    "testcase_id": custom_id,
-                    "defect_id": "N/A",
-                    "rule_id": p_id,
-                    "testcase_name": p_help,
-                    "description": p_desc,
-                    "criteria": meta["criteria"],
-                    "level": meta["level"],
-                    "severity": meta["severity"],
-                    "expected_result": meta["expected_result"],
-                    "actual_result": meta["actual_result"],
-                    "steps_to_reproduce": meta["steps_to_reproduce"],
-                    "remediation": meta["remediation"],
-                    "business_impact": meta["business_impact"],
-                    "html_snippet": html_snippet,
-                    "refined_by": "N/A",
-                    "help_url": p_help_url,
-                    "status": "PASS",
-                    "page_url": page_url,
-                    "page_title": page_title,
-                    "input_tokens": 0,
-                    "output_tokens": 0
-                })
-                counter += 1
-
-        # ── FAILED test cases (violations) ────────────────────────────────────────
-        if result.violations:
-            for v in result.violations:
-                metadata = v.metadata or {}
-                nodes = v.nodes or []
-                if not isinstance(nodes, list):
-                    nodes = [nodes]
-
-                normalized_nodes = [
-                    node if isinstance(node, dict) else (
-                        node.model_dump(mode='json') if hasattr(node, 'model_dump') else vars(node)
+                    sc_info = SC_CATALOG.get(code, {})
+                    actual_msg = (
+                        f"All {elem_count} elements checked on this page meet this requirement."
+                        if elem_count > 1
+                        else "All elements checked on this page meet this requirement."
                     )
-                    for node in nodes
-                ]
-
-                # Collect every distinct page this violation's nodes were found on.
-                # The analyzer only groups nodes from different pages together when
-                # they're the exact same element (e.g. a shared nav/footer component) —
-                # see aggregate_and_deduplicate — so >1 page here means a genuinely
-                # shared defect, not a mis-attributed one.
-                affected_pages = sorted({nd["page_url"] for nd in normalized_nodes if nd.get("page_url")})
-
-                page_title = result.metadata.get("page_title", "Page")
-                if len(affected_pages) == 1:
-                    target_url = affected_pages[0]
-                    for nd in normalized_nodes:
-                        if nd.get("page_url") == target_url and nd.get("page_title") and nd["page_title"] != "N/A":
-                            page_title = nd["page_title"]
-                            break
-                elif len(affected_pages) > 1:
-                    target_url = affected_pages[0]
-                    page_title = f"Shared across {len(affected_pages)} pages"
+                    pass_testcases.append({
+                        "rule_id": f"wcag-{code}",
+                        "testcase_name": scope_crit["name"],
+                        "description": sc_info.get("what_we_check", f"Verify elements meet WCAG {code} {scope_crit['name']} requirements."),
+                        "criteria": f"{code} {scope_crit['name']}",
+                        "level": scope_crit["level"],
+                        "principle": principle_for(code),
+                        "severity": "N/A",
+                        "expected_result": sc_info.get("expected", f"All elements on the page should comply with WCAG {code} {scope_crit['name']}."),
+                        "actual_result": actual_msg,
+                        "steps_to_reproduce": "1. Open the webpage in a browser.\n2. Locate elements matching this requirement.\n3. Verify all elements meet accessibility standards.",
+                        "remediation": "No remediation required. Elements comply with accessibility requirements.",
+                        "business_impact": f"Ensures accessible user experience for {scope_crit['name']}.",
+                        "html_snippet": "N/A",
+                        "status": "PASS",
+                        "page_url": base_page_url,
+                        "page_title": base_page_title,
+                        "screenshot": "N/A",
+                        "repeat_count": 1,
+                        "remarks": "",
+                        "fix_steps": [],
+                        "code_before": "",
+                        "code_after": "",
+                        "verify_steps": [],
+                        "false_positive_note": "",
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "help_url": f"https://www.w3.org/WAI/WCAG22/Understanding/{code.replace('.', '')}",
+                        "refined_by": "rule_catalog"
+                    })
                 else:
-                    target_url = str(result.url)
+                    # NOT_APPLICABLE: 0 failing, 0 passing elements
+                    sc_info = SC_CATALOG.get(code, {})
+                    na_testcases.append({
+                        "rule_id": f"wcag-{code}",
+                        "testcase_name": scope_crit["name"],
+                        "description": f"WCAG {code} {scope_crit['name']} — No elements matching this criterion were found on the audited pages.",
+                        "criteria": f"{code} {scope_crit['name']}",
+                        "level": scope_crit["level"],
+                        "principle": principle_for(code),
+                        "severity": "N/A",
+                        "expected_result": sc_info.get("expected", f"Elements on the page should comply with WCAG {code} {scope_crit['name']}."),
+                        "actual_result": "No elements matching this criterion were found on the website. This criterion is not applicable for this audit.",
+                        "steps_to_reproduce": "N/A",
+                        "remediation": "No action required. This criterion did not apply to the audited pages.",
+                        "business_impact": "N/A",
+                        "html_snippet": "N/A",
+                        "status": "NOT_APPLICABLE",
+                        "page_url": base_page_url,
+                        "page_title": base_page_title,
+                        "screenshot": "N/A",
+                        "repeat_count": 1,
+                        "remarks": "",
+                        "fix_steps": [],
+                        "code_before": "",
+                        "code_after": "",
+                        "verify_steps": [],
+                        "false_positive_note": "",
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "help_url": "",
+                        "refined_by": "rule_catalog"
+                    })
 
-                html_snippets = []
-                for nd in normalized_nodes[:2]:
-                    html = nd.get("html", "")
-                    if html:
-                        html_snippets.append(html[:500])
-                html_snippet = "\n".join(html_snippets)
-
-                custom_id = self.generate_tc_custom_id(target_url, page_title, counter)
-                testcases.append({
-                    "testcase_id": custom_id,
-                    "defect_id": f"DEF-{v.id}",
-                    "rule_id": v.id,
-                    "testcase_name": metadata.get("friendly_name", v.help or v.id),
-                    "description": metadata.get("description", v.description or "N/A"),
-                    "criteria": metadata.get("wcag_criteria", "N/A"),
-                    "level": metadata.get("wcag_level", "N/A"),
-                    "severity": metadata.get("severity", (v.impact or "N/A").capitalize()),
-                    "expected_result": metadata.get("expected_result", "N/A"),
-                    "actual_result": metadata.get("actual_result", "N/A"),
-                    "steps_to_reproduce": metadata.get("steps_to_reproduce", "N/A"),
-                    "remediation": metadata.get("remediation", "N/A"),
-                    "business_impact": metadata.get("business_impact", "N/A"),
-                    "html_snippet": html_snippet,
-                    "refined_by": metadata.get("refined_by", "N/A"),
-                    "help_url": getattr(v, "helpUrl", getattr(v, "help_url", "")),
-                    "status": "FAIL",
-                    "page_url": target_url,
-                    "page_title": page_title,
-                    "affected_pages": affected_pages if len(affected_pages) > 1 else None,
-                    "input_tokens": metadata.get("input_tokens", 0),
-                    "output_tokens": metadata.get("output_tokens", 0),
-                    "screenshot": metadata.get("screenshot", "N/A")
-                })
-                counter += 1
-
-        # ── NOT_APPLICABLE entries for the 26 scope criteria not already covered ──
-        covered_criteria_codes = set()
-        for tc in testcases:
-            crit = tc.get("criteria", "N/A")
-            if crit != "N/A":
-                # Extract code from full name like "1.4.3 Contrast (Minimum)"
-                code = crit.split(" ")[0]
-                covered_criteria_codes.add(code)
-
-        base_page_url = str(result.url)
-        base_page_title = result.metadata.get("page_title", "Page")
-
-        for scope_crit in A11YSENSE_AUDIT_SCOPE:
-            if scope_crit["code"] not in covered_criteria_codes:
-                crit_full = WCAG_CRITERIA_MAP.get(scope_crit["code"], f"{scope_crit['code']} {scope_crit['name']}")
-                custom_id = self.generate_tc_custom_id(base_page_url, base_page_title, counter)
-                testcases.append({
-                    "testcase_id": custom_id,
-                    "defect_id": "N/A",
-                    "rule_id": f"wcag-{scope_crit['code']}",
-                    "testcase_name": scope_crit["name"],
-                    "description": f"WCAG {scope_crit['code']} {scope_crit['name']} — No elements matching this criterion were found on the audited pages.",
-                    "criteria": crit_full,
-                    "level": scope_crit["level"],
-                    "severity": "N/A",
-                    "expected_result": f"Elements on the page should comply with WCAG {scope_crit['code']} {scope_crit['name']}.",
-                    "actual_result": "No elements matching this criterion were found on the website. This criterion is not applicable for this audit.",
-                    "steps_to_reproduce": "N/A",
-                    "remediation": "No action required. This criterion did not apply to the audited pages.",
-                    "business_impact": "N/A",
-                    "html_snippet": "N/A",
-                    "refined_by": "N/A",
-                    "help_url": "",
-                    "status": "NOT_APPLICABLE",
-                    "page_url": base_page_url,
-                    "page_title": base_page_title,
-                    "input_tokens": 0,
-                    "output_tokens": 0
-                })
-                counter += 1
-
-        # ── MANUAL_REVIEW entries for the 24 criteria not covered by the tool ─────
+        # ── 3. MANUAL_REVIEW entries for the 24 criteria not covered by the tool ──
+        manual_testcases: list = []
         for manual_crit in A11YSENSE_MANUAL_REVIEW_CRITERIA:
-            crit_full = WCAG_CRITERIA_MAP.get(manual_crit["code"], f"{manual_crit['code']} {manual_crit['name']}")
-            group = manual_crit.get("group", "B")
-            if group == "A":
-                review_note = "This criterion can potentially be automated in a future release. Manual testing is recommended for now."
-            else:
-                review_note = "This criterion requires human judgement, real device testing, or watching/listening to content. It cannot be reliably automated."
-
-            custom_id = self.generate_tc_custom_id(base_page_url, base_page_title, counter)
-            testcases.append({
-                "testcase_id": custom_id,
-                "defect_id": "N/A",
-                "rule_id": f"wcag-{manual_crit['code']}",
+            code = manual_crit["code"]
+            sc_info = SC_CATALOG.get(code, {})
+            manual_steps = sc_info.get("manual_steps", [])
+            steps_str = (
+                "\n".join(f"{i+1}. {s}" for i, s in enumerate(manual_steps))
+                if manual_steps
+                else "1. Open the page in a browser.\n2. Perform manual review with assistive technology."
+            )
+            manual_testcases.append({
+                "rule_id": f"wcag-{code}",
                 "testcase_name": manual_crit["name"],
-                "description": f"WCAG {manual_crit['code']} {manual_crit['name']} — {review_note}",
-                "criteria": crit_full,
+                "description": sc_info.get("what_we_check", f"WCAG {code} {manual_crit['name']} — Requires manual human testing."),
+                "criteria": f"{code} {manual_crit['name']}",
                 "level": manual_crit["level"],
+                "principle": principle_for(code),
                 "severity": "N/A",
-                "expected_result": f"Elements on the page should comply with WCAG {manual_crit['code']} {manual_crit['name']}.",
-                "actual_result": f"This criterion is not covered by the automated audit tool. {review_note}",
-                "steps_to_reproduce": "Manual review required by a human accessibility tester.",
-                "remediation": "Perform manual accessibility testing for this criterion.",
+                "expected_result": sc_info.get("expected", f"Elements on the page should comply with WCAG {code} {manual_crit['name']}."),
+                "actual_result": f"This criterion requires human judgment and is not covered by the automated audit tool.\n\nRecommended verification steps:\n{steps_str}",
+                "steps_to_reproduce": steps_str,
+                "remediation": "Perform manual accessibility verification with real assistive technology (screen readers, keyboard, screen magnifier) and human testers.",
                 "business_impact": f"Manual review ensures full WCAG 2.1 Level A and AA compliance for {manual_crit['name']}.",
                 "html_snippet": "N/A",
-                "refined_by": "N/A",
-                "help_url": "",
                 "status": "MANUAL_REVIEW",
-                "page_url": base_page_url,
-                "page_title": base_page_title,
+                "page_url": "All pages",
+                "page_title": "All pages",
+                "screenshot": "N/A",
+                "repeat_count": 1,
+                "remarks": "Manual review required",
+                "fix_steps": manual_steps,
+                "code_before": "",
+                "code_after": "",
+                "verify_steps": manual_steps,
+                "false_positive_note": "",
                 "input_tokens": 0,
-                "output_tokens": 0
+                "output_tokens": 0,
+                "help_url": f"https://www.w3.org/WAI/WCAG22/Understanding/{code.replace('.', '')}",
+                "refined_by": "rule_catalog"
             })
-            counter += 1
 
+        # ── 4. Combine all into ordered testcases list and assign sequential IDs ──
+        all_testcases = fail_testcases + pass_testcases + na_testcases + manual_testcases
+
+        tc_counter = 0
+        def_counter = 0
+        for tc in all_testcases:
+            tc_counter += 1
+            tc["testcase_id"] = f"TC-{tc_counter:04d}"
+            custom_id = self.generate_tc_custom_id(tc["page_url"], tc["page_title"], tc_counter)
+            tc["display_name"] = custom_id
+
+            if tc["status"] == "FAIL":
+                def_counter += 1
+                tc["defect_id"] = f"DEF-{def_counter:04d}"
+            else:
+                tc["defect_id"] = "N/A"
+
+        # ── 5. Save JSON report to disk ───────────────────────────────────────
         reports_dir = get_audit_storage_path(task_id, org_id, proj_id)
         json_path = os.path.join(reports_dir, f"testcase_report_{task_id}.json")
         try:
             with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(testcases, f, separators=(',', ':'), ensure_ascii=False)
-            logger.info(f"JSON Testcase report saved to {json_path}")
+                json.dump(all_testcases, f, separators=(',', ':'), ensure_ascii=False)
+            logger.info(f"JSON Testcase report saved to {json_path} ({len(all_testcases)} testcases)")
         except Exception as e:
             logger.error(f"Failed to write JSON testcase report: {str(e)}")
 
-        return testcases
+        return all_testcases
 
 
 audit_orchestrator = AuditOrchestrator()

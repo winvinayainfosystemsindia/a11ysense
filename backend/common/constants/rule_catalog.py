@@ -151,6 +151,104 @@ RULE_CATALOG: Dict[str, Dict[str, Any]] = {
         "default_severity": "Moderate",
         "plain_issue": "landmark label is generic",
     },
+
+    # ── Standard axe-core rules ───────────────────────────────────────────────
+    "button-name": {
+        "sc_code": "4.1.2",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "button does not have a discernible text name",
+    },
+    "image-alt": {
+        "sc_code": "1.1.1",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "image is missing an alternative text description",
+    },
+    "color-contrast": {
+        "sc_code": "1.4.3",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "text does not have sufficient contrast against background",
+    },
+    "link-name": {
+        "sc_code": "2.4.4",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "link has no discernible text",
+    },
+    "document-title": {
+        "sc_code": "2.4.2",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "page does not have a title",
+    },
+    "html-has-lang": {
+        "sc_code": "3.1.1",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "page does not specify a language",
+    },
+    "label": {
+        "sc_code": "1.3.1",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "form element does not have a label",
+    },
+    "bypass": {
+        "sc_code": "2.4.1",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "page lacks a mechanism to bypass repeated blocks",
+    },
+    "aria-allowed-attr": {
+        "sc_code": "4.1.2",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "element has invalid attributes",
+    },
+    "aria-required-attr": {
+        "sc_code": "4.1.2",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "element is missing required attributes",
+    },
+    "aria-valid-attr-value": {
+        "sc_code": "4.1.2",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "element has an invalid attribute value",
+    },
+    "aria-valid-attr": {
+        "sc_code": "4.1.2",
+        "kind": "wcag",
+        "default_severity": "Critical",
+        "plain_issue": "element has an invalid attribute name",
+    },
+    "aria-hidden-focus": {
+        "sc_code": "4.1.2",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "hidden element is focusable",
+    },
+    "heading-order": {
+        "sc_code": None,
+        "kind": "best-practice",
+        "default_severity": "Moderate",
+        "plain_issue": "heading level hierarchy is skipped or broken",
+    },
+    "empty-heading": {
+        "sc_code": None,
+        "kind": "best-practice",
+        "default_severity": "Minor",
+        "plain_issue": "heading contains no text",
+    },
+    "target-size": {
+        "sc_code": "2.5.8",
+        "kind": "wcag",
+        "default_severity": "Serious",
+        "plain_issue": "touch target size is too small",
+    },
 }
 
 
