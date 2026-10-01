@@ -1,9 +1,13 @@
 """
 Excel Report Generator for A11ySense AI.
 Generates an executive 3-sheet workbook:
-1. Defect Report (Dark Red #8B0000)
-2. Test Case Report (Dark Blue #1a237e)
+1. Test Case Report (Dark Blue #1a237e)
+2. Defects Report (Dark Red #8B0000)
 3. WCAG Criteria Reference (Light Blue #1565c0)
+
+ALL descriptive content (Description, Expected Result, Actual Result,
+Steps to Reproduce, AI Fix Suggestion) comes from the LLM-generated
+metadata_json field — nothing is hardcoded.
 """
 import io
 import logging
@@ -16,11 +20,12 @@ from common.constants.wcag import WCAG_CRITERIA_MAP
 
 logger = logging.getLogger(__name__)
 
-# Colors
+# ── Colour palette ──────────────────────────────────────────────────────────
 DARK_RED_FILL = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")
 DARK_BLUE_FILL = PatternFill(start_color="1A237E", end_color="1A237E", fill_type="solid")
 LIGHT_BLUE_FILL = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
 
+# ── Fonts ───────────────────────────────────────────────────────────────────
 WHITE_BOLD_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
 REGULAR_FONT = Font(name="Calibri", size=10)
 BOLD_FONT = Font(name="Calibri", size=10, bold=True)
@@ -29,15 +34,28 @@ PASS_FILL = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="sol
 PASS_FONT = Font(name="Calibri", size=10, color="2E7D32", bold=True)
 FAIL_FILL = PatternFill(start_color="FFEBEE", end_color="FFEBEE", fill_type="solid")
 FAIL_FONT = Font(name="Calibri", size=10, color="C62828", bold=True)
+NA_FILL = PatternFill(start_color="FFF3E0", end_color="FFF3E0", fill_type="solid")
+NA_FONT = Font(name="Calibri", size=10, color="E65100", bold=True)
+MANUAL_FILL = PatternFill(start_color="E3F2FD", end_color="E3F2FD", fill_type="solid")
+MANUAL_FONT = Font(name="Calibri", size=10, color="1565C0", bold=True)
 
 THIN_BORDER = Border(
     left=Side(style="thin", color="CCCCCC"),
     right=Side(style="thin", color="CCCCCC"),
     top=Side(style="thin", color="CCCCCC"),
-    bottom=Side(style="thin", color="CCCCCC")
+    bottom=Side(style="thin", color="CCCCCC"),
 )
 
-def build_wcag_principle(sc_code: str) -> str:
+# ── Column width presets (approximate chars) ────────────────────────────────
+TC_COL_WIDTHS = [6, 14, 40, 24, 8, 16, 40, 45, 45, 45, 50, 12, 12, 25]
+DEF_COL_WIDTHS = [6, 14, 14, 40, 24, 8, 16, 40, 45, 45, 45, 50, 12, 12, 50, 25]
+WCAG_COL_WIDTHS = [6, 10, 30, 8, 16, 24, 50, 50]
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ────────────────────────────────────────────────────────────────────────────
+def _wcag_principle(sc_code: str) -> str:
     """Derive WCAG principle (Perceivable, Operable, Understandable, Robust)."""
     if sc_code.startswith("1."):
         return "Perceivable"
@@ -49,184 +67,274 @@ def build_wcag_principle(sc_code: str) -> str:
         return "Robust"
     return "General"
 
+
+def _extract_sc_number(sc_info: str) -> str:
+    """Extract just the SC number (e.g. '1.1.1') from a string like '1.1.1 Non-text Content'."""
+    parts = str(sc_info).split(" ", 1)
+    return parts[0] if parts else "N/A"
+
+
+def _get_meta(v: Dict[str, Any]) -> Dict[str, Any]:
+    """Get the LLM-generated metadata dict from a violation record."""
+    meta = v.get("metadata_json") or v.get("metadata") or {}
+    if not isinstance(meta, dict):
+        return {}
+    return meta
+
+
+def _status_style(status_value: str):
+    """Return (fill, font) tuple for a given test-case status."""
+    s = status_value.upper()
+    if s == "FAIL":
+        return FAIL_FILL, FAIL_FONT
+    elif s == "PASS":
+        return PASS_FILL, PASS_FONT
+    elif s in ("NOT_APPLICABLE", "N/A"):
+        return NA_FILL, NA_FONT
+    elif s == "MANUAL_REVIEW":
+        return MANUAL_FILL, MANUAL_FONT
+    return None, REGULAR_FONT
+
+
+def _apply_row_style(ws, row_idx: int, num_cols: int, status_col: int = None, status_value: str = None):
+    """Apply standard styling to a data row."""
+    for col_idx in range(1, num_cols + 1):
+        cell = ws.cell(row=row_idx, column=col_idx)
+        cell.font = REGULAR_FONT
+        cell.border = THIN_BORDER
+        cell.alignment = Alignment(vertical="top", wrap_text=True)
+        if col_idx == 1:
+            cell.alignment = Alignment(horizontal="center", vertical="top")
+    if status_col and status_value:
+        fill, font = _status_style(status_value)
+        cell = ws.cell(row=row_idx, column=status_col)
+        if fill:
+            cell.fill = fill
+        cell.font = font
+        cell.alignment = Alignment(horizontal="center", vertical="top")
+
+
+def _apply_header_style(ws, num_cols: int, fill: PatternFill):
+    """Apply header row style."""
+    for col_idx in range(1, num_cols + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = fill
+        cell.font = WHITE_BOLD_FONT
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+
+def _set_col_widths(ws, widths: list):
+    """Set column widths for a sheet."""
+    ws.row_dimensions[1].height = 30
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Main generator — ALL content from LLM metadata, zero hardcoded values
+# ────────────────────────────────────────────────────────────────────────────
 def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
     """
-    Generates Excel report binary (.xlsx) with 3 sheets matching specific user templates.
+    Generates an Excel report (.xlsx) with 3 sheets.
+
+    ALL descriptive columns are populated from the LLM-generated
+    metadata_json stored for each violation — no content is hardcoded.
     """
     wb = openpyxl.Workbook()
-    # Remove default sheet
     default_sheet = wb.active
 
     violations = audit_data.get("violations", [])
     passes = audit_data.get("passes", [])
-    pages = audit_data.get("pages_scanned", [])
 
-    # ==========================================
-    # SHEET 1: Defect Report (Red Header)
-    # ==========================================
-    ws_defects = wb.create_sheet(title="Defect Report")
-    defect_headers = [
-        "S.No", "Defect ID", "Page URL", "Menu Name", "Component Name",
-        "WCAG Criteria", "Level", "WCAG Principle", "Impact / Severity",
-        "Expected Result", "Actual Result", "Description", "Steps to Reproduce", "Remediation Plan"
-    ]
-    ws_defects.append(defect_headers)
-    for col_idx in range(1, len(defect_headers) + 1):
-        cell = ws_defects.cell(row=1, column=col_idx)
-        cell.fill = DARK_RED_FILL
-        cell.font = WHITE_BOLD_FONT
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-    defect_row_idx = 2
-    for idx, v in enumerate(violations, start=1):
-        sc_info = v.get("wcag_criteria", v.get("rule_id", "N/A"))
-        sc_num = sc_info.split(" ")[0] if " " in str(sc_info) else str(sc_info)
-        principle = build_wcag_principle(sc_num)
-        
-        row_data = [
-            idx,
-            f"DEF-{idx:03d}",
-            v.get("page_url", v.get("url", "N/A")),
-            v.get("menu_name", v.get("page_title", "Page Section")),
-            v.get("component_name", v.get("target_selector", "UI Element")),
-            v.get("wcag_criteria", "1.1.1 Non-text Content"),
-            v.get("wcag_level", "A"),
-            principle,
-            v.get("impact", v.get("severity", "Moderate")).capitalize(),
-            v.get("expected_result", "The element MUST conform to WCAG 2.2 accessibility standards."),
-            v.get("actual_result", v.get("help", "Element violates accessibility criteria.")),
-            v.get("description", "Accessibility violation detected."),
-            v.get("steps_to_reproduce", "1. Open URL\n2. Navigate to component\n3. Observe accessibility issue."),
-            v.get("remediation_plan", v.get("help_url", "Refer to WCAG guidelines for fix."))
-        ]
-        ws_defects.append(row_data)
-
-        # Style data row
-        for col_idx in range(1, len(row_data) + 1):
-            cell = ws_defects.cell(row=defect_row_idx, column=col_idx)
-            cell.font = REGULAR_FONT
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
-            if col_idx == 1:
-                cell.alignment = Alignment(horizontal="center", vertical="top")
-
-        defect_row_idx += 1
-
-    # ==========================================
-    # SHEET 2: Test Case Report (Blue Header)
-    # ==========================================
-    ws_testcases = wb.create_sheet(title="Test Case Report")
+    # ==================================================================
+    # SHEET 1: Test Case Report (Blue Header)
+    # Columns: S.No | Testcase ID | Page URL | WCAG Criteria | Level |
+    #          WCAG Principle | Element HTML Snippet | Description |
+    #          Expected Result | Actual Result | Steps to Reproduce |
+    #          Status | Severity | Remarks
+    # ==================================================================
+    ws_tc = wb.create_sheet(title="Test Case Report")
     tc_headers = [
-        "S.No", "Test Case ID", "Page URL", "Menu Name", "Component Name",
-        "Feature / Element", "WCAG Criteria", "Level", "WCAG Principle",
-        "Screen Reader Persona", "Expected Result", "Actual Result", "Description", "Status"
+        "S.No",
+        "Testcase ID",
+        "Page URL",
+        "WCAG Criteria",
+        "Level",
+        "WCAG Principle",
+        "Element HTML Snippet",
+        "Description",
+        "Expected Result",
+        "Actual Result",
+        "Steps to Reproduce",
+        "Status",
+        "Severity",
+        "Remarks",
     ]
-    ws_testcases.append(tc_headers)
-    for col_idx in range(1, len(tc_headers) + 1):
-        cell = ws_testcases.cell(row=1, column=col_idx)
-        cell.fill = DARK_BLUE_FILL
-        cell.font = WHITE_BOLD_FONT
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws_tc.append(tc_headers)
+    _apply_header_style(ws_tc, len(tc_headers), DARK_BLUE_FILL)
 
-    tc_row_idx = 2
-    tc_counter = 1
+    tc_counter = 0
+    tc_row = 2
+    # Maps: violation index → testcase_id (for linking defects to testcases)
+    violation_tc_map: Dict[int, str] = {}
 
-    # 1. Add FAIL test cases from violations
-    for v in violations:
-        sc_info = v.get("wcag_criteria", v.get("rule_id", "N/A"))
-        sc_num = sc_info.split(" ")[0] if " " in str(sc_info) else str(sc_info)
-        principle = build_wcag_principle(sc_num)
+    # 1a) FAIL test cases from violations ─────────────────────────────────
+    for idx, v in enumerate(violations):
+        tc_counter += 1
+        tc_id = f"TC-{tc_counter:04d}"
+        violation_tc_map[idx] = tc_id
+
+        meta = _get_meta(v)
+        criteria = meta.get("wcag_criteria", v.get("wcag_criteria", ""))
+        sc_num = _extract_sc_number(criteria)
+        principle = _wcag_principle(sc_num)
+        level = meta.get("wcag_level", v.get("wcag_level", ""))
+        snippet = meta.get("element_html_snippet", "")
+        if not snippet:
+            # Fallback: extract from nodes
+            nodes = v.get("nodes")
+            if isinstance(nodes, list) and nodes:
+                first = nodes[0] if isinstance(nodes[0], dict) else {}
+                snippet = first.get("html", "")
 
         row_data = [
             tc_counter,
-            f"TC-{tc_counter:03d}",
-            v.get("page_url", v.get("url", "N/A")),
-            v.get("menu_name", "Navigation Menu"),
-            v.get("component_name", "Interactive Component"),
-            v.get("target_selector", "DOM Node"),
-            v.get("wcag_criteria", "1.1.1 Non-text Content"),
-            v.get("wcag_level", "A"),
+            tc_id,
+            v.get("page_url", v.get("url", "")),
+            criteria,
+            level,
             principle,
-            "NVDA / JAWS User Perspective",
-            v.get("expected_result", "Screen reader announces element name, role, and state correctly."),
-            v.get("actual_result", v.get("help", "Screen reader fails to announce component metadata.")),
-            v.get("description", "Accessibility test for screen reader compatibility."),
-            "FAIL"
+            snippet,
+            meta.get("description", v.get("description", "")),
+            meta.get("expected_result", v.get("expected_result", "")),
+            meta.get("actual_result", v.get("actual_result", "")),
+            meta.get("steps_to_reproduce", v.get("steps_to_reproduce", "")),
+            "FAIL",
+            meta.get("severity", v.get("impact", "")),
+            "",  # Remarks — intentionally blank for auditor to fill
         ]
-        ws_testcases.append(row_data)
+        ws_tc.append(row_data)
+        _apply_row_style(ws_tc, tc_row, len(tc_headers), status_col=12, status_value="FAIL")
+        tc_row += 1
 
-        for col_idx in range(1, len(row_data) + 1):
-            cell = ws_testcases.cell(row=tc_row_idx, column=col_idx)
-            cell.font = REGULAR_FONT
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
-            if col_idx == 1:
-                cell.alignment = Alignment(horizontal="center", vertical="top")
-            if col_idx == 14: # Status
-                cell.fill = FAIL_FILL
-                cell.font = FAIL_FONT
-                cell.alignment = Alignment(horizontal="center", vertical="top")
-
-        tc_counter += 1
-        tc_row_idx += 1
-
-    # 2. Add PASS test cases
+    # 1b) PASS test cases ─────────────────────────────────────────────────
     for p in passes:
-        sc_num = p.get("wcag_criteria", "1.1.1").split(" ")[0]
-        principle = build_wcag_principle(sc_num)
+        tc_counter += 1
+        tc_id = f"TC-{tc_counter:04d}"
+
+        meta = _get_meta(p)
+        criteria = meta.get("wcag_criteria", p.get("wcag_criteria", ""))
+        sc_num = _extract_sc_number(criteria)
+        principle = _wcag_principle(sc_num)
 
         row_data = [
             tc_counter,
-            f"TC-{tc_counter:03d}",
-            p.get("page_url", "N/A"),
-            "Navigation Menu",
-            p.get("component", "Standard Element"),
-            p.get("id", "Pass Node"),
-            p.get("wcag_criteria", "1.1.1 Non-text Content"),
-            "A",
+            tc_id,
+            p.get("page_url", ""),
+            criteria,
+            meta.get("wcag_level", p.get("wcag_level", "")),
             principle,
-            "NVDA / JAWS User Perspective",
-            "Screen reader announces accessible name and role properly.",
-            "Passed automated and screen reader accessibility checks.",
-            p.get("description", "Element complies with accessibility standards."),
-            "PASS"
+            meta.get("element_html_snippet", p.get("html_snippet", "")),
+            meta.get("description", p.get("description", "")),
+            meta.get("expected_result", p.get("expected_result", "")),
+            meta.get("actual_result", p.get("actual_result", "")),
+            meta.get("steps_to_reproduce", p.get("steps_to_reproduce", "")),
+            "PASS",
+            "N/A",
+            "",
         ]
-        ws_testcases.append(row_data)
+        ws_tc.append(row_data)
+        _apply_row_style(ws_tc, tc_row, len(tc_headers), status_col=12, status_value="PASS")
+        tc_row += 1
 
-        for col_idx in range(1, len(row_data) + 1):
-            cell = ws_testcases.cell(row=tc_row_idx, column=col_idx)
-            cell.font = REGULAR_FONT
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
-            if col_idx == 1:
-                cell.alignment = Alignment(horizontal="center", vertical="top")
-            if col_idx == 14: # Status
-                cell.fill = PASS_FILL
-                cell.font = PASS_FONT
-                cell.alignment = Alignment(horizontal="center", vertical="top")
+    _set_col_widths(ws_tc, TC_COL_WIDTHS)
 
-        tc_counter += 1
-        tc_row_idx += 1
+    # ==================================================================
+    # SHEET 2: Defects Report (Red Header)
+    # Columns: S.No | Defect ID | Testcase ID | Page URL | WCAG Criteria |
+    #          Level | WCAG Principle | Element HTML Snippet | Description |
+    #          Expected Result | Actual Result | Steps to Reproduce |
+    #          Status | Severity | AI Suggestion to Fix | Remarks
+    # ==================================================================
+    ws_def = wb.create_sheet(title="Defects Report")
+    def_headers = [
+        "S.No",
+        "Defect ID",
+        "Testcase ID",
+        "Page URL",
+        "WCAG Criteria",
+        "Level",
+        "WCAG Principle",
+        "Element HTML Snippet",
+        "Description",
+        "Expected Result",
+        "Actual Result",
+        "Steps to Reproduce",
+        "Status",
+        "Severity",
+        "AI Suggestion to Fix",
+        "Remarks",
+    ]
+    ws_def.append(def_headers)
+    _apply_header_style(ws_def, len(def_headers), DARK_RED_FILL)
 
-    # ==========================================
+    def_row = 2
+    for idx, v in enumerate(violations):
+        defect_id = f"DEF-{idx + 1:04d}"
+        linked_tc = violation_tc_map.get(idx, "")
+
+        meta = _get_meta(v)
+        criteria = meta.get("wcag_criteria", v.get("wcag_criteria", ""))
+        sc_num = _extract_sc_number(criteria)
+        principle = _wcag_principle(sc_num)
+        level = meta.get("wcag_level", v.get("wcag_level", ""))
+        snippet = meta.get("element_html_snippet", "")
+        if not snippet:
+            nodes = v.get("nodes")
+            if isinstance(nodes, list) and nodes:
+                first = nodes[0] if isinstance(nodes[0], dict) else {}
+                snippet = first.get("html", "")
+
+        row_data = [
+            idx + 1,
+            defect_id,
+            linked_tc,
+            v.get("page_url", v.get("url", "")),
+            criteria,
+            level,
+            principle,
+            snippet,
+            meta.get("description", v.get("description", "")),
+            meta.get("expected_result", v.get("expected_result", "")),
+            meta.get("actual_result", v.get("actual_result", "")),
+            meta.get("steps_to_reproduce", v.get("steps_to_reproduce", "")),
+            "Open",
+            meta.get("severity", v.get("impact", "")),
+            meta.get("ai_fix_suggestion", meta.get("remediation", v.get("remediation_plan", ""))),
+            "",  # Remarks — blank for auditor
+        ]
+        ws_def.append(row_data)
+        _apply_row_style(ws_def, def_row, len(def_headers), status_col=13, status_value="FAIL")
+        def_row += 1
+
+    _set_col_widths(ws_def, DEF_COL_WIDTHS)
+
+    # ==================================================================
     # SHEET 3: WCAG Criteria Reference (Light Blue Header)
-    # ==========================================
+    # ==================================================================
     ws_wcag = wb.create_sheet(title="WCAG Criteria Reference")
     wcag_headers = [
-        "S.No", "WCAG SC #", "Criterion Title", "Level", "Principle", "Guideline", "Description", "URL"
+        "S.No", "WCAG SC #", "Criterion Title", "Level", "Principle",
+        "Guideline", "Description", "URL",
     ]
     ws_wcag.append(wcag_headers)
-    for col_idx in range(1, len(wcag_headers) + 1):
-        cell = ws_wcag.cell(row=1, column=col_idx)
-        cell.fill = LIGHT_BLUE_FILL
-        cell.font = WHITE_BOLD_FONT
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    _apply_header_style(ws_wcag, len(wcag_headers), LIGHT_BLUE_FILL)
 
-    wcag_row_idx = 2
+    wcag_row = 2
     wcag_items = sorted(WCAG_CRITERIA_MAP.items(), key=lambda x: x[0])
-    
+
     for idx, (sc_code, details) in enumerate(wcag_items, start=1):
-        principle = build_wcag_principle(sc_code)
+        principle = _wcag_principle(sc_code)
         if isinstance(details, dict):
             title = details.get("title", f"Criterion {sc_code}")
             level = details.get("level", "A")
@@ -240,38 +348,24 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
             description = f"WCAG 2.2 Success Criterion {title}"
             url = f"https://www.w3.org/WAI/WCAG22/Understanding/{sc_code}"
 
-        row_data = [
-            idx,
-            sc_code,
-            title,
-            level,
-            principle,
-            guideline,
-            description,
-            url
-        ]
+        row_data = [idx, sc_code, title, level, principle, guideline, description, url]
         ws_wcag.append(row_data)
 
         for col_idx in range(1, len(row_data) + 1):
-            cell = ws_wcag.cell(row=wcag_row_idx, column=col_idx)
+            cell = ws_wcag.cell(row=wcag_row, column=col_idx)
             cell.font = REGULAR_FONT
             cell.border = THIN_BORDER
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             if col_idx in [1, 2, 4]:
                 cell.alignment = Alignment(horizontal="center", vertical="top")
 
-        wcag_row_idx += 1
+        wcag_row += 1
 
-    # Remove default worksheet
+    _set_col_widths(ws_wcag, WCAG_COL_WIDTHS)
+
+    # ── Cleanup & serialise ─────────────────────────────────────────────
     if "Sheet" in wb.sheetnames:
         wb.remove(wb["Sheet"])
-
-    # Auto-adjust column widths
-    for sheet in wb.worksheets:
-        sheet.row_dimensions[1].height = 28
-        for col in sheet.columns:
-            col_letter = get_column_letter(col[0].column)
-            sheet.column_dimensions[col_letter].width = 22
 
     output = io.BytesIO()
     wb.save(output)

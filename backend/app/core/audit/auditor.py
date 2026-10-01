@@ -149,20 +149,25 @@ class AuditorAgent(BaseAgent):
     async def refine_violation(self, violation: Violation, session_id: str = None) -> Violation:
         # Build an HTML snippet from the first 3 nodes for context
         nodes_html = ""
+        element_selector = ""
         if violation.nodes:
             snippets = []
             for node in violation.nodes[:3]:
                 if isinstance(node, dict):
                     html = node.get("html", "")
+                    targets = node.get("target", [])
                 else:
                     html = getattr(node, "html", "")
+                    targets = getattr(node, "target", [])
                 if html:
-                    snippets.append(html[:400])
+                    snippets.append(html[:500])
+                if targets and not element_selector:
+                    element_selector = targets[0] if isinstance(targets[0], str) else str(targets[0])
             nodes_html = "\n".join(snippets)
 
-        prompt = f"""You are an expert Web Accessibility (WCAG 2.2) auditor writing a professional defect report entry.
+        prompt = f"""You are a senior Web Accessibility Auditor writing a professional WCAG 2.2 compliance report for a client.
 
-TASK: Analyze the violation details below and produce a precise, clear, and professional audit report entry.
+TASK: Analyse the violation below and produce ALL report fields. Your audience includes non-technical stakeholders and screen-reader users — keep the language simple, clear, and jargon-free.
 
 VIOLATION DATA:
 - Rule ID: {violation.id}
@@ -170,30 +175,36 @@ VIOLATION DATA:
 - Technical Description: {violation.description}
 - Axe Help Text: {violation.help}
 - Help URL: {violation.helpUrl}
+- Element Selector: {element_selector or "(not available)"}
 - Affected HTML Element(s):
 {nodes_html if nodes_html else "(no HTML nodes captured)"}
 
 STRICT OUTPUT RULES:
-1. Return ONLY a single raw JSON object.
-2. DO NOT use markdown code blocks (```json or ```).
-3. DO NOT include any text before or after the JSON.
-4. All string values MUST be specific to the Rule ID "{violation.id}" — do NOT use generic image alt text examples for non-image rules.
-5. Ensure double quotes inside JSON string values are escaped with backslash (\").
-6. Base every field ONLY on the VIOLATION DATA above (Rule ID, Technical Description, Axe Help Text, Affected HTML). Do not invent contrast ratios, element counts, or page behavior that isn't shown. If no HTML nodes were captured, say so in "actual_result" instead of describing an element you were not given.
+1. Return ONLY a single raw JSON object — no markdown, no code blocks, no extra text.
+2. All field values MUST be specific to this exact Rule ID "{violation.id}" and the HTML shown.
+3. Do NOT invent information not supported by the data above.
+4. Escape double quotes inside values with backslash.
+5. "description" — Write in plain English that a non-technical person can understand. Do NOT use developer jargon. Example: instead of "Missing alt attribute on img element" write "An image on this page has no text description, so people who cannot see the image will not know what it shows."
+6. "expected_result" — Tell the reader what the correct behaviour SHOULD be. Example: "Every image should have a short text description (called alt text) that explains what the image shows. When a screen reader reaches this image, it should read out this description so the user knows what the image is about."
+7. "actual_result" — Tell the reader what is ACTUALLY happening right now. Example: "This image has no text description at all. When a screen reader user reaches this image, the screen reader either skips it completely or reads out the file name, which does not help the user understand the content."
+8. "steps_to_reproduce" — Write numbered steps FROM THE PERSPECTIVE OF A SCREEN READER USER (NVDA / JAWS). Guide them step-by-step to find the element and observe the problem. Each step should be short and simple.
+9. "ai_fix_suggestion" — Provide a step-by-step guide for the developer to fix this issue. Number each step. Include specific code changes where applicable.
+10. "severity" — Must be one of: Critical, Serious, Moderate, Minor.
 
-REQUIRED JSON FIELDS (fill each based on the ACTUAL Rule ID and HTML above):
+REQUIRED JSON FIELDS:
 {{
-    "friendly_name": "<Clear, simple, and professional title specific to rule ID {violation.id}, easy for both developers and non-technical stakeholders to understand>",
-    "description": "<Clear, professional technical description of the accessibility barrier observed>",
-    "help": "<Short, actionable help text explaining how to resolve or verify this rule>",
+    "friendly_name": "<Clear, simple title for this issue — understandable by anyone>",
+    "description": "<Simple, non-technical explanation of what the accessibility problem is and why it matters for people with disabilities>",
     "wcag_criteria": "<Exact WCAG 2.2 Success Criteria ID and Name, e.g. '1.1.1 Non-text Content'>",
     "wcag_level": "<A or AA or AAA>",
-    "severity": "<Critical, Serious, Moderate, or Minor — based on impact '{violation.impact}'>",
-    "business_impact": "<How this specific rule violation affects users with disabilities, particularly those using assistive technologies like screen readers or keyboard navigation>",
-    "expected_result": "<Specify exactly 'what it is actually' (the target compliant state/behavior) and 'how it has to be' to satisfy accessibility guidelines. Define what the element/component should announce, display, or how it should respond to keyboard interactions under standard compliance>",
-    "actual_result": "<Specify exactly 'what was actually found' on the page and 'how it is currently behaving' under testing. Describe the exact failure observed in relation to the affected HTML snippet, detailing the user experience barrier>",
-    "steps_to_reproduce": "<Numbered, step-by-step instructions so a developer can easily navigate, locate the exact element on the page, perform the interaction (e.g. keyboard navigation, screen reader check, inspector examination), and observe the failure>",
-    "remediation_plan": "<Specific code/config fix for rule {violation.id} using semantic HTML and ARIA best practices>"
+    "severity": "<Critical, Serious, Moderate, or Minor>",
+    "expected_result": "<What SHOULD happen — describe the correct, accessible behaviour in simple terms so a non-technical person understands what the element is supposed to do>",
+    "actual_result": "<What IS happening right now — describe the actual barrier a user with a disability would face, referencing the specific HTML element shown above>",
+    "steps_to_reproduce": "<Numbered steps (1. 2. 3. ...) written for a screen reader user (NVDA/JAWS) to navigate to the element and observe the issue. Keep each step simple and short. Start with opening the URL, then guide through keyboard/screen reader navigation to the exact element.>",
+    "ai_fix_suggestion": "<Step-by-step numbered guide for the developer on how to fix this issue. Include specific HTML/ARIA code changes. Each step should be actionable.>",
+    "business_impact": "<How this issue affects real users with disabilities in their daily experience>",
+    "element_html_snippet": "<The exact HTML snippet of the affected element, copied from the violation data above>",
+    "help": "<Short actionable guidance on what to check or fix>"
 }}"""
         data = None
         for attempt in range(1, 3):
@@ -215,21 +226,24 @@ REQUIRED JSON FIELDS (fill each based on the ACTUAL Rule ID and HTML above):
                     logger.error(f"LLM refinement failed after {attempt} attempts for {violation.id}. Using fallback.")
                     return violation
         
-        # Merge AI data into metadata
+        # Merge AI data into metadata — these fields map 1:1 to the Excel report columns
         violation.metadata = {
             "friendly_name": data.get("friendly_name", violation.help),
             "description": data.get("description", violation.description),
             "help": data.get("help", violation.help),
             "wcag_criteria": data.get("wcag_criteria", "N/A"),
             "wcag_level": data.get("wcag_level", "AA"),
-            "severity": data.get("severity", violation.impact or "High"),
+            "severity": data.get("severity", violation.impact or "Moderate"),
             "business_impact": data.get("business_impact", ""),
             "expected_result": data.get("expected_result", ""),
             "actual_result": data.get("actual_result", ""),
             "steps_to_reproduce": data.get("steps_to_reproduce", ""),
-            "remediation": data.get("remediation_plan", ""),
-            "refined_by": "AuditorAgent",  # Successfully refined by AuditorAgent LLM process
+            "ai_fix_suggestion": data.get("ai_fix_suggestion", ""),
+            "element_html_snippet": data.get("element_html_snippet", nodes_html),
+            "remediation": data.get("ai_fix_suggestion", data.get("remediation_plan", "")),
+            "refined_by": "AuditorAgent",
             "input_tokens": self.last_input_tokens,
             "output_tokens": self.last_output_tokens
         }
         return violation
+

@@ -37,6 +37,7 @@ async def download_excel_report(task_id: str, db: Session = Depends(get_db)):
             "help": v.help,
             "help_url": v.help_url,
             "nodes": v.nodes,
+            "metadata_json": v.metadata_json or {},
             "page_url": session.url,
             "wcag_criteria": (v.metadata_json or {}).get("wcag_criteria", "1.1.1 Non-text Content"),
             "wcag_level": (v.metadata_json or {}).get("wcag_level", "A"),

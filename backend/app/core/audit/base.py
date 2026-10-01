@@ -229,9 +229,10 @@ class BaseAgent:
         """
         import re
         fields = [
-            "friendly_name", "wcag_criteria", "wcag_level", "severity", 
+            "friendly_name", "description", "help", "wcag_criteria", "wcag_level", "severity", 
             "business_impact", "expected_result", "actual_result", 
-            "steps_to_reproduce", "remediation_plan"
+            "steps_to_reproduce", "ai_fix_suggestion", "element_html_snippet",
+            "remediation_plan"
         ]
         extracted = {}
         for field in fields:
