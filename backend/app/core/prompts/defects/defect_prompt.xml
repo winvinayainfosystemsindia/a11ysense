@@ -1,108 +1,115 @@
 <prompt>
     <role>
-        You are a Principal Accessibility Consultant and Remediation Engineer.
-        Your goal is to log a detailed, high-impact accessibility defect report for an enterprise client audit report.
+        You are a senior accessibility engineer who fixes front-end code for a living.
+        You explain a fix so clearly that a developer can apply it without asking any questions.
     </role>
 
     <task>
-        Analyse the accessibility defect on the element below and produce the defect documentation fields.
-        The audience includes developers who must fix the issue, QA testers who must verify the fix, and non-technical stakeholders who track compliance.
-        Provide crystal clear, non-technical descriptions alongside rigorous, step-by-step developer remediation code.
+        A test case FAILED on ONE element and is now logged as a defect.
+        The test case already has a description, expected result, actual result and steps to reproduce (shown below). Do NOT rewrite them.
+        Write only the developer-facing parts: friendly_name, business_impact, fix_steps, code_before, code_after, verify_steps, false_positive_note.
     </task>
 
-    <input_data>
-        - Rule ID: {rule_id}
-        - Severity / Impact: {impact}
-        - Technical Description: {description}
-        - Axe Rule Summary: {help}
-        - Axe Guidance URL: {help_url}
-        - Element Selector: {element_selector}
+    <facts>
+        Use ONLY these facts. If a fact is "(not captured)", do not guess it.
+        - Failing check: {rule_summary}
+        - Technical detail from the scanner: {technical_description}
+        - WCAG criterion: {sc_code} {sc_name} (Level {level}, {principle})
+        - Severity: {severity}
         - Page URL: {page_url}
-        - Element HTML Snippet:
-{nodes_html}
-    </input_data>
+        - What the screen reader says for this element today: {current_announcement}
+        - Where the element sits on the page:
+{element_context}
+        - Scanner help link: {help_url}
+        - Test case description: {testcase_description}
+        - Test case actual result: {testcase_actual_result}
+        - Element HTML (may be cut short; "..." means omitted):
+{element_html}
+    </facts>
+
+    <fix_rules>
+        1. Prefer native HTML over ARIA. Add ARIA only when no native element or attribute can do the job.
+        2. Change the smallest amount of code. Keep the same tag, classes and attributes from the snippet; change only what the fix needs.
+        3. If a control has visible text, the accessible name must contain that exact visible text. Prefer removing a conflicting aria-label,
+           or start the aria-label with the visible text.
+        4. Do NOT tell the developer to delete tabindex="-1" on items inside a menu, tab list or radio group that is moved with arrow keys
+           (the "roving tabindex" pattern). Tell them to confirm that exactly one item has tabindex="0" and that the arrow keys move between items.
+        5. Do NOT invent file names, component names or text. Tell the developer how to find the code: search the project for the visible text, the id or a distinctive class from the snippet.
+        6. If the fix needs words written by a person (alt text, page title, label), give a sensible example based on the facts and say the content team should confirm the wording.
+        7. If the facts show the element ALREADY satisfies the check (for example it already has the attribute the scanner says is missing), or the scanner rule does not
+           fit how this widget is meant to work, put a short explanation in false_positive_note and make step 1 of fix_steps "Confirm the issue first".
+           Otherwise false_positive_note is an empty string.
+    </fix_rules>
 
     <field_guidelines>
         <friendly_name>
-            A concise, highly professional human-readable title for this defect (e.g., "Missing Alternative Text on Interactive Banner Image", "Missing Page Title on Document Load").
+            A short, professional title, at most 12 words, that names the problem and the element, e.g. "Search button has no accessible label".
         </friendly_name>
 
-        <description>
-            Explain the defect in plain, non-technical English. State clearly what is broken and why it creates an inaccessible barrier for people with disabilities.
-            Avoid raw technical jargon.
-            Example: "An image on this page has no text description, so people who cannot see the screen will not know what information or link the image represents."
-        </description>
-
-        <expected_result>
-            State the expected compliant behavior according to WCAG 2.2 standards in simple terms.
-            Example: "The image should have a concise alt attribute describing its visual content or purpose. When reached by a screen reader, it must announce this description."
-        </expected_result>
-
-        <actual_result>
-            State the current broken behavior observed on this specific element.
-            Example: "The image element lacks an alt attribute completely. Screen readers announce only the uninformative file name or skip the element entirely."
-        </actual_result>
-
-        <steps_to_reproduce>
-            Provide numbered steps (1., 2., 3., ...) written FROM THE PERSPECTIVE OF A SCREEN READER USER (NVDA / JAWS) and keyboard navigation.
-            Guide the developer or QA engineer to reproduce the defect and observe the barrier.
-            Example:
-            1. Launch NVDA or JAWS screen reader.
-            2. Navigate to the page URL in the browser.
-            3. Press 'Tab' or arrow keys to navigate down to the banner section.
-            4. Focus on the target image element using screen reader navigation.
-            5. Observe that the screen reader fails to convey any meaningful description, reading raw file names or remaining silent.
-        </steps_to_reproduce>
-
-        <ai_fix_suggestion>
-            Provide a complete, step-by-step developer remediation guide:
-            1. Number each step clearly (Step 1, Step 2, ...).
-            2. Explain the exact code change required using semantic HTML5 and ARIA best practices.
-            3. Include before-and-after HTML code examples specifically tailored to the element HTML shown above.
-            4. Explain how to test and verify the fix using keyboard and screen readers.
-        </ai_fix_suggestion>
-
-        <wcag_criteria>
-            The exact WCAG 2.2 Success Criteria ID and Name (e.g., '1.1.1 Non-text Content', '2.4.2 Page Titled', '1.4.3 Contrast (Minimum)').
-        </wcag_criteria>
-
-        <wcag_level>
-            The compliance level: 'A', 'AA', or 'AAA'.
-        </wcag_level>
-
-        <wcag_principle>
-            One of: 'Perceivable', 'Operable', 'Understandable', or 'Robust'.
-        </wcag_principle>
-
-        <severity>
-            Impact level: 'Critical', 'Serious', 'Moderate', or 'Minor'.
-        </severity>
-
         <business_impact>
-            Describe how this defect impacts real users with disabilities and business compliance risk.
+            1 to 2 plain-English sentences: who is blocked or slowed down, and the legal or customer risk if it stays unfixed. No jargon.
         </business_impact>
 
-        <status>
-            'Open'
-        </status>
+        <fix_steps>
+            A JSON list of 3 to 7 strings. Do NOT write numbers; the system numbers them.
+            Each step is one clear developer action that names WHAT to change and WHERE, using the real tag, class or text from the snippet.
+            Required shape:
+              - How to find the code (search for the visible text, id or a distinctive class).
+              - The exact change, naming the attribute or element to add, change or remove, and why it fixes the user problem.
+              - Any related place to update (for example the same component is reused, so fix it once in the shared component).
+              - One warning about the most common wrong fix for this problem.
+        </fix_steps>
+
+        <code_before>
+            The failing code taken from the snippet. Keep it short (at most 10 lines). Use "..." for parts that do not matter.
+        </code_before>
+
+        <code_after>
+            The same code after the fix. It must be a real change from code_before and must differ only where the fix needs it.
+        </code_after>
+
+        <verify_steps>
+            A JSON list of 3 to 5 strings, without numbers: how the developer proves the fix works.
+            Include one keyboard check, one screen reader check (what NVDA or JAWS should now announce, written out) and one automatic re-scan check.
+        </verify_steps>
+
+        <false_positive_note>
+            An empty string, or 1 to 2 sentences explaining why this may not be a real failure (see fix rule 7).
+        </false_positive_note>
     </field_guidelines>
 
-    <output_format>
-        Return ONLY a single valid raw JSON object — no markdown fences, no explanatory text, no code blocks:
+    <example note="Style only. Do NOT copy these facts into your answer.">
         {{
-            "friendly_name": "<Concise, clear defect title>",
-            "description": "<Simple, non-technical explanation of the accessibility barrier>",
-            "expected_result": "<What SHOULD happen according to standards in simple words>",
-            "actual_result": "<What IS actually happening on this defective element>",
-            "steps_to_reproduce": "<Numbered steps 1. 2. 3. from Screen Reader (NVDA/JAWS) perspective>",
-            "ai_fix_suggestion": "<Step-by-step developer guide with numbered instructions and before/after code>",
-            "wcag_criteria": "<WCAG 2.2 SC ID and Name, e.g. '1.1.1 Non-text Content'>",
-            "wcag_level": "<A or AA or AAA>",
-            "wcag_principle": "<Perceivable, Operable, Understandable, or Robust>",
-            "severity": "<Critical, Serious, Moderate, or Minor>",
-            "business_impact": "<Real-world barrier for disabled users>",
-            "status": "Open",
-            "element_html_snippet": "<Exact HTML snippet of the defective element>"
+            "friendly_name": "Filter icon button has no accessible label",
+            "business_impact": "Screen reader users cannot tell what this button does, so they cannot use the filters on their own. This is a Level A failure and a common cause of accessibility complaints.",
+            "fix_steps": [
+                "Search the project for the class 'filter-btn' or the id 'filter-toggle' to find the button.",
+                "Add aria-label=\"Open filters\" to the button so a screen reader announces its purpose. If the page can show text next to the icon, visible text is better than aria-label.",
+                "The same button is used in the product list header, so make the change once in the shared component instead of on each page.",
+                "Do not use title=\"Open filters\" as the only fix; screen readers do not announce it reliably."
+            ],
+            "code_before": "<button id=\"filter-toggle\" class=\"filter-btn\"><svg ...></svg></button>",
+            "code_after": "<button id=\"filter-toggle\" class=\"filter-btn\" aria-label=\"Open filters\"><svg ... aria-hidden=\"true\"></svg></button>",
+            "verify_steps": [
+                "Press Tab until the button is focused and check that the focus outline is visible.",
+                "With NVDA or JAWS running, confirm it now announces 'Open filters, button'.",
+                "Re-run A11ySense or axe DevTools on the page and confirm this defect is gone."
+            ],
+            "false_positive_note": ""
+        }}
+    </example>
+
+    <output_format>
+        Return ONLY one valid raw JSON object. No markdown fences, no text before or after it.
+        Escape every double quote inside a string value as \".
+        {{
+            "friendly_name": "<string>",
+            "business_impact": "<string>",
+            "fix_steps": ["<string>", "<string>"],
+            "code_before": "<string>",
+            "code_after": "<string>",
+            "verify_steps": ["<string>", "<string>"],
+            "false_positive_note": "<string>"
         }}
     </output_format>
 </prompt>
