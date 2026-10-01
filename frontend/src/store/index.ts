@@ -4,7 +4,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import type { TypedUseSelectorHook } from 'react-redux';
 import authReducer from './slices/authSlice';
 import projectReducer from './slices/projectSlice';
-import billingReducer from './slices/billingSlice';
 import dashboardReducer from './slices/dashboardSlice';
 import auditReducer from './slices/auditSlice';
 import crawlDiscoveryReducer from './slices/crawlDiscoverySlice';
@@ -81,7 +80,6 @@ export const store = configureStore({
   reducer: {
     auth: authReducer,
     project: projectReducer,
-    billing: billingReducer,
     dashboard: dashboardReducer,
     audit: auditReducer,
     crawlDiscovery: crawlDiscoveryReducer,

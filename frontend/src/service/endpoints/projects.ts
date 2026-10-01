@@ -1,30 +1,9 @@
 import api from '../api';
-import type {
-  ProjectResponse,
-  ApiKeyResponse,
-  ApiKeyCreatedResponse,
-} from '../../model/project.model';
-import type {
-  DashboardStats,
-  HistoricalTrends,
-} from '../../model/dashboard.model';
-import type {
-  BillingStatus,
-} from '../../model/billing.model';
+import type { ProjectCreate, ProjectResponse } from '../../model/project.model';
+import type { DashboardStats, HistoricalTrends } from '../../model/dashboard.model';
 
-export type {
-  ProjectResponse,
-  ApiKeyResponse,
-  ApiKeyCreatedResponse,
-} from '../../model/project.model';
-export type {
-  DashboardStats,
-  HistoricalTrends,
-} from '../../model/dashboard.model';
-export type {
-  BillingTransaction,
-  BillingStatus,
-} from '../../model/billing.model';
+export type { ProjectResponse } from '../../model/project.model';
+export type { DashboardStats, HistoricalTrends } from '../../model/dashboard.model';
 
 export const projectService = {
   listProjects: async (): Promise<ProjectResponse[]> => {
@@ -32,23 +11,10 @@ export const projectService = {
     return response.data;
   },
 
-  createProject: async (name: string): Promise<ProjectResponse> => {
-    const response = await api.post<ProjectResponse>('/api/projects', { name });
+  createProject: async (payload: string | ProjectCreate): Promise<ProjectResponse> => {
+    const reqData = typeof payload === 'string' ? { name: payload } : payload;
+    const response = await api.post<ProjectResponse>('/api/projects', reqData);
     return response.data;
-  },
-
-  listApiKeys: async (): Promise<ApiKeyResponse[]> => {
-    const response = await api.get<ApiKeyResponse[]>('/api/keys');
-    return response.data;
-  },
-
-  createApiKey: async (name: string, expiresInDays: number = 30): Promise<ApiKeyCreatedResponse> => {
-    const response = await api.post<ApiKeyCreatedResponse>('/api/keys', { name, expires_in_days: expiresInDays });
-    return response.data;
-  },
-
-  revokeApiKey: async (id: string): Promise<void> => {
-    await api.delete(`/api/keys/${id}`);
   },
 
   getDashboardStats: async (range?: string): Promise<DashboardStats> => {
@@ -62,21 +28,6 @@ export const projectService = {
     const response = await api.get<HistoricalTrends>('/api/trends', {
       params: range ? { time_range: range } : undefined
     });
-    return response.data;
-  },
-
-  getBillingStatus: async (): Promise<BillingStatus> => {
-    const response = await api.get<BillingStatus>('/api/billing/status');
-    return response.data;
-  },
-
-  topupCredits: async (packageName: string, amountUsd: number): Promise<any> => {
-    const response = await api.post<any>('/api/billing/topup', { package_name: packageName, amount_usd: amountUsd });
-    return response.data;
-  },
-
-  togglePayAsYouGo: async (): Promise<any> => {
-    const response = await api.post<any>('/api/billing/toggle-pay-as-you-go');
     return response.data;
   },
 };
