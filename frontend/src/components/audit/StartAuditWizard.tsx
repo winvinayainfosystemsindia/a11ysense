@@ -98,7 +98,7 @@ export const StartAuditWizard: React.FC<StartAuditWizardProps> = ({ open, onClos
   // Poll the crawl-discovery task until it settles, then default all
   // discovered pages to selected (pre-checked) the moment it completes.
   useEffect(() => {
-    const isActive = currentCrawlTask && (currentCrawlTask.status === 'queued' || currentCrawlTask.status === 'crawling');
+    const isActive = currentCrawlTask && ['queued', 'crawling', 'started', 'processing'].includes(currentCrawlTask.status);
     if (!isActive) {
       return;
     }
@@ -120,6 +120,22 @@ export const StartAuditWizard: React.FC<StartAuditWizardProps> = ({ open, onClos
       }
     };
   }, [currentCrawlTask?.status, currentCrawlTask?.crawl_task_id, dispatch]);
+
+  // Auto-start discovery when navigating to Step 1 if not already started
+  useEffect(() => {
+    if (activeStep === 1 && url && !currentCrawlTask && !crawlLoading) {
+      handleStartDiscovery();
+    }
+  }, [activeStep, url, currentCrawlTask, crawlLoading]);
+
+  // Sync discovered pages to selectedUrls when completed
+  useEffect(() => {
+    if (currentCrawlTask?.status === 'completed' && currentCrawlTask.pages_discovered) {
+      if (selectedUrls.length === 0 && currentCrawlTask.pages_discovered.length > 0) {
+        setSelectedUrls(currentCrawlTask.pages_discovered);
+      }
+    }
+  }, [currentCrawlTask?.status, currentCrawlTask?.pages_discovered]);
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -149,7 +165,6 @@ export const StartAuditWizard: React.FC<StartAuditWizardProps> = ({ open, onClos
     )
       .unwrap()
       .then((task) => {
-        // Covers the (unlikely) case where discovery finishes before the polling effect attaches.
         if (task.status === 'completed') {
           setSelectedUrls(task.pages_discovered || []);
         }
@@ -216,7 +231,7 @@ export const StartAuditWizard: React.FC<StartAuditWizardProps> = ({ open, onClos
 
   const allSelected = currentCrawlTask?.pages_discovered?.length === selectedUrls.length && selectedUrls.length > 0;
   const discoveryCompleted = currentCrawlTask?.status === 'completed';
-  const discoveryRunning = currentCrawlTask?.status === 'queued' || currentCrawlTask?.status === 'crawling';
+  const discoveryRunning = currentCrawlTask?.status && ['queued', 'crawling', 'started', 'processing'].includes(currentCrawlTask.status);
   const discoveryFailed = currentCrawlTask?.status === 'failed';
 
   const nextDisabled =

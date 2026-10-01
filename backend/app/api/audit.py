@@ -43,7 +43,17 @@ async def start_crawl_discovery(
         str(current_user.organization_id)
     )
 
-    return {"status": "started", "crawl_task_id": crawl_task_id}
+    return {
+        "crawl_task_id": crawl_task_id,
+        "status": "crawling",
+        "url": req.url,
+        "pages_discovered": [],
+        "pages_depth_map": {},
+        "sitemaps_found": [],
+        "unauth_pages_discovered": [],
+        "auth_pages_discovered": [],
+        "error": None
+    }
 
 @router.get("/api/audit/discover/{crawl_task_id}")
 @router.get("/crawl_discovery/{crawl_task_id}")
