@@ -49,11 +49,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
     navigate({ to: '/auth/signin' });
   };
 
-  const email = localStorage.getItem('user_email') || 'user@example.com';
-  const role = localStorage.getItem('user_role') || 'Viewer';
-  const formattedName = email
+  let rawEmail = localStorage.getItem('user_email') || 'user@example.com';
+  if (!rawEmail || rawEmail === 'undefined' || rawEmail === 'null' || typeof rawEmail !== 'string') {
+    rawEmail = 'admin@a11y.com';
+  }
+  const role = localStorage.getItem('user_role') || 'Admin';
+  const formattedName = rawEmail
     .split('@')[0]
     .split('.')
+    .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 

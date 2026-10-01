@@ -2,7 +2,10 @@ import axios from 'axios';
 import { ENV } from '../../config/env';
 import type { PrometheusMetric } from '../../model/metrics.model';
 
-function parsePrometheusText(text: string): PrometheusMetric[] {
+function parsePrometheusText(text: any): PrometheusMetric[] {
+  if (typeof text !== 'string') {
+    return [];
+  }
   const lines = text.split('\n');
   const metrics: PrometheusMetric[] = [];
   
@@ -77,20 +80,25 @@ function parsePrometheusText(text: string): PrometheusMetric[] {
 
 export const metricsService = {
   getSystemMetrics: async (): Promise<PrometheusMetric[]> => {
-    // Determine metrics URL based on API_URL
-    // from http://localhost:8000/v1 to http://localhost:8000/metrics
-    const baseUrl = ENV.API_URL.endsWith('/v1') 
-      ? ENV.API_URL.slice(0, -3) 
-      : ENV.API_URL;
-      
-    const metricsUrl = `${baseUrl}/metrics`;
+    try {
+      // Determine metrics URL based on API_URL
+      // from http://localhost:8000/v1 to http://localhost:8000/metrics
+      const baseUrl = ENV.API_URL.endsWith('/v1') 
+        ? ENV.API_URL.slice(0, -3) 
+        : ENV.API_URL;
+        
+      const metricsUrl = `${baseUrl}/metrics`;
 
-    const response = await axios.get(metricsUrl, {
-      headers: {
-        Accept: 'text/plain',
-      },
-    });
+      const response = await axios.get(metricsUrl, {
+        headers: {
+          Accept: 'text/plain',
+        },
+        responseType: 'text',
+      });
 
-    return parsePrometheusText(response.data);
+      return parsePrometheusText(response.data);
+    } catch (err) {
+      return [];
+    }
   },
 };

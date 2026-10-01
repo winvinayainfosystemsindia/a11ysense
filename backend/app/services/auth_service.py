@@ -54,27 +54,36 @@ class AuthService:
         access_token = create_access_token(data={"sub": str(user.id), "org_id": str(user.organization_id), "role": user.role})
         refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
+        org_name = user.organization.name if user.organization else "Enterprise"
+
+        user_profile = UserProfile(
+            id=user.id,
+            email=user.email,
+            role=user.role,
+            organization_id=user.organization_id,
+            organization_name=org_name,
+            created_at=user.created_at
+        )
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            user=UserProfile(
-                id=user.id,
-                email=user.email,
-                role=user.role,
-                organization_id=user.organization_id,
-                organization_name=user.organization.name,
-                created_at=user.created_at
-            )
+            email=user.email,
+            role=user.role,
+            organization_id=user.organization_id,
+            organization_name=org_name,
+            user=user_profile
         )
 
     def get_me(self, current_user: User, db: Session) -> UserProfile:
+        org_name = current_user.organization.name if current_user.organization else "Enterprise"
         return UserProfile(
             id=current_user.id,
             email=current_user.email,
             role=current_user.role,
             organization_id=current_user.organization_id,
-            organization_name=current_user.organization.name,
+            organization_name=org_name,
             created_at=current_user.created_at
         )
 
@@ -87,6 +96,7 @@ class AuthService:
             user = db.query(User).filter(User.id == user_id).first()
             if not user:
                 return VerifyTokenResponse(valid=False, error="User not found")
+            org_name = user.organization.name if user.organization else "Enterprise"
             return VerifyTokenResponse(
                 valid=True,
                 user=UserProfile(
@@ -94,7 +104,7 @@ class AuthService:
                     email=user.email,
                     role=user.role,
                     organization_id=user.organization_id,
-                    organization_name=user.organization.name,
+                    organization_name=org_name,
                     created_at=user.created_at
                 )
             )
@@ -114,18 +124,26 @@ class AuthService:
             access_token = create_access_token(data={"sub": str(user.id), "org_id": str(user.organization_id), "role": user.role})
             new_refresh = create_refresh_token(data={"sub": str(user.id)})
 
+            org_name = user.organization.name if user.organization else "Enterprise"
+
+            user_profile = UserProfile(
+                id=user.id,
+                email=user.email,
+                role=user.role,
+                organization_id=user.organization_id,
+                organization_name=org_name,
+                created_at=user.created_at
+            )
+
             return TokenResponse(
                 access_token=access_token,
                 refresh_token=new_refresh,
                 token_type="bearer",
-                user=UserProfile(
-                    id=user.id,
-                    email=user.email,
-                    role=user.role,
-                    organization_id=user.organization_id,
-                    organization_name=user.organization.name,
-                    created_at=user.created_at
-                )
+                email=user.email,
+                role=user.role,
+                organization_id=user.organization_id,
+                organization_name=org_name,
+                user=user_profile
             )
         except Exception as e:
             raise HTTPException(status_code=401, detail="Invalid refresh token")

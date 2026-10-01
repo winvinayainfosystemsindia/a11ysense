@@ -42,11 +42,17 @@ export const loginUser = createAsyncThunk(
   async (req: LoginRequest, { rejectWithValue }) => {
     try {
       const data = await authService.login(req);
+      const email = data.user?.email || data.email || '';
+      const role = data.user?.role || data.role || '';
+      const orgName = data.user?.organization_name || data.organization_name || '';
+      const orgId = data.user?.organization_id || data.organization_id || '';
+
       localStorage.setItem('auth_token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
-      localStorage.setItem('user_email', data.email);
-      localStorage.setItem('user_role', data.role);
-      localStorage.setItem('org_name', data.organization_name);
+      if (email) localStorage.setItem('user_email', email);
+      if (role) localStorage.setItem('user_role', role);
+      if (orgName) localStorage.setItem('org_name', orgName);
+      if (orgId) localStorage.setItem('org_id', orgId);
       return data;
     } catch (err: any) {
       return rejectWithValue(err.userMessage || 'Incorrect email or password');
@@ -81,11 +87,17 @@ export const refreshUserToken = createAsyncThunk(
   async (req: RefreshTokenRequest, { rejectWithValue }) => {
     try {
       const data = await authService.refreshToken(req);
+      const email = data.user?.email || data.email || '';
+      const role = data.user?.role || data.role || '';
+      const orgName = data.user?.organization_name || data.organization_name || '';
+      const orgId = data.user?.organization_id || data.organization_id || '';
+
       localStorage.setItem('auth_token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
-      localStorage.setItem('user_email', data.email);
-      localStorage.setItem('user_role', data.role);
-      localStorage.setItem('org_name', data.organization_name);
+      if (email) localStorage.setItem('user_email', email);
+      if (role) localStorage.setItem('user_role', role);
+      if (orgName) localStorage.setItem('org_name', orgName);
+      if (orgId) localStorage.setItem('org_id', orgId);
       return data;
     } catch (err: any) {
       return rejectWithValue(err.userMessage || 'Token refresh failed');
@@ -135,12 +147,18 @@ const authSlice = createSlice({
         state.loading = false;
         state.token = action.payload.access_token;
         state.isAuthenticated = true;
+        const email = action.payload.user?.email || action.payload.email || '';
+        const role = action.payload.user?.role || action.payload.role || 'Admin';
+        const orgId = action.payload.user?.organization_id || action.payload.organization_id || '';
+        const orgName = action.payload.user?.organization_name || action.payload.organization_name || 'Enterprise';
+        const userId = action.payload.user?.id || '';
+
         state.user = {
-          id: '', // Not in token response directly, can be fetched or left blank
-          email: action.payload.email,
-          role: action.payload.role,
-          organization_id: action.payload.organization_id,
-          organization_name: action.payload.organization_name,
+          id: userId,
+          email,
+          role,
+          organization_id: orgId,
+          organization_name: orgName,
         };
       })
       .addCase(loginUser.rejected, (state, action) => {
@@ -154,6 +172,10 @@ const authSlice = createSlice({
       .addCase(getUserProfile.fulfilled, (state, action: PayloadAction<UserProfile>) => {
         state.loading = false;
         state.user = action.payload;
+        if (action.payload.email) localStorage.setItem('user_email', action.payload.email);
+        if (action.payload.role) localStorage.setItem('user_role', action.payload.role);
+        if (action.payload.organization_name) localStorage.setItem('org_name', action.payload.organization_name);
+        if (action.payload.organization_id) localStorage.setItem('org_id', action.payload.organization_id);
       })
       .addCase(getUserProfile.rejected, (state, action) => {
         state.loading = false;
@@ -164,6 +186,10 @@ const authSlice = createSlice({
         if (action.payload.valid && action.payload.user) {
           state.user = action.payload.user;
           state.isAuthenticated = true;
+          if (action.payload.user.email) localStorage.setItem('user_email', action.payload.user.email);
+          if (action.payload.user.role) localStorage.setItem('user_role', action.payload.user.role);
+          if (action.payload.user.organization_name) localStorage.setItem('org_name', action.payload.user.organization_name);
+          if (action.payload.user.organization_id) localStorage.setItem('org_id', action.payload.user.organization_id);
         } else {
           state.user = null;
           state.isAuthenticated = false;
@@ -175,12 +201,18 @@ const authSlice = createSlice({
       .addCase(refreshUserToken.fulfilled, (state, action: PayloadAction<TokenResponse>) => {
         state.token = action.payload.access_token;
         state.isAuthenticated = true;
+        const email = action.payload.user?.email || action.payload.email || '';
+        const role = action.payload.user?.role || action.payload.role || 'Admin';
+        const orgId = action.payload.user?.organization_id || action.payload.organization_id || '';
+        const orgName = action.payload.user?.organization_name || action.payload.organization_name || 'Enterprise';
+        const userId = action.payload.user?.id || '';
+
         state.user = {
-          id: '',
-          email: action.payload.email,
-          role: action.payload.role,
-          organization_id: action.payload.organization_id,
-          organization_name: action.payload.organization_name,
+          id: userId,
+          email,
+          role,
+          organization_id: orgId,
+          organization_name: orgName,
         };
       })
       .addCase(refreshUserToken.rejected, (state) => {

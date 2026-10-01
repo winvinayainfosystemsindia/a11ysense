@@ -35,14 +35,19 @@ export const WelcomeHeader: React.FC<WelcomeHeaderProps> = ({
     day: 'numeric'
   }).format(new Date());
 
-  const userEmail = user?.email || localStorage.getItem('user_email') || 'daran@winvinaya.com';
-  let displayName = userEmail.split('@')[0];
+  let rawEmail = user?.email || localStorage.getItem('user_email') || 'daran@winvinaya.com';
+  if (!rawEmail || rawEmail === 'undefined' || rawEmail === 'null' || typeof rawEmail !== 'string') {
+    rawEmail = 'daran@winvinaya.com';
+  }
+
+  let displayName = rawEmail.split('@')[0] || 'User';
   if (displayName.toLowerCase() === 'daran') {
     displayName = 'Dharanidaran';
   } else {
     displayName = displayName
       .replace(/[._-]/g, ' ')
       .split(' ')
+      .filter(Boolean)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }

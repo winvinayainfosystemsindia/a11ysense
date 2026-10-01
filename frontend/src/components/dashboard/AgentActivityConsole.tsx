@@ -21,8 +21,9 @@ interface AgentActivityConsoleProps {
   onNavigateToAudit: () => void;
 }
 
-const getProjectNameFromUrl = (urlStr: string): string => {
+const getProjectNameFromUrl = (urlStr: any): string => {
   try {
+    if (!urlStr || typeof urlStr !== 'string') return 'Audit Flow';
     const cleanUrl = urlStr.replace(/^(https?:\/\/)?(www\.)?/, '');
     const firstPart = cleanUrl.split('/')[0];
     const parts = firstPart.split('.');

@@ -18,6 +18,7 @@ export interface TokenResponse {
   email: string;
   organization_id: string;
   organization_name: string;
+  user?: UserProfile;
 }
 
 export interface UserProfile {

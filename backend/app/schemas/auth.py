@@ -27,7 +27,11 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
-    user: UserProfile
+    email: str
+    role: str
+    organization_id: UUID
+    organization_name: str
+    user: Optional[UserProfile] = None
 
 class VerifyTokenRequest(BaseModel):
     token: str
