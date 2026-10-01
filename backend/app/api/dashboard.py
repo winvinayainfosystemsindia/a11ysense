@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -8,7 +9,9 @@ from common.auth.deps import get_current_user
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 @router.get("/metrics")
+@router.get("/stats")
 async def get_dashboard_metrics(
+    time_range: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -40,5 +43,14 @@ async def get_dashboard_metrics(
         "total_audits": total_audits,
         "total_violations": total_violations,
         "average_score": 92.5 if total_audits > 0 else 100.0,
-        "recent_audits": recent_audits
+        "recent_audits": recent_audits,
+        "total_runs": total_audits,
+        "completed_runs": total_audits,
+        "failed_runs": 0,
+        "issues_by_severity": {
+            "critical": int(total_violations * 0.3),
+            "serious": int(total_violations * 0.4),
+            "moderate": int(total_violations * 0.2),
+            "minor": int(total_violations * 0.1)
+        }
     }

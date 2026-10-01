@@ -66,6 +66,7 @@ os.makedirs(REPORTS_DIR, exist_ok=True)
 app.mount("/static/reports", StaticFiles(directory=REPORTS_DIR), name="reports")
 
 @app.get("/health", tags=["Health"])
+@app.get("/v1/health", tags=["Health"])
 async def health_check():
     """Health check endpoint for monitoring."""
     return {"status": "healthy", "service": "a11ysense-monolith", "version": "2.0.0"}
@@ -78,12 +79,21 @@ from backend.app.api.audit import router as audit_router
 from backend.app.api.reports import router as reports_router
 from backend.app.api.dashboard import router as dashboard_router
 
+# Root prefixed routes (/auth, /api/projects, etc.)
 app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(credentials_router)
 app.include_router(audit_router)
 app.include_router(reports_router)
 app.include_router(dashboard_router)
+
+# /v1 prefixed routes (/v1/auth, /v1/api/projects, etc.)
+app.include_router(auth_router, prefix="/v1")
+app.include_router(projects_router, prefix="/v1")
+app.include_router(credentials_router, prefix="/v1")
+app.include_router(audit_router, prefix="/v1")
+app.include_router(reports_router, prefix="/v1")
+app.include_router(dashboard_router, prefix="/v1")
 
 if __name__ == "__main__":
     import uvicorn
