@@ -4,6 +4,14 @@ Single high-performance FastAPI service replacing microservices architecture.
 """
 import sys
 import os
+import asyncio
+
+# Set ProactorEventLoop on Windows for Playwright asyncio subprocess support
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
 
 # Add root and backend to python path for module resolution
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

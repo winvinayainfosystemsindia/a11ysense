@@ -16,6 +16,31 @@ logger = logging.getLogger("a11ysense.api.audit")
 router = APIRouter(tags=["Audit Engine"])
 orchestrator = AuditOrchestrator()
 
+@router.get("/api/audits")
+async def list_audits(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all audit sessions for the authenticated user's organization."""
+    sessions = db.query(AuditSession).filter(
+        AuditSession.organization_id == current_user.organization_id
+    ).order_by(AuditSession.created_at.desc()).all()
+
+    result = []
+    for s in sessions:
+        summary = s.summary or {}
+        project_name = s.project.name if s.project else "Default Project"
+        result.append({
+            "task_id": s.task_id,
+            "url": s.url,
+            "timestamp": s.timestamp.isoformat() if s.timestamp else "",
+            "status": s.status,
+            "accessibility_score": summary.get("accessibility_score", 100.0),
+            "total_violations": summary.get("total_violations", 0),
+            "project_name": project_name
+        })
+    return result
+
 @router.post("/api/audit/discover")
 @router.post("/crawl_discovery")
 async def start_crawl_discovery(
@@ -114,7 +139,21 @@ async def get_audit_status(
     """Poll audit run status and progress counters."""
     rec = db.query(AuditProgress).filter(AuditProgress.task_id == task_id).first()
     if not rec:
-        raise HTTPException(status_code=404, detail="Audit task not found")
+        session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Audit task not found")
+        return {
+            "task_id": session.task_id,
+            "status": session.status,
+            "url": session.url,
+            "pages_found": 1,
+            "pages_completed": 1,
+            "pages_total": 1,
+            "pages_scanned": [session.url],
+            "report_url": f"/api/reports/excel/{task_id}",
+            "error": None
+        }
+
     return {
         "task_id": rec.task_id,
         "status": rec.status,
@@ -133,7 +172,7 @@ async def get_task_token_usage(
     db: Session = Depends(get_db)
 ):
     """Get token usage stats for a task."""
-    return await orchestrator.get_llm_token_usage(task_id)
+    return await orchestrator.fetch_and_format_token_usage(task_id)
 
 @router.get("/task/{task_id}/testcases")
 async def get_task_testcases(
@@ -145,3 +184,19 @@ async def get_task_testcases(
     if not session:
         return []
     return (session.summary or {}).get("test_cases", [])
+
+@router.post("/task/{task_id}/stop")
+async def stop_audit(task_id: str):
+    return await orchestrator.stop_audit(task_id)
+
+@router.post("/task/{task_id}/pause")
+async def pause_audit(task_id: str):
+    return await orchestrator.pause_audit(task_id)
+
+@router.post("/task/{task_id}/resume")
+async def resume_audit(task_id: str):
+    return await orchestrator.resume_audit(task_id)
+
+@router.delete("/task/{task_id}")
+async def delete_audit(task_id: str):
+    return await orchestrator.delete_audit(task_id)
