@@ -43,11 +43,11 @@
 
     <field_guidelines>
         <friendly_name>
-            A short, professional title, at most 12 words, that names the problem and the element, e.g. "Search button has no accessible label".
+            A short, professional title, at most 12 words, in the form "what is missing or wrong, then the element", e.g. "Missing alternative text for banner picture" or "Search button has no accessible label".
         </friendly_name>
 
         <business_impact>
-            1 to 2 plain-English sentences: who is blocked or slowed down, and the legal or customer risk if it stays unfixed. No jargon.
+            2 to 3 plain-English sentences: say what the screen reader announces today (quote it), what the user cannot understand or do because of it, and the legal or customer risk if it stays unfixed. No jargon.
         </business_impact>
 
         <fix_steps>

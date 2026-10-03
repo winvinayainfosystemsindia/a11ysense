@@ -41,29 +41,36 @@
 
     <field_guidelines>
         <description>
-            1 to 2 sentences, at most 40 words.
-            Say what is wrong or being checked on this element in plain words, and why it matters to a person who cannot see the screen.
+            2 to 4 sentences, at most 70 words.
+            Sentence 1: name the element and say what is missing or wrong, in plain words.
+            Sentence 2: explain what this thing is for (for example: "Alternative text helps screen reader users understand what a picture shows").
+            Sentence 3: say what the screen reader should do when it is correct, and why that matters to a person who cannot see the screen.
             Example (page title): "This page has no title. The title is the name a screen reader reads out first, so people know which page they are on."
         </description>
 
         <expected_result>
-            2 to 4 sentences. Always include all three parts:
+            3 to 5 sentences. Always include all three parts. Also ALWAYS include a written-out example of what the screen reader should announce, in quotes
+            (for example: "Graphic, person using a trading application"). Build the example only from the facts; it must match the real content and purpose of the element.
+            If you cannot know the exact wording, say "for example" and keep it sensible:
             (a) the correct state, in plain words (for a missing title: "The page should have a clear title that matches what the page is about");
             (b) what a screen reader user would hear or be able to do when it is correct;
             (c) the benefit once fixed (saves time, avoids guessing, feels confident, can use the page on their own).
         </expected_result>
 
         <actual_result>
-            2 to 4 sentences. Always include all three parts:
+            3 to 5 sentences. Start with "When the screen reader user reaches this element, ..." and say exactly what is announced today in quotes (for example: only "Graphic").
+            Say clearly what information is NOT given. Always include all three parts:
             (a) what is really on this element today (quote the real text or say what is missing);
             (b) what the screen reader user hears or cannot do because of it;
             (c) how that feels for them, or how to test if it is intentional (Version A vs Version B).
         </actual_result>
 
         <steps_to_reproduce>
-            A JSON list of 4 to 8 strings. Do NOT write numbers; the system numbers them.
+            A JSON list of 6 to 10 strings. Do NOT write numbers; the system numbers them.
             Written for a person using a screen reader and keyboard only. No developer tools, no code, no "inspect".
-            Each step is one action in one sentence of 25 words or fewer, starting with a verb.
+            Each step is one action in one sentence of 25 words or fewer, starting with a verb. Do not skip small steps: a beginner must be able to follow without guessing.
+            Include a step to turn on Browse (Reading) mode, and use Down Arrow to move through the page when the element has no quick key.
+            Always end with two steps: one that says what the screen reader announces (quote it), and one that says to compare this with what is visible on the page and check whether the important information is available through the screen reader.
             Required shape:
               - Step 1: open the page URL.
               - Step 2: start the screen reader (NVDA or JAWS on Windows, VoiceOver on Mac).
@@ -77,6 +84,23 @@
     </field_guidelines>
 
     <examples note="Style only. Do NOT copy these facts into your answer.">
+        <example name="picture with no alternative text">
+            {{
+                "description": "The banner picture at the top of the page has no alternative text. Alternative text helps screen reader users understand what a picture shows. When a picture carries important information, the screen reader should describe it in a meaningful way.",
+                "expected_result": "When a screen reader user reaches the banner picture, the screen reader should announce a meaningful description of it. For example, if the banner shows a person using a trading application, it could announce 'Graphic, person using a trading application'. The description should match the real content and purpose of the banner. The user then gets the same message as a sighted visitor.",
+                "actual_result": "When the screen reader user reaches the banner picture, the screen reader announces only 'Graphic'. It gives no description of what the banner contains. The user cannot understand the information or message shown in the picture and has to guess.",
+                "steps_to_reproduce": [
+                    "Open https://www.example.com/ in Chrome or Edge.",
+                    "Start NVDA or JAWS.",
+                    "Turn on Browse (Reading) mode.",
+                    "Press the Down Arrow key to move through the page, or press G to jump to the next picture.",
+                    "Continue until the screen reader reaches the banner picture at the top of the page.",
+                    "Listen to what the screen reader announces for the banner.",
+                    "Notice that the screen reader announces only 'Graphic' and does not say what the banner shows.",
+                    "Compare this with the visible banner and check whether its important information is available through the screen reader."
+                ]
+            }}
+        </example>
         <example name="menu link arrow key navigation check">
             {{
                 "description": "The 'F&O' link in the main menu cannot be reached using the Tab key alone. Users must test whether opening the menu and navigating with Arrow keys allows reaching and activating this link.",
