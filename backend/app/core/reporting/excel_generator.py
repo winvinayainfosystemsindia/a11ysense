@@ -24,6 +24,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from common.constants.wcag import WCAG_CRITERIA_MAP
 from common.constants.rule_catalog import principle_for
+from backend.app.core.reporting.wcag22_reference import WCAG22_A_AA_CRITERIA, principle_of
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ BOTTOM_THICK_BORDER = Border(
 # ── Column Widths ─────────────────────────────────────────────────────────────
 TC_COL_WIDTHS = [6, 14, 38, 26, 8, 16, 42, 45, 45, 45, 50, 14, 12, 30]
 DEF_COL_WIDTHS = [6, 14, 14, 38, 26, 8, 16, 42, 45, 45, 45, 50, 14, 12, 50, 30]
-WCAG_COL_WIDTHS = [6, 12, 32, 8, 16, 24, 55, 50]
+WCAG_COL_WIDTHS = [8, 46, 8, 14, 18, 90]
 SUMMARY_COL_WIDTHS = [28, 24, 20, 20, 24]
 
 
@@ -630,59 +631,34 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
     ws_wcag.freeze_panes = "A2"
 
     wcag_headers = [
-        "S.No",
-        "WCAG SC #",
-        "Criterion Title",
+        "Sl. No",
+        "Criteria",
         "Level",
-        "Principle",
-        "Guideline",
+        "WCAG Version",
+        "WCAG Principle",
         "Description",
-        "URL",
     ]
     ws_wcag.append(wcag_headers)
     _apply_header_style(ws_wcag, len(wcag_headers), LIGHT_BLUE_FILL)
 
-    sorted_wcag = sorted(WCAG_CRITERIA_MAP.items(), key=lambda x: [int(p) if p.isdigit() else p for p in x[0].split(".")])
-
-    for idx, (sc_code, details) in enumerate(sorted_wcag, start=1):
+    for idx, (sc_code, title, level, version, desc) in enumerate(WCAG22_A_AA_CRITERIA, start=1):
         row_num = idx + 1
-        p_name = principle_for(sc_code)
-        if isinstance(details, dict):
-            title = details.get("title", f"Criterion {sc_code}")
-            level = details.get("level", "A")
-            guideline = details.get("guideline", f"Guideline {sc_code.rsplit('.', 1)[0]}")
-            desc = details.get("description", f"WCAG 2.2 Success Criterion {sc_code}")
-            url = details.get("url", f"https://www.w3.org/WAI/WCAG22/Understanding/{sc_code.replace('.', '')}")
-        else:
-            title = str(details)
-            level = "A"
-            guideline = f"Guideline {sc_code.rsplit('.', 1)[0]}" if "." in sc_code else "WCAG 2.2"
-            desc = f"WCAG 2.2 Success Criterion {title}"
-            url = f"https://www.w3.org/WAI/WCAG22/Understanding/{sc_code.replace('.', '')}"
-
-        row_data = [
+        ws_wcag.append([
             idx,
-            sc_code,
-            title,
+            f"{sc_code} {title}",
             level,
-            p_name,
-            guideline,
+            version,
+            principle_of(sc_code),
             desc,
-            url
-        ]
-        ws_wcag.append(row_data)
+        ])
 
         for col_idx in range(1, len(wcag_headers) + 1):
             cell = ws_wcag.cell(row=row_num, column=col_idx)
             cell.border = THIN_BORDER
             cell.alignment = Alignment(vertical="top", wrap_text=True)
 
-            if col_idx in (1, 2, 4, 5):
+            if col_idx in (1, 3, 4, 5):
                 cell.alignment = Alignment(horizontal="center", vertical="top")
-
-            if col_idx == 8 and url.startswith("http"):
-                cell.hyperlink = url
-                cell.font = LINK_FONT
 
     _set_col_widths(ws_wcag, WCAG_COL_WIDTHS)
     ws_wcag.auto_filter.ref = ws_wcag.dimensions

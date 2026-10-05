@@ -119,7 +119,7 @@ def test_p5_excel_structure_and_formatting():
     assert ws_def.cell(row=2, column=13).value == "Open"
     assert ws_def.cell(row=2, column=14).value == "Critical"
 
-    # 5. Verify WCAG Criteria Reference sheet has 8 columns
+    # 5. Verify WCAG Criteria Reference sheet has 6 columns and all 55 Level A/AA criteria
     ws_wcag = wb["WCAG Criteria Reference"]
-    assert ws_wcag.max_column == 8
-    assert ws_wcag.max_row > 40
+    assert ws_wcag.max_column == 6
+    assert ws_wcag.max_row == 56
