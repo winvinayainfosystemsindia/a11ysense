@@ -17,6 +17,7 @@ import AuditDetailsPage from '../pages/audits/AuditDetailsPage';
 import UserManagementPage from '../pages/users/UserManagementPage';
 import CredentialsPage from '../pages/credentials/CredentialsPage';
 import ProjectsPage from '../pages/projects/ProjectsPage';
+import EstimationPage from '../pages/estimation/EstimationPage';
 
 // Create a root route with a custom 404 fallback component
 const rootRoute = createRootRoute({
@@ -152,6 +153,12 @@ const projectsRoute = createRoute({
   component: ProjectsPage,
 });
 
+const estimationRoute = createRoute({
+  getParentRoute: () => tenantLayout,
+  path: '/estimation',
+  component: EstimationPage,
+});
+
 // Splat catch-all route for any other unmatched URL paths
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -166,7 +173,7 @@ const routeTree = rootRoute.addChildren([
   maintenanceRoute,
   publicLayout.addChildren([loginRoute, registerRoute]),
   protectedLayout.addChildren([
-    tenantLayout.addChildren([dashboardRoute, agentsRoute, auditsRoute, auditDetailsRoute, usersRoute, credentialsRoute, projectsRoute])
+    tenantLayout.addChildren([dashboardRoute, agentsRoute, auditsRoute, auditDetailsRoute, usersRoute, credentialsRoute, projectsRoute, estimationRoute])
   ]),
   notFoundRoute
 ]);
