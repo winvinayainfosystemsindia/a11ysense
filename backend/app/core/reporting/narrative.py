@@ -65,27 +65,27 @@ def validate_testcase(d: Dict[str, Any]) -> List[str]:
     actual = str(d.get("actual_result", ""))
     steps = d.get("steps_to_reproduce")
 
-    # 1. Description word count
+    # 1. Description word count (prompt allows up to 70 words)
     words = desc.split()
-    if len(words) > 45:
-        problems.append(f"Description exceeds 45 words ({len(words)} words)")
+    if len(words) > 85:
+        problems.append(f"Description exceeds 85 words ({len(words)} words)")
 
-    # 2. Expected and Actual sentence count (2 to 4 sentences)
+    # 2. Expected and Actual sentence count (prompt asks for 3 to 5; allow 2 to 6)
     exp_sent = _count_sentences(expected)
-    if exp_sent < 2 or exp_sent > 4:
-        problems.append(f"Expected result must be 2 to 4 sentences (found {exp_sent})")
+    if exp_sent < 2 or exp_sent > 6:
+        problems.append(f"Expected result must be 3 to 5 sentences (found {exp_sent})")
 
     act_sent = _count_sentences(actual)
-    if act_sent < 2 or act_sent > 4:
-        problems.append(f"Actual result must be 2 to 4 sentences (found {act_sent})")
+    if act_sent < 2 or act_sent > 6:
+        problems.append(f"Actual result must be 3 to 5 sentences (found {act_sent})")
 
-    # 3. Steps to reproduce: list of 4 to 8 non-empty strings
+    # 3. Steps to reproduce: list of 4 to 12 non-empty strings (prompt asks for 6 to 10)
     if not isinstance(steps, list):
         problems.append("steps_to_reproduce must be a JSON list of strings")
     else:
         non_empty_steps = [s for s in steps if isinstance(s, str) and s.strip()]
-        if len(non_empty_steps) < 4 or len(non_empty_steps) > 8:
-            problems.append(f"steps_to_reproduce must contain 4 to 8 steps (found {len(non_empty_steps)})")
+        if len(non_empty_steps) < 4 or len(non_empty_steps) > 12:
+            problems.append(f"steps_to_reproduce must contain 6 to 10 steps (found {len(non_empty_steps)})")
 
     # 4. Check banned words across description, expected, actual, steps
     combined_text = f"{desc} {expected} {actual} "
