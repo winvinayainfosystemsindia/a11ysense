@@ -22,12 +22,19 @@ router = APIRouter(prefix="/api/estimation", tags=["Estimation"])
 
 
 class EstimationRequest(BaseModel):
-    url: str
+    url: Optional[str] = None
+    urls: Optional[List[str]] = None
     depth: int = Field(default=1, ge=1, le=3)
-    max_pages: int = Field(default=10, ge=1, le=25)
+    max_pages: int = Field(default=10, ge=1, le=50)
     hourly_rate: float = Field(default=DEFAULT_HOURLY_RATE, ge=0.0)
     platform_fee: float = Field(default=DEFAULT_PLATFORM_FEE_PER_PAGE, ge=0.0)
     profit_margin_pct: float = Field(default=DEFAULT_PROFIT_MARGIN_PCT, ge=0.0)
+
+
+class DiscoverRequest(BaseModel):
+    url: str
+    depth: int = Field(default=1, ge=1, le=3)
+    max_pages: int = Field(default=30, ge=1, le=100)
 
 
 class RecalculateRequest(BaseModel):
@@ -35,6 +42,120 @@ class RecalculateRequest(BaseModel):
     hourly_rate: float = Field(default=DEFAULT_HOURLY_RATE, ge=0.0)
     platform_fee: float = Field(default=DEFAULT_PLATFORM_FEE_PER_PAGE, ge=0.0)
     profit_margin_pct: float = Field(default=DEFAULT_PROFIT_MARGIN_PCT, ge=0.0)
+
+
+def _normalize_discovered_link(href: str, base_netloc: str) -> Optional[str]:
+    from urllib.parse import urlparse
+    clean = href.split('#')[0].split('?')[0].rstrip('/')
+    if not clean:
+        return None
+    parsed = urlparse(clean)
+    if parsed.scheme not in ('http', 'https'):
+        return None
+    if parsed.netloc.lower() != base_netloc:
+        return None
+    for ext in ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico', '.pdf', '.zip', '.mp4', '.css', '.js', '.woff'):
+        if clean.lower().endswith(ext):
+            return None
+    return clean
+
+
+async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: int = 30) -> List[Dict[str, Any]]:
+    from playwright.async_api import async_playwright
+    import asyncio
+    from urllib.parse import urlparse
+
+    target_url = base_url.strip()
+    if not target_url.startswith(("http://", "https://")):
+        target_url = "https://" + target_url
+
+    parsed_base = urlparse(target_url)
+    base_netloc = parsed_base.netloc.lower()
+
+    discovered = {}
+    clean_root = target_url.rstrip('/')
+    discovered[clean_root] = "/"
+    queue = [(clean_root, 0)]
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        context = await browser.new_context(
+            bypass_csp=True,
+            viewport={"width": 1280, "height": 800},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
+        page = await context.new_page()
+        page.set_default_timeout(30000)
+
+        while queue and len(discovered) < max_pages:
+            current_url, current_depth = queue.pop(0)
+            try:
+                await page.goto(current_url, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(1.0)
+                hrefs = await page.evaluate('''() => {
+                    return Array.from(document.querySelectorAll('a[href]'))
+                        .map(a => a.href)
+                        .filter(href => href && (href.startsWith('http') || href.startsWith('/')));
+                }''')
+
+                for h in hrefs:
+                    if h.startswith('/'):
+                        h = f"{parsed_base.scheme}://{parsed_base.netloc}{h}"
+                    norm = _normalize_discovered_link(h, base_netloc)
+                    if norm and norm not in discovered:
+                        path = urlparse(norm).path or "/"
+                        discovered[norm] = path
+                        if current_depth + 1 < depth and len(discovered) < max_pages:
+                            queue.append((norm, current_depth + 1))
+                        if len(discovered) >= max_pages:
+                            break
+            except Exception as e:
+                logger.warning(f"Error exploring {current_url}: {e}")
+
+        await browser.close()
+
+    result = []
+    for u, p in discovered.items():
+        result.append({"url": u, "path": p})
+    return result
+
+
+def _discover_urls_worker(base_url: str, depth: int, max_pages: int) -> List[Dict[str, Any]]:
+    import sys, asyncio
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(_async_discover_urls(base_url, depth, max_pages))
+        finally:
+            loop.close()
+    else:
+        return asyncio.run(_async_discover_urls(base_url, depth, max_pages))
+
+
+@router.post("/discover")
+async def discover_website_urls(request: DiscoverRequest):
+    """
+    Fast discovery of internal website URLs belonging to the base domain.
+    Returns list of discovered URLs so the user can select specific pages for audit estimation.
+    """
+    import asyncio
+    base_url = request.url.strip()
+    if not base_url.startswith(("http://", "https://")):
+        base_url = "https://" + base_url
+
+    try:
+        discovered = await asyncio.to_thread(_discover_urls_worker, base_url, request.depth, request.max_pages)
+    except Exception as e:
+        logger.error(f"URL discovery failed for {base_url}: {e}")
+        discovered = [{"url": base_url, "path": "/"}]
+
+    return {
+        "base_url": base_url,
+        "total_found": len(discovered),
+        "urls": discovered
+    }
 
 
 async def _async_inspect_pages(urls: List[str]) -> List[Dict[str, Any]]:
@@ -107,30 +228,33 @@ async def analyze_and_estimate(request: EstimationRequest):
     Crawls URL, inspects DOM complexity per page, and computes effort, costs, and quotes.
     """
     import asyncio
-    target_url = request.url.strip()
-    if not target_url.startswith(("http://", "https://")):
-        target_url = "https://" + target_url
+    discovered_urls = []
+    if request.urls and len(request.urls) > 0:
+        for u in request.urls:
+            raw = str(u).strip()
+            if raw:
+                if not raw.startswith(("http://", "https://")):
+                    raw = "https://" + raw
+                if raw not in discovered_urls:
+                    discovered_urls.append(raw)
+        logger.info(f"Direct/Selected URLs estimation requested for {len(discovered_urls)} page(s).")
+    elif request.url:
+        target_url = request.url.strip()
+        if not target_url.startswith(("http://", "https://")):
+            target_url = "https://" + target_url
 
-    logger.info(f"Starting estimation analysis for: {target_url} (depth={request.depth})")
+        logger.info(f"Starting estimation analysis for: {target_url} (depth={request.depth})")
+        discovered_urls = [target_url]
+        if request.depth > 1:
+            try:
+                discovered_items = await asyncio.to_thread(_discover_urls_worker, target_url, request.depth, request.max_pages)
+                discovered_urls = [d["url"] for d in discovered_items][:request.max_pages]
+            except Exception as e:
+                logger.warning(f"URL discovery fallback to root URL: {e}")
+                discovered_urls = [target_url]
 
-    # 1. Discover URLs
-    discovered_urls = [target_url]
-    if request.depth > 1:
-        try:
-            from common.schemas.crawl import CrawlRequest
-            from backend.app.core.crawler.crawler import WebCrawler
-            crawl_req = CrawlRequest(
-                url=target_url,
-                depth=request.depth,
-                max_pages=request.max_pages
-            )
-            crawler = WebCrawler(crawl_req)
-            crawl_res = await crawler.crawl()
-            if crawl_res.pages_discovered:
-                discovered_urls = crawl_res.pages_discovered[:request.max_pages]
-        except Exception as e:
-            logger.warning(f"Crawler encountered issue, defaulting to root URL: {e}")
-            discovered_urls = [target_url]
+    if not discovered_urls:
+        raise HTTPException(status_code=400, detail="Please enter or select at least one valid URL to estimate.")
 
     # 2. Inspect pages and analyze complexity in worker thread
     try:

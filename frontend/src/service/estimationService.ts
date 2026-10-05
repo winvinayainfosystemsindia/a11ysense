@@ -55,8 +55,26 @@ export interface EstimationResult {
   summary: EstimationSummary;
 }
 
-export interface AnalyzeParams {
+export interface DiscoveredUrlItem {
   url: string;
+  path: string;
+}
+
+export interface DiscoverResult {
+  base_url: string;
+  total_found: number;
+  urls: DiscoveredUrlItem[];
+}
+
+export interface DiscoverParams {
+  url: string;
+  depth?: number;
+  max_pages?: number;
+}
+
+export interface AnalyzeParams {
+  url?: string;
+  urls?: string[];
   depth?: number;
   max_pages?: number;
   hourly_rate?: number;
@@ -72,6 +90,11 @@ export interface RecalculateParams {
 }
 
 export const estimationService = {
+  discover: async (params: DiscoverParams): Promise<DiscoverResult> => {
+    const response = await api.post('/api/estimation/discover', params);
+    return response.data;
+  },
+
   analyze: async (params: AnalyzeParams): Promise<EstimationResult> => {
     const response = await api.post('/api/estimation/analyze', params);
     return response.data;
