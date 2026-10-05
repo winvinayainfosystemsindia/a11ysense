@@ -768,7 +768,7 @@ class AuditOrchestrator:
     async def compile_and_save_testcase_report(self, task_id: str, result, org_id: str = None, proj_id: str = None) -> list:
         base_page_url = str(result.url) if result.url else ""
         base_page_title = (result.metadata or {}).get("page_title", "Page") if hasattr(result, "metadata") and result.metadata else "Page"
-        pass_mode = os.getenv("REPORT_PASS_MODE", "per_criterion").lower()
+        pass_mode = os.getenv("REPORT_PASS_MODE", "per_element").lower()
 
         fail_testcases: list = []
         seen_fail_cases: dict = {}
@@ -932,29 +932,36 @@ class AuditOrchestrator:
                 if not p_nodes:
                     p_nodes = [{"html": "", "target": []}]
 
-                for nd in p_nodes:
+                for nd in p_nodes[:50]:  # cap PASS rows per rule to keep the report readable
                     nd_dict = nd if isinstance(nd, dict) else (
                         nd.model_dump(mode='json') if hasattr(nd, 'model_dump') else vars(nd)
                     )
                     raw_html = nd_dict.get("html", "") or ""
                     p_url = nd_dict.get("page_url") or (p.get('page_url') if isinstance(p, dict) else getattr(p, 'page_url', None)) or base_page_url
                     p_title = nd_dict.get("page_title") or (p.get('page_title') if isinstance(p, dict) else getattr(p, 'page_title', None)) or base_page_title
-                    sc_code = p_rule.get("sc_code") or "1.1.1"
-                    sc_info = SC_CATALOG.get(sc_code, {})
+                    sc_code = p_rule.get("sc_code") or ""
+                    sc_info = SC_CATALOG.get(sc_code, {}) if sc_code else {}
+                    p_criteria = p_rule.get("criteria", "N/A")
+                    try:
+                        from backend.app.core.skills.implementations.element_context import extract_context_from_html
+                        p_name = (extract_context_from_html(raw_html) or {}).get("clean_name") if raw_html else ""
+                    except Exception:
+                        p_name = ""
+                    p_label = f"the '{p_name}' element" if p_name else "this element"
 
                     pass_testcases.append({
                         "rule_id": p_id,
                         "testcase_name": p_rule.get("criteria", p_id),
-                        "description": sc_info.get("what_we_check", f"Verify element meets {p_rule.get('criteria', 'accessibility')} requirements."),
+                        "description": f"{p_label.capitalize()} was checked against {p_criteria}. " + sc_info.get("what_we_check", "The check makes sure people who use a screen reader or keyboard can use it."),
                         "criteria": p_rule.get("criteria", "N/A"),
                         "level": p_rule.get("level", "A"),
                         "principle": p_rule.get("principle", "N/A"),
                         "severity": "N/A",
-                        "expected_result": sc_info.get("expected", f"Elements on the page should comply with WCAG {p_rule.wcag_sc} {p_rule.wcag_sc_name}."),
-                        "actual_result": "Verification passed: Element meets accessibility requirements.",
-                        "steps_to_reproduce": "1. Open webpage.\n2. Locate element.\n3. Verify element complies with accessibility requirements.",
+                        "expected_result": sc_info.get("expected", f"{p_label.capitalize()} should meet {p_criteria} so that screen reader and keyboard users can use it."),
+                        "actual_result": f"When a screen reader or keyboard user reaches {p_label}, it already meets this requirement. No problem was found.",
+                        "steps_to_reproduce": f"1. Open {p_url} in Chrome or Edge.\n2. Start NVDA or JAWS.\n3. Turn on Browse (Reading) mode.\n4. Move through the page with the Down Arrow key until the screen reader reaches {p_label}.\n5. Listen to what the screen reader announces.\n6. Confirm the announcement matches what is visible and nothing important is missing.",
                         "remediation": "No remediation required. Element complies with accessibility requirements.",
-                        "business_impact": f"Ensures optimal user experience for {p_rule.wcag_sc_name}.",
+                        "business_impact": f"Keeps this part of the page usable for people who rely on assistive technology ({p_criteria}).",
                         "html_snippet": raw_html[:500] if raw_html else "N/A",
                         "status": "PASS",
                         "page_url": p_url,
@@ -972,12 +979,14 @@ class AuditOrchestrator:
                         "help_url": getattr(p, "helpUrl", getattr(p, "help_url", "")),
                         "refined_by": "rule_catalog"
                     })
-        else:
-            # per_criterion pass mode (default)
+        if True:
+            # Always build NOT_APPLICABLE rows; one PASS row per criterion only in per_criterion mode
             for scope_crit in A11YSENSE_AUDIT_SCOPE:
                 code = scope_crit["code"]
                 if code in failed_sc_codes:
                     continue  # Already represented by FAIL test case(s)
+                elif code in passed_sc_map and pass_mode == "per_element":
+                    continue  # Already represented by per-element PASS rows
                 elif code in passed_sc_map:
                     p_list = passed_sc_map[code]
                     elem_count = 0

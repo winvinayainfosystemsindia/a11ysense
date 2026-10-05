@@ -1,6 +1,5 @@
 import React from 'react';
 import { Box, Stack, Typography, Chip, Button } from '@mui/material';
-import LaunchIcon from '@mui/icons-material/Launch';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PauseIcon from '@mui/icons-material/Pause';
 import StopIcon from '@mui/icons-material/Stop';
@@ -30,7 +29,6 @@ export const AuditHeader: React.FC<AuditHeaderProps> = ({
   isRunning,
   isPaused,
   actionLoading,
-  handleOpenReport,
   handleExportReport,
   handlePause,
   handleResume,
@@ -67,22 +65,13 @@ export const AuditHeader: React.FC<AuditHeaderProps> = ({
         {(isCompleted || isStopped) && (
           <>
             <Button
-              variant="contained"
-              color="primary"
-              startIcon={<LaunchIcon />}
-              onClick={handleOpenReport}
-              sx={{ fontWeight: '700', borderRadius: '8px', px: 3, py: 1 }}
-            >
-              Allure Compliance Report
-            </Button>
-            <Button
               variant="outlined"
               color="primary"
               startIcon={<FileDownloadIcon />}
               onClick={handleExportReport}
               sx={{ fontWeight: '700', borderRadius: '8px', px: 3, py: 1 }}
             >
-              Export Report (ZIP)
+              Export Report (Excel)
             </Button>
           </>
         )}
