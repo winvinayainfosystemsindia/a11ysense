@@ -71,7 +71,7 @@ async def test_p4_multi_node_and_deduplication(tmp_path, monkeypatch):
     for nfc in non_fail_cases:
         assert nfc["defect_id"] == "N/A"
 
-    # Verify Manual Review criteria: all 24 present with Page URL == "All pages"
+    # Verify Manual Review criteria: all present with Page URL == "All pages"
     manual_cases = [tc for tc in testcases if tc["status"] == "MANUAL_REVIEW"]
     assert len(manual_cases) == len(A11YSENSE_MANUAL_REVIEW_CRITERIA)
     for mc in manual_cases:
@@ -79,7 +79,7 @@ async def test_p4_multi_node_and_deduplication(tmp_path, monkeypatch):
         assert mc["steps_to_reproduce"] != ""
         assert mc["steps_to_reproduce"] != "N/A"
 
-    # Verify total criteria coverage (26 scope + 24 manual review)
+    # Verify total criteria coverage (26 scope + 29 manual review = 55 total)
     # The 26 scope criteria should be partitioned across FAIL, PASS, NOT_APPLICABLE
     scope_codes = {sc["code"] for sc in A11YSENSE_AUDIT_SCOPE}
     covered_scope_codes = {

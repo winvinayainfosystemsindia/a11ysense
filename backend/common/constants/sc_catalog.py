@@ -614,4 +614,66 @@ SC_CATALOG = {
             "Check that your keyboard focus stays right where it was without jumping away."
         ],
     },
+    "2.4.11": {
+        "plain_name": "Focused controls not hidden by sticky banners",
+        "what_we_check": "When navigating with the keyboard, the focused button or field is not completely covered by floating headers, footers, or cookie banners.",
+        "expected": "Controls with keyboard focus should remain visible and not be completely hidden behind sticky headers, footers, or floating dialogs. A keyboard user moving through the page can always see the highlighted item they are interacting with.",
+        "manual_steps": [
+            "Open the page and use the Tab key to navigate through all interactive controls.",
+            "Observe the keyboard focus indicator as you move past sticky headers or footers.",
+            "Check whether any focused button or link gets completely hidden beneath a floating banner.",
+            "Confirm that the page scrolls sufficiently to keep the focused item in view."
+        ],
+    },
+    "2.5.7": {
+        "plain_name": "Dragging actions have single-click alternatives",
+        "what_we_check": "Actions that require dragging items, like reordering lists or moving sliders, can also be completed with simple clicks or taps.",
+        "expected": "Any function that requires dragging or sliding should provide a simple click or tap alternative, such as up and down arrow buttons. People who cannot hold and drag can tap buttons to move items easily.",
+        "manual_steps": [
+            "Locate drag-and-drop features, sortable lists, or range sliders on the page.",
+            "Check for alternative buttons, such as Move Up, Move Down, or clickable step buttons.",
+            "Use the alternative buttons to complete the action without dragging.",
+            "Confirm the changes save and update properly."
+        ],
+    },
+    "2.5.8": {
+        "plain_name": "Target size and spacing for buttons",
+        "what_we_check": "Clickable buttons, icons, and links have enough size or spacing so users do not tap the wrong item accidentally.",
+        "expected": "Clickable targets should be large enough or have sufficient spacing around them. A person with motor challenges or anyone using a touchscreen can tap buttons accurately without accidentally triggering adjacent links.",
+        "manual_steps": [
+            "Examine small icons, close buttons, and inline links across the page.",
+            "Check that adjacent clickable items have sufficient space between them.",
+            "Tap or click on each button to verify it responds without triggering neighboring controls."
+        ],
+    },
+    "3.2.6": {
+        "plain_name": "Consistent help and contact information",
+        "what_we_check": "Help features like chat, contact numbers, and FAQ links appear in the same relative position across all pages.",
+        "expected": "Self-help options, contact details, and support chat links should appear in the same location on every page where they are offered. Users who need assistance can find help quickly without searching across different page sections.",
+        "manual_steps": [
+            "Locate support links, chat widgets, or contact numbers on the home page.",
+            "Navigate to several subpages across the site.",
+            "Verify that the help links or chat widgets appear in the same location on every page."
+        ],
+    },
+    "3.3.7": {
+        "plain_name": "No redundant data entry",
+        "what_we_check": "Information entered in a multi-step process is auto-populated or available for selection rather than re-typed.",
+        "expected": "Information previously entered in the same session, such as a shipping address, should be auto-populated or selectable in subsequent steps. Users do not have to type the same details repeatedly across multi-step checkout or registration forms.",
+        "manual_steps": [
+            "Navigate through a multi-step checkout or application process.",
+            "Enter your address or contact information in the initial step.",
+            "Proceed to subsequent steps and verify the previously entered details are pre-filled or selectable without re-typing."
+        ],
+    },
+    "3.3.8": {
+        "plain_name": "Accessible login without memory puzzles",
+        "what_we_check": "Logging in does not require solving cognitive puzzles, memorizing complex patterns, or transcribing difficult text.",
+        "expected": "Authentication processes should support password managers, copy-paste, or one-click email links instead of requiring users to solve puzzles or transcribe text. People with cognitive impairments can sign in smoothly and securely.",
+        "manual_steps": [
+            "Navigate to the login or sign-in screen.",
+            "Verify that password fields allow pasting from password managers.",
+            "Check that alternative login methods like email magic links, biometric login, or standard credentials are available without cognitive puzzles."
+        ],
+    },
 }
