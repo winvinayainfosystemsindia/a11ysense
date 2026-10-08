@@ -1,4 +1,3 @@
-export * from './EstimationHeroHeader';
 export * from './ComplexityMatrixGuide';
 export * from './EstimationUrlInputCard';
 export * from './CommercialRateConfigurator';

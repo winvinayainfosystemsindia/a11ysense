@@ -2,12 +2,17 @@ import React, { useState } from 'react';
 import {
   Box,
   Typography,
+  Stack,
+  Button,
   Card,
   CircularProgress,
   Alert,
   useTheme,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import DescriptionIcon from '@mui/icons-material/Description';
+import PrintIcon from '@mui/icons-material/Print';
 
 import { estimationService } from '../../service/estimationService';
 import type {
@@ -17,7 +22,6 @@ import type {
 } from '../../service/estimationService';
 
 import {
-  EstimationHeroHeader,
   ComplexityMatrixGuide,
   EstimationUrlInputCard,
   CommercialRateConfigurator,
@@ -241,15 +245,68 @@ export const EstimationPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ maxWidth: 1440, mx: 'auto', p: { xs: 2, sm: 3, md: 4 } }}>
-      {/* ── Executive Hero Header ── */}
-      <EstimationHeroHeader
-        result={result}
-        exportingExcel={exportingExcel}
-        exportingPdf={exportingPdf}
-        onDownloadExcel={handleDownloadExcel}
-        onDownloadPdf={handleDownloadPdf}
-      />
+    <Box sx={{ pb: 4 }}>
+      {/* ── Page Header (Consistent with Audits and Projects pages) ── */}
+      <Stack
+        component="div"
+        direction={{ xs: 'column', sm: 'row' }}
+        sx={{
+          justifyContent: 'space-between',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          mb: 4,
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography
+            variant="h4"
+            sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.5px' }}
+          >
+            Estimation
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Evaluate page complexity across Simple, Medium, and Complex tiers to generate commercial audit proposals.
+          </Typography>
+        </Box>
+
+        {/* Action Buttons (Visible when results are ready) */}
+        {result && (
+          <Stack component="div" direction="row" spacing={1.5} sx={{ flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={
+                exportingExcel ? <CircularProgress size={16} color="inherit" /> : <FileDownloadIcon />
+              }
+              onClick={handleDownloadExcel}
+              disabled={exportingExcel}
+              sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 2 }}
+            >
+              {exportingExcel ? 'Exporting...' : 'Excel Quote'}
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={
+                exportingPdf ? <CircularProgress size={16} color="inherit" /> : <DescriptionIcon />
+              }
+              onClick={handleDownloadPdf}
+              disabled={exportingPdf}
+              sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 2 }}
+            >
+              {exportingPdf ? 'Exporting...' : 'PDF Proposal'}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<PrintIcon />}
+              onClick={() => window.print()}
+              sx={{ fontWeight: 700, textTransform: 'none', borderRadius: 2 }}
+            >
+              Print
+            </Button>
+          </Stack>
+        )}
+      </Stack>
 
       {/* ── Mode Selection & URL Input Card ── */}
       <EstimationUrlInputCard
@@ -278,7 +335,7 @@ export const EstimationPage: React.FC = () => {
 
       {/* Error Banner */}
       {error && (
-        <Alert severity="error" sx={{ mb: 4, borderRadius: 2.5 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
@@ -289,7 +346,7 @@ export const EstimationPage: React.FC = () => {
           sx={{
             mb: 4,
             p: 4,
-            borderRadius: 4,
+            borderRadius: 3,
             textAlign: 'center',
             bgcolor: alpha(theme.palette.background.default, 0.8),
             border: '1px solid',
