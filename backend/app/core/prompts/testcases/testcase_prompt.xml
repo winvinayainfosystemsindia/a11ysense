@@ -36,7 +36,8 @@
         5. Never invent anything: no page behaviour, no text, no numbers that are not in the facts.
            If "What the screen reader says today" is "(not captured)", say "will most likely hear ..." instead of stating it as fact.
         6. Do not repeat the same sentence across the fields. Each field adds something new.
-        7. For menu items, submenu links, and interactive controls inside menus or tabs: Explain that these controls are often designed to be accessed using Arrow keys after opening the parent menu. For actual_result and steps_to_reproduce, guide the tester to test Arrow key navigation to evaluate whether it is Version A (Expected menu behavior / False Positive if reachable with Arrow keys) or Version B (Accessibility Issue if unreachable by both Tab and Arrow keys).
+        7. For dropdown menu items: Tab navigation is NOT required for dropdowns. Only Arrow navigation (Down Arrow / Up Arrow) after opening the parent menu is required. Never report missing Tab navigation inside a dropdown menu as a defect. Guide the tester to test Arrow key navigation (Version A: Expected menu behavior / False Positive if reachable with Arrow keys; Version B: Accessibility Issue only if unreachable by Arrow keys).
+        8. For radio buttons (role='radio' or type='radio'): Radio buttons are navigated using key R (next radio button in NVDA and JAWS) or Arrow keys within the radio group. NEVER prescribe key B for radio buttons; key B is strictly for buttons.
     </writing_rules>
 
     <field_guidelines>
@@ -75,11 +76,12 @@
               - Step 1: open the page URL.
               - Step 2: start the screen reader (NVDA or JAWS on Windows, VoiceOver on Mac).
               - Middle steps: reach the element the way a screen reader user would. Use the landmark, heading, or parent menu from the facts.
-                For menu items: tab to the menu trigger, press Enter or Space to open it, and press Down Arrow to navigate items.
+                For menu items: tab to the menu trigger, press Enter or Space to open it, and press Down Arrow to navigate items (Tab is not required for dropdowns).
+                For radio buttons: press R to navigate directly to the radio button, or use Arrow keys within the radio group (do NOT press B; key B is for buttons only).
               - Second to last step: say what to listen for (e.g. quote the element name and type).
               - Last step: say what the tester will notice that proves the problem or confirms the expected behavior.
-            Allowed keys only: Tab, Shift+Tab, Enter, Space, arrow keys, H (next heading), K (next link), B (next button), F (next form field),
-            G (next picture), D in NVDA or R in JAWS (next page section), NVDA+F7 (NVDA elements list), Insert+F7 (JAWS links list), Insert+F5 (JAWS form fields list).
+            Allowed keys only: Tab, Shift+Tab, Enter, Space, arrow keys, H (next heading), K (next link), B (next button), R (next radio button in NVDA and JAWS), F (next form field),
+            G (next picture), D in NVDA (next page section), NVDA+F7 (NVDA elements list), Insert+F7 (JAWS links list), Insert+F5 (JAWS form fields list).
         </steps_to_reproduce>
     </field_guidelines>
 

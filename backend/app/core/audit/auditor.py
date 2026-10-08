@@ -21,7 +21,8 @@ from backend.app.core.reporting.narrative import (
 from backend.app.core.skills.implementations.element_context import (
     collect_element_context,
     format_element_context,
-    quick_key_for
+    quick_key_for,
+    extract_context_from_html
 )
 
 logger = logging.getLogger(__name__)
@@ -66,12 +67,20 @@ class AuditorAgent(BaseAgent):
                     snippets.append(html[:500])
             nodes_html = "\n".join(snippets)
 
-        element_label = node_ctx.get("visible_text") or node_ctx.get("accessible_name") or ""
+        parsed_html_ctx = extract_context_from_html(nodes_html) if nodes_html else {}
+        merged_ctx = {**parsed_html_ctx, **(node_ctx or {})}
+        if parsed_html_ctx.get("is_radio"):
+            merged_ctx["is_radio"] = True
+            merged_ctx["type_name"] = "radio button"
+        elif parsed_html_ctx.get("is_menu_item"):
+            merged_ctx["is_menu_item"] = True
+
+        element_label = merged_ctx.get("visible_text") or merged_ctx.get("accessible_name") or ""
         fb_ctx = {
             "visible_text": element_label,
-            "accessible_name": node_ctx.get("accessible_name", ""),
+            "accessible_name": merged_ctx.get("accessible_name", ""),
             "page_url": getattr(violation, "page_url", ""),
-            "screen_reader_quick_key": quick_key_for(node_ctx),
+            "screen_reader_quick_key": quick_key_for(merged_ctx),
             "element_html": nodes_html[:600]
         }
         fb = fallback_narrative(violation.id, fb_ctx)
@@ -371,8 +380,16 @@ class AuditorAgent(BaseAgent):
         sc_code = rule_facts["sc_code"] or "1.1.1"
         sc_name = rule_facts["criteria"].split(" ", 1)[1] if " " in rule_facts["criteria"] else rule_facts["criteria"]
 
-        formatted_ctx = format_element_context(node_ctx) if node_ctx else "(not captured)"
-        quick_key = quick_key_for(node_ctx) if node_ctx else "Tab"
+        parsed_html_ctx = extract_context_from_html(nodes_html) if nodes_html else {}
+        merged_ctx = {**parsed_html_ctx, **(node_ctx or {})}
+        if parsed_html_ctx.get("is_radio"):
+            merged_ctx["is_radio"] = True
+            merged_ctx["type_name"] = "radio button"
+        elif parsed_html_ctx.get("is_menu_item"):
+            merged_ctx["is_menu_item"] = True
+
+        formatted_ctx = format_element_context(merged_ctx) if merged_ctx else "(not captured)"
+        quick_key = quick_key_for(merged_ctx) if merged_ctx else "Tab"
 
         tc_context = {
             "rule_id": violation.id,

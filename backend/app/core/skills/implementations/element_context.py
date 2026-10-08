@@ -37,6 +37,9 @@ def extract_context_from_html(html_str: str) -> Dict[str, Any]:
     title_m = re.search(r'\btitle=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
     title = html_lib.unescape(title_m.group(1).strip()) if title_m else ""
 
+    type_m = re.search(r'\btype=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
+    input_type = type_m.group(1).lower().strip() if type_m else ""
+
     tab_m = re.search(r'\btabindex=["\']([^"\']+)["\']', snippet, re.IGNORECASE)
     tabindex = tab_m.group(1).strip() if tab_m else ""
 
@@ -50,13 +53,29 @@ def extract_context_from_html(html_str: str) -> Dict[str, Any]:
     # Determine best accessible name
     accessible_name = aria_label or alt or title or visible_text
 
+    is_radio = (
+        role in ("radio", "menuitemradio")
+        or "radio" in role
+        or (tag == "input" and input_type == "radio")
+    )
+
+    is_checkbox = (
+        role in ("checkbox", "menuitemcheckbox")
+        or "checkbox" in role
+        or (tag == "input" and input_type == "checkbox")
+    )
+
     is_menu_item = (
         role == "menuitem"
         or "menuitem" in role
         or (tag == "a" and tabindex == "-1" and ("menu" in href or "nav" in snippet.lower()))
     )
 
-    if is_menu_item:
+    if is_radio:
+        type_name = "radio button"
+    elif is_checkbox:
+        type_name = "checkbox"
+    elif is_menu_item:
         type_name = "link in the menu" if (tag == "a" or href) else "menu item"
     elif role == "button" or tag == "button":
         type_name = "button"
@@ -74,8 +93,8 @@ def extract_context_from_html(html_str: str) -> Dict[str, Any]:
         type_name = "interactive control"
 
     raw_name = visible_text or accessible_name or ""
-    # Clean up trailing ", link" or ", button" from screen-reader style labels (e.g. "F&O, link" -> "F&O")
-    clean_name = re.sub(r',\s*(link|button|menuitem|dropdown)\s*$', '', raw_name, flags=re.IGNORECASE).strip()
+    # Clean up trailing ", link", ", button", ", radio button" etc. from screen-reader style labels
+    clean_name = re.sub(r',\s*(link|button|menuitem|dropdown|radio button|radio|checkbox)\s*$', '', raw_name, flags=re.IGNORECASE).strip()
 
     if clean_name:
         friendly_label = f"the '{clean_name}' {type_name}"
@@ -85,6 +104,9 @@ def extract_context_from_html(html_str: str) -> Dict[str, Any]:
     return {
         "tag": tag,
         "role": role,
+        "input_type": input_type,
+        "is_radio": is_radio,
+        "is_checkbox": is_checkbox,
         "aria_label": aria_label,
         "visible_text": visible_text,
         "accessible_name": accessible_name,
@@ -100,12 +122,14 @@ def extract_context_from_html(html_str: str) -> Dict[str, Any]:
 def quick_key_for(ctx: Optional[Dict[str, Any]]) -> str:
     """
     Returns the screen reader single-letter navigation quick key for an element.
+    radio button -> R (both NVDA and JAWS navigate next radio button with R)
+    checkbox -> X
     button -> B
     link -> K
     input/select/textarea -> F
     img -> G
     heading -> H
-    landmark -> D in NVDA / R in JAWS
+    landmark -> D in NVDA / landmark navigation in JAWS
     table -> T
     list -> L
     otherwise -> Tab
@@ -115,19 +139,36 @@ def quick_key_for(ctx: Optional[Dict[str, Any]]) -> str:
 
     tag = str(ctx.get("tag", "")).lower()
     role = str(ctx.get("role", "")).lower()
+    input_type = str(ctx.get("input_type", ctx.get("type", ""))).lower()
+    is_radio = (
+        ctx.get("is_radio")
+        or role in ("radio", "menuitemradio")
+        or "radio" in role
+        or (tag == "input" and input_type == "radio")
+    )
+    is_checkbox = (
+        ctx.get("is_checkbox")
+        or role in ("checkbox", "menuitemcheckbox")
+        or "checkbox" in role
+        or (tag == "input" and input_type == "checkbox")
+    )
 
-    if role == "button" or tag == "button":
+    if is_radio:
+        return "R"
+    elif is_checkbox:
+        return "X"
+    elif role == "button" or tag == "button":
         return "B"
     elif role == "link" or tag == "a":
         return "K"
-    elif tag in ("input", "select", "textarea") or role in ("textbox", "combobox", "checkbox", "radio", "listbox"):
+    elif tag in ("input", "select", "textarea") or role in ("textbox", "combobox", "listbox"):
         return "F"
     elif tag == "img" or role == "img":
         return "G"
     elif tag in ("h1", "h2", "h3", "h4", "h5", "h6") or role == "heading":
         return "H"
     elif role in ("banner", "main", "navigation", "contentinfo", "complementary", "region"):
-        return "D in NVDA / R in JAWS"
+        return "D in NVDA / landmark in JAWS"
     elif tag == "table" or role in ("table", "grid"):
         return "T"
     elif tag in ("ul", "ol") or role == "list":

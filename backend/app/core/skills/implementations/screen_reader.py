@@ -523,7 +523,14 @@ class ScreenReaderSkill:
             # Validation 4: Focusable Tabindex on Custom ARIA Roles
             is_custom_role = item.get("isAriaRole")
             tabindex = item.get("tabindex")
-            if is_custom_role and tagName not in ["button", "a", "input", "select", "textarea"] and (tabindex is None or int(tabindex) < 0):
+            roving_roles = {
+                "menuitem", "menuitemcheckbox", "menuitemradio",
+                "tab", "radio", "option", "treeitem", "gridcell", "row", "separator"
+            }
+            if role in roving_roles or (item.get("isDropdown") and str(role).startswith("menu")):
+                # Tab navigation is not required for dropdown items or roving tabindex controls
+                pass
+            elif is_custom_role and tagName not in ["button", "a", "input", "select", "textarea"] and (tabindex is None or int(tabindex) < 0):
                 violations.append(Violation(
                     id="screen-reader-aria-role-missing-handlers",
                     impact="serious",

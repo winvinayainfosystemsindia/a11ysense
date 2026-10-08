@@ -80,3 +80,72 @@ def test_no_medium_severity_in_catalog():
         sev = data.get("default_severity")
         assert sev in ("Critical", "Serious", "Moderate", "Minor"), f"Rule {rule_id} has invalid severity: {sev}"
         assert sev != "Medium", f"Rule {rule_id} has severity 'Medium'!"
+
+
+def test_radio_button_element_context_and_quick_key():
+    from backend.app.core.skills.implementations.element_context import (
+        extract_context_from_html,
+        quick_key_for
+    )
+
+    # 1. Button element styled with role="radio" (e.g. Stocks, Mutual Funds, Months)
+    stocks_snippet = '<button role="radio" aria-checked="true" class="tab-pill">Stocks</button>'
+    ctx_stocks = extract_context_from_html(stocks_snippet)
+    assert ctx_stocks["is_radio"] is True
+    assert ctx_stocks["type_name"] == "radio button"
+    assert "Stocks" in ctx_stocks["clean_name"]
+    assert quick_key_for(ctx_stocks) == "R"
+    assert quick_key_for(ctx_stocks) != "B"
+
+    # 2. Native radio input
+    input_snippet = '<input type="radio" id="mutual-funds" name="category" value="mf">'
+    ctx_mf = extract_context_from_html(input_snippet)
+    assert ctx_mf["is_radio"] is True
+    assert ctx_mf["type_name"] == "radio button"
+    assert quick_key_for(ctx_mf) == "R"
+    assert quick_key_for(ctx_mf) != "B"
+
+    # 3. Div with role="radio" (e.g. Months duration filter)
+    months_snippet = '<div role="radio" aria-checked="false">Months</div>'
+    ctx_months = extract_context_from_html(months_snippet)
+    assert ctx_months["is_radio"] is True
+    assert ctx_months["type_name"] == "radio button"
+    assert quick_key_for(ctx_months) == "R"
+    assert quick_key_for(ctx_months) != "B"
+
+
+def test_radio_button_narrative_uses_key_r_not_b():
+    from backend.app.core.reporting.narrative import fallback_narrative
+
+    fb = fallback_narrative(
+        "aria-required-parent",
+        {
+            "element_html": '<button role="radio" aria-checked="false">Stocks</button>',
+            "visible_text": "Stocks",
+            "page_url": "https://example.com"
+        }
+    )
+    steps_joined = " ".join(fb["steps_to_reproduce"])
+    # Must instruct using key R, NOT key B
+    assert "Press R" in steps_joined
+    assert "Press B" not in steps_joined
+    assert "radio button" in fb["description"].lower() or "radio" in fb["description"].lower()
+
+
+def test_dropdown_menuitem_narrative_tab_not_required():
+    from backend.app.core.reporting.narrative import fallback_narrative
+
+    fb = fallback_narrative(
+        "keyboard-non-focusable-interactive",
+        {
+            "element_html": '<a role="menuitem" tabindex="-1" href="/stocks">Stocks</a>',
+            "visible_text": "Stocks",
+            "page_url": "https://example.com",
+            "parent_menu": "Trade"
+        }
+    )
+    # Verifies tab navigation is explicitly noted as not required for dropdowns
+    assert "Tab navigation is not required for dropdowns" in fb["remarks"] or "Tab navigation is not required for dropdowns" in fb["description"] or "Tab navigation is not required" in fb["actual_result"]
+    steps_joined = " ".join(fb["steps_to_reproduce"])
+    assert "Down Arrow" in steps_joined
+

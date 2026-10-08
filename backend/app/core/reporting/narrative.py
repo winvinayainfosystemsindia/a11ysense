@@ -245,7 +245,16 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
         or ""
     )
     clean_name = parsed_html_ctx.get("clean_name") or visible_text or ""
-    clean_name = re.sub(r',\s*(link|button|menuitem|dropdown)\s*$', '', clean_name, flags=re.IGNORECASE).strip()
+    clean_name = re.sub(r',\s*(link|button|menuitem|dropdown|radio button|radio|checkbox)\s*$', '', clean_name, flags=re.IGNORECASE).strip()
+
+    is_radio = (
+        parsed_html_ctx.get("is_radio", False)
+        or element_ctx.get("role") in ("radio", "menuitemradio")
+        or "radio" in str(element_ctx.get("role", "")).lower()
+        or "radio" in str(parsed_html_ctx.get("type_name", "")).lower()
+        or (element_ctx.get("tag") == "input" and element_ctx.get("input_type") == "radio")
+        or (parsed_html_ctx.get("tag") == "input" and parsed_html_ctx.get("input_type") == "radio")
+    )
 
     is_menu_item = (
         parsed_html_ctx.get("is_menu_item", False)
@@ -259,7 +268,13 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
     plain_issue = rule_info.get("plain_issue", "does not meet accessibility requirements")
 
     # Friendly element label (non-technical)
-    type_name = parsed_html_ctx.get("type_name") or ("link in the menu" if is_menu_item else "element")
+    if is_radio:
+        type_name = "radio button"
+    elif is_menu_item:
+        type_name = "link in the menu"
+    else:
+        type_name = parsed_html_ctx.get("type_name") or "element"
+
     if clean_name:
         element_label = f"the '{clean_name}' {type_name}"
     else:
@@ -270,7 +285,7 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
         menu_desc = f"in the '{parent_menu}' menu" if parent_menu else "in the main menu"
         item_quote = f"'{clean_name}'" if clean_name else "menu"
         description = (
-            f"The {item_quote} link {menu_desc} cannot be reached using the Tab key alone. "
+            f"The {item_quote} link {menu_desc} cannot be reached using the Tab key alone, but Tab navigation is not required for dropdowns. "
             f"Users must test whether opening the menu and navigating with Arrow keys allows reaching and activating this link."
         )
         expected_result = (
@@ -278,7 +293,7 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
             f"The screen reader should announce '{clean_name or 'item'}, link', and pressing Enter should open the page."
         )
         actual_result = (
-            f"The {item_quote} link {menu_desc} cannot be reached using the Tab key. "
+            f"The {item_quote} link {menu_desc} cannot be reached using the Tab key alone (Tab navigation is not required for dropdowns). "
             f"Check whether pressing Down Arrow in the open menu announces '{clean_name or 'item'}, link' (Version A: Expected menu behavior / False Positive) "
             f"or if the link is completely skipped (Version B: Accessibility Issue)."
         )
@@ -289,12 +304,12 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
             "Press Enter or Space to open the menu.",
             "Press the Down Arrow key to move through the menu items.",
             f"Listen for '{clean_name or 'item'}, link'.",
-            f"Check whether you can reach the {clean_name or 'item'} link: If you can reach it using the Arrow keys -> Version A / False Positive. If the link is skipped completely -> Version B / Accessibility Issue."
+            f"Check whether you can reach the {clean_name or 'item'} link: If you can reach it using the Arrow keys -> Version A / False Positive (Tab navigation is not required for dropdowns). If the link is skipped completely -> Version B / Accessibility Issue."
         ]
         friendly_name = f"'{clean_name}' menu link navigation check"[:60]
         business_impact = f"If unreachable by keyboard, users who cannot use a mouse cannot access the {clean_name or 'item'} page from the menu, creating an accessibility barrier."
-        false_pos = "Menu items are designed to be accessed using Arrow keys. Therefore, skipping them with the Tab key is expected behavior if reachable with Arrow keys."
-        remarks = "Menu items are designed to be accessed using Arrow keys. Therefore, skipping them with the Tab key is expected behavior if reachable with Arrow keys."
+        false_pos = "Menu items are designed to be accessed using Arrow keys. Tab navigation is not required for dropdowns. Skipping them with the Tab key is expected behavior if reachable with Arrow keys."
+        remarks = "Menu items are designed to be accessed using Arrow keys. Tab navigation is not required for dropdowns. Skipping them with the Tab key is expected behavior if reachable with Arrow keys."
         fix_steps = [
             f"Search the project for '{clean_name}' or href '{parsed_html_ctx.get('href', '')}' to locate the menu item.",
             "Confirm whether the menu follows the arrow key navigation pattern (roving tabindex).",
@@ -307,8 +322,42 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
             "Press Enter and verify that the page opens without needing a mouse."
         ]
 
+    # ── CASE 1.5: Radio Button Missing Label or State ─────────────────────────
+    elif is_radio or (rule_info.get("sc_code") in ("4.1.2", "1.3.1") and is_radio):
+        description = f"{element_label.capitalize()} lacks a clear accessible label or selection state. People using screen readers cannot identify what option this radio button controls."
+        expected_result = (
+            f"{element_label.capitalize()} should have a clear label describing its option and announce whether it is selected or unselected. "
+            f"Screen reader users navigate directly to it using the R key (or Arrow keys within the radio group) and press Space to select it."
+        )
+        actual_result = (
+            f"{element_label.capitalize()} announces without a clear name or state. "
+            f"Users navigating with the R key or Arrow keys cannot tell what option this radio button selects."
+        )
+        steps = [
+            f"Open {page_url} in your browser.",
+            "Start NVDA or JAWS screen reader.",
+            f"Press R to navigate directly to {element_label}, or use the Arrow keys within the radio group.",
+            "Listen to the announcement as focus lands on the radio button.",
+            "Notice if the screen reader announces only an unlabelled control or fails to indicate the selection state."
+        ]
+        friendly_name = f"{element_label.capitalize()} missing accessible name"[:60]
+        business_impact = "Blind users cannot determine what this radio button option selects, risking submitting incorrect choices or failing to filter content."
+        false_pos = ""
+        remarks = "Radio buttons are navigated using key R in screen readers or Arrow keys within the radio group, not key B."
+        fix_steps = [
+            f"Locate {element_label} in the component template.",
+            "Ensure the radio button has a clear label using a linked <label>, aria-label, or visible text.",
+            "Group related radio options inside a <fieldset> with <legend> or a container with role='radiogroup'.",
+            "Ensure the selection state (checked or aria-checked) is programmatically exposed."
+        ]
+        verify_steps = [
+            "With NVDA or JAWS running, press R to navigate directly to the radio button, or use Arrow keys within the group.",
+            "Confirm the screen reader clearly announces the option name and selection state ('checked' or 'not checked').",
+            "Press Space or Arrow keys to change selection and verify the state updates correctly."
+        ]
+
     # ── CASE 2: Button Missing Label ──────────────────────────────────────────
-    elif rule_id == "button-name" or (rule_info.get("sc_code") == "4.1.2" and "button" in element_label):
+    elif (rule_id == "button-name" or (rule_info.get("sc_code") == "4.1.2" and "button" in element_label)) and not is_radio:
         description = f"{element_label.capitalize()} has no label. People who use screen readers cannot tell what action this control will perform."
         expected_result = f"{element_label.capitalize()} should have a clear label describing what it does, such as 'Search' or 'Submit'. A screen reader announces this name clearly, enabling confident self-service."
         actual_result = f"{element_label.capitalize()} announces only 'button' with no name. Users cannot tell what the button does without guessing or pressing it."

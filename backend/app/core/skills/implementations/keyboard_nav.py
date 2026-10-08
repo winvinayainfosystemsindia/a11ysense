@@ -28,6 +28,19 @@ class KeyboardNavSkill:
                     'div[role="button"], span[role="button"], div[role="link"], span[role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="radio"]'
                 ));
                 return candidates.filter(el => {
+                    const role = (el.getAttribute("role") || "").toLowerCase();
+                    
+                    // Dropdown menu items operate via Arrow keys; Tab navigation is not required for dropdowns
+                    const isMenuItem = role.startsWith("menuitem") || 
+                                       Boolean(el.closest('[role="menu"], [role="menubar"], .menu, .dropdown, .dropdown-menu, nav [aria-expanded] + *'));
+                    if (isMenuItem) return false;
+                    
+                    // Tabs in a tablist use roving tabindex (Arrow keys)
+                    if (role === "tab" && Boolean(el.closest('[role="tablist"], .tabs, .tablist'))) return false;
+                    
+                    // Radio buttons in a radiogroup use roving tabindex (Arrow keys / R key)
+                    if (role === "radio" && Boolean(el.closest('[role="radiogroup"], .radiogroup, form, fieldset'))) return false;
+
                     const tabindex = el.getAttribute("tabindex");
                     // If no tabindex is set, or if it is negative (excluded from tab flow)
                     const isExcluded = tabindex === null || parseInt(tabindex) < 0;

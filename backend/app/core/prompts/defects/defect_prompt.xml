@@ -33,7 +33,9 @@
         3. If a control has visible text, the accessible name must contain that exact visible text. Prefer removing a conflicting aria-label,
            or start the aria-label with the visible text.
         4. Do NOT tell the developer to delete tabindex="-1" on items inside a menu, tab list or radio group that is moved with arrow keys
-           (the "roving tabindex" pattern). Tell them to confirm that exactly one item has tabindex="0" and that the arrow keys move between items.
+           (the "roving tabindex" pattern). Tab navigation is NOT required for dropdown menu items (arrow navigation is sufficient).
+           Radio buttons must be navigated using the quick key 'R' or Arrow keys, NEVER key 'B' (which is for buttons only). Tell them to confirm that
+           exactly one item has tabindex="0" (or selection) and that the arrow keys move between items.
         5. Do NOT invent file names, component names or text. Tell the developer how to find the code: search the project for the visible text, the id or a distinctive class from the snippet.
         6. If the fix needs words written by a person (alt text, page title, label), give a sensible example based on the facts and say the content team should confirm the wording.
         7. If the facts show the element ALREADY satisfies the check (for example it already has the attribute the scanner says is missing), or the scanner rule does not
