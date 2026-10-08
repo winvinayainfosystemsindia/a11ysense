@@ -9,21 +9,23 @@ import {
   Button,
   Chip,
   Divider,
-  Collapse,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
   useTheme,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SpeedIcon from '@mui/icons-material/Speed';
 import DynamicFormIcon from '@mui/icons-material/DynamicForm';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 interface ComplexityMatrixGuideProps {
-  expanded: boolean;
-  onToggle: () => void;
+  open: boolean;
+  onClose: () => void;
 }
 
 interface TierFeature {
@@ -38,7 +40,6 @@ interface TierCardData {
   subtitle: string;
   hours: string;
   unit: string;
-  effortCaption: string;
   targetPages: string;
   recommended?: boolean;
   colorType: 'success' | 'warning' | 'error';
@@ -48,8 +49,8 @@ interface TierCardData {
 }
 
 export const ComplexityMatrixGuide: React.FC<ComplexityMatrixGuideProps> = ({
-  expanded,
-  onToggle,
+  open,
+  onClose,
 }) => {
   const theme = useTheme();
 
@@ -61,13 +62,12 @@ export const ComplexityMatrixGuide: React.FC<ComplexityMatrixGuideProps> = ({
       subtitle: 'Static Informational Content',
       hours: '1.0',
       unit: 'hr / page',
-      effortCaption: 'Manual Assistive Tech Verification',
       targetPages: 'Blogs, About Us, Privacy Policies, FAQs, Landing Pages',
       colorType: 'success',
-      icon: <SpeedIcon sx={{ fontSize: 24 }} />,
+      icon: <SpeedIcon sx={{ fontSize: 20 }} />,
       footerNote: 'Quick sweep · ~1 Story Point',
       features: [
-        { label: 'DOM Density', detail: '≤ 50 total visible elements (links & buttons ≤ 60)' },
+        { label: 'DOM Density', detail: '≤ 50 visible elements (links/buttons ≤ 60)' },
         { label: 'Interactivity', detail: 'Linear read top-to-bottom with no state mutations' },
         { label: 'Semantic Structure', detail: 'Native HTML headings (H1–H6), paragraphs & lists' },
         { label: 'Controls & Media', detail: 'Plain push buttons, informative/decorative images' },
@@ -81,16 +81,15 @@ export const ComplexityMatrixGuide: React.FC<ComplexityMatrixGuideProps> = ({
       subtitle: 'Standard Interactive Controls',
       hours: '2.5',
       unit: 'hrs / page',
-      effortCaption: 'Manual Assistive Tech Verification',
       targetPages: 'Contact Forms, Account Login, Search Results, Service Catalogs',
       recommended: true,
       colorType: 'warning',
-      icon: <DynamicFormIcon sx={{ fontSize: 24 }} />,
+      icon: <DynamicFormIcon sx={{ fontSize: 20 }} />,
       footerNote: 'Standard verification · ~3 Story Points',
       features: [
         { label: 'DOM Density', detail: '51 to 90 visible elements (or navigation links > 60)' },
         { label: 'Form Controls', detail: 'Standard inputs, checkboxes, radios, select dropdowns' },
-        { label: 'Expanding Navigation', detail: 'Accordions, collapsible menus, and tab interfaces' },
+        { label: 'Expanding Menus', detail: 'Accordions, collapsible menus, and tab interfaces' },
         { label: 'Tables & Media', detail: 'Standard data table with headers, single audio/video embed' },
         { label: 'Audit Scope', detail: 'Full keyboard trap check + NVDA / VoiceOver testing' },
       ],
@@ -102,10 +101,9 @@ export const ComplexityMatrixGuide: React.FC<ComplexityMatrixGuideProps> = ({
       subtitle: 'Dynamic State & Custom Widgets',
       hours: '5.5',
       unit: 'hrs / page',
-      effortCaption: 'Manual Assistive Tech Verification',
       targetPages: 'Checkout Flows, Analytics Dashboards, Portals, Multi-Step Wizards',
       colorType: 'error',
-      icon: <AutoAwesomeIcon sx={{ fontSize: 24 }} />,
+      icon: <AutoAwesomeIcon sx={{ fontSize: 20 }} />,
       footerNote: 'Deep assistive tech audit · ~5–8 Story Points',
       features: [
         { label: 'DOM Density', detail: '> 90 elements or any single complex trigger present' },
@@ -125,277 +123,308 @@ export const ComplexityMatrixGuide: React.FC<ComplexityMatrixGuideProps> = ({
           main: theme.palette.success.main,
           dark: theme.palette.success.dark,
           light: theme.palette.success.light,
-          bg: alpha(theme.palette.success.main, 0.05),
+          bg: alpha(theme.palette.success.main, 0.06),
           border: alpha(theme.palette.success.main, 0.3),
-          chipBg: alpha(theme.palette.success.main, 0.12),
+          chipBg: alpha(theme.palette.success.main, 0.1),
         };
       case 'warning':
         return {
           main: theme.palette.warning.main,
           dark: theme.palette.warning.dark,
           light: theme.palette.warning.light,
-          bg: alpha(theme.palette.warning.main, 0.05),
+          bg: alpha(theme.palette.warning.main, 0.06),
           border: alpha(theme.palette.warning.main, 0.35),
-          chipBg: alpha(theme.palette.warning.main, 0.12),
+          chipBg: alpha(theme.palette.warning.main, 0.1),
         };
       case 'error':
         return {
           main: theme.palette.error.main,
           dark: theme.palette.error.dark,
           light: theme.palette.error.light,
-          bg: alpha(theme.palette.error.main, 0.05),
+          bg: alpha(theme.palette.error.main, 0.06),
           border: alpha(theme.palette.error.main, 0.3),
-          chipBg: alpha(theme.palette.error.main, 0.12),
+          chipBg: alpha(theme.palette.error.main, 0.1),
         };
     }
   };
 
   return (
-    <Box sx={{ mb: 4 }}>
-      {/* Collapsible Trigger Button */}
-      <Button
-        variant="text"
-        color="inherit"
-        onClick={onToggle}
-        startIcon={<InfoOutlinedIcon color="primary" />}
-        endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        sx={{
-          fontWeight: 700,
-          textTransform: 'none',
-          px: 0,
-          mb: 1.5,
-          color: theme.palette.text.primary,
-          '&:hover': {
-            bgcolor: 'transparent',
-            color: theme.palette.primary.main,
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      slotProps={{
+        paper: {
+          sx: {
+            borderRadius: 3,
+            p: 0,
+            overflow: 'hidden',
+            bgcolor: theme.palette.background.paper,
+            boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.18)',
           },
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          px: { xs: 2.5, sm: 3 },
+          pt: 2.5,
+          pb: 1.5,
+          borderBottom: '1px solid',
+          borderColor: theme.palette.divider,
         }}
       >
-        {expanded
-          ? 'Hide Complexity Classification Guide'
-          : 'View Complexity Classification Guide (Simple, Medium, Complex)'}
-      </Button>
+        <Stack
+          component="div"
+          direction="row"
+          sx={{ justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: theme.palette.text.primary, lineHeight: 1.2 }}>
+              Complexity Classification Standards
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Overview of DOM complexity thresholds, interactive behaviors, and manual audit verification times.
+            </Typography>
+          </Box>
+          <IconButton
+            onClick={onClose}
+            size="small"
+            sx={{
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary', bgcolor: alpha(theme.palette.text.primary, 0.06) },
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+      </DialogTitle>
 
-      <Collapse in={expanded}>
-        <Box sx={{ mt: 1 }}>
-          <Grid container spacing={3} component="div" sx={{ alignItems: 'stretch' }}>
-            {tiers.map((tier) => {
-              const pal = getColorPalette(tier.colorType);
+      <DialogContent sx={{ px: { xs: 2, sm: 3 }, py: 2 }}>
+        <Grid container spacing={2} component="div" sx={{ alignItems: 'stretch' }}>
+          {tiers.map((tier) => {
+            const pal = getColorPalette(tier.colorType);
 
-              return (
-                <Grid size={{ xs: 12, md: 4 }} key={tier.id} component="div">
-                  <Card
-                    sx={{
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      borderRadius: 4,
-                      border: '2px solid',
-                      borderColor: tier.recommended ? pal.main : pal.border,
-                      bgcolor: theme.palette.background.paper,
-                      boxShadow: tier.recommended
-                        ? `0 12px 32px -4px ${alpha(pal.main, 0.25)}`
-                        : `0 4px 20px -2px ${alpha(theme.palette.text.primary, 0.05)}`,
-                      position: 'relative',
-                      overflow: 'hidden',
-                      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                      '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: `0 16px 36px -4px ${alpha(pal.main, 0.3)}`,
-                      },
-                    }}
-                  >
-                    {/* Top colored accent bar */}
-                    <Box sx={{ height: 6, bgcolor: pal.main, width: '100%' }} />
+            return (
+              <Grid size={{ xs: 12, md: 4 }} key={tier.id} component="div">
+                <Card
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderRadius: 2.5,
+                    border: '1.5px solid',
+                    borderColor: tier.recommended ? pal.main : pal.border,
+                    bgcolor: theme.palette.background.paper,
+                    boxShadow: tier.recommended
+                      ? `0 6px 18px -2px ${alpha(pal.main, 0.2)}`
+                      : 'none',
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Sleek top colored accent bar */}
+                  <Box sx={{ height: 3.5, bgcolor: pal.main, width: '100%' }} />
 
-                    <CardContent sx={{ p: { xs: 2.5, sm: 3 }, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                      {/* Header Badge & Icon */}
-                      <Stack
-                        component="div"
-                        direction="row"
-                        sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 2 }}
-                      >
-                        <Chip
-                          label={tier.badge}
-                          size="small"
-                          sx={{
-                            bgcolor: pal.chipBg,
-                            color: pal.dark,
-                            fontWeight: 800,
-                            fontSize: '0.72rem',
-                            letterSpacing: '0.5px',
-                            border: `1px solid ${pal.border}`,
-                          }}
-                        />
-                        <Box sx={{ color: pal.main, display: 'flex' }}>
-                          {tier.icon}
-                        </Box>
-                      </Stack>
-
-                      {/* Tier Name & Subtitle */}
-                      <Typography
-                        variant="h5"
+                  <CardContent sx={{ p: 2, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                    {/* Header Badge & Icon */}
+                    <Stack
+                      component="div"
+                      direction="row"
+                      sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 1 }}
+                    >
+                      <Chip
+                        label={tier.badge}
+                        size="small"
                         sx={{
+                          bgcolor: pal.chipBg,
+                          color: pal.dark,
                           fontWeight: 800,
-                          color: theme.palette.text.primary,
-                          letterSpacing: '-0.01em',
-                          mb: 0.5,
-                        }}
-                      >
-                        {tier.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, minHeight: 40 }}>
-                        {tier.subtitle}
-                      </Typography>
-
-                      {/* Effort Hours Callout */}
-                      <Box
-                        sx={{
-                          p: 2,
-                          borderRadius: 2.5,
-                          bgcolor: pal.bg,
+                          fontSize: '0.68rem',
+                          height: 22,
+                          letterSpacing: '0.4px',
                           border: `1px solid ${pal.border}`,
-                          mb: 2.5,
                         }}
-                      >
-                        <Stack component="div" direction="row" sx={{ alignItems: 'baseline', gap: 1 }}>
-                          <Typography
-                            variant="h3"
-                            sx={{
-                              fontWeight: 800,
-                              color: pal.dark,
-                              letterSpacing: '-0.03em',
-                              lineHeight: 1,
-                            }}
-                          >
-                            {tier.hours}
-                          </Typography>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: pal.dark }}>
-                            {tier.unit}
-                          </Typography>
-                        </Stack>
-                        <Typography
-                          variant="caption"
-                          sx={{ display: 'block', mt: 0.75, color: pal.dark, fontWeight: 600 }}
-                        >
-                          {tier.effortCaption}
-                        </Typography>
+                      />
+                      <Box sx={{ color: pal.main, display: 'flex' }}>
+                        {tier.icon}
                       </Box>
+                    </Stack>
 
-                      {/* Best Suited For box */}
-                      <Box sx={{ mb: 2.5 }}>
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            fontWeight: 800,
-                            color: 'text.secondary',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px',
-                            display: 'block',
-                            mb: 0.5,
-                          }}
-                        >
-                          IDEAL PAGE TYPES:
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: theme.palette.text.primary,
-                            bgcolor: alpha(theme.palette.background.default, 0.9),
-                            p: 1.25,
-                            borderRadius: 1.5,
-                            border: `1px solid ${theme.palette.divider}`,
-                            fontSize: '0.825rem',
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          {tier.targetPages}
-                        </Typography>
-                      </Box>
+                    {/* Tier Name & Subtitle */}
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontWeight: 800,
+                        color: theme.palette.text.primary,
+                        letterSpacing: '-0.01em',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {tier.title}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+                      {tier.subtitle}
+                    </Typography>
 
-                      <Divider sx={{ my: 1.5 }} />
-
-                      {/* Feature Checklist */}
+                    {/* Compact Effort Hours Callout */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        px: 1.5,
+                        py: 0.85,
+                        borderRadius: 1.5,
+                        bgcolor: pal.bg,
+                        border: `1px solid ${pal.border}`,
+                        mb: 1.25,
+                      }}
+                    >
                       <Typography
-                        variant="caption"
+                        variant="subtitle1"
                         sx={{
                           fontWeight: 800,
-                          color: 'text.secondary',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          display: 'block',
-                          mb: 1.5,
+                          color: pal.dark,
+                          letterSpacing: '-0.02em',
+                          lineHeight: 1,
                         }}
                       >
-                        CLASSIFICATION CRITERIA:
+                        {tier.hours}{' '}
+                        <Typography component="span" variant="caption" sx={{ fontWeight: 700, color: pal.dark }}>
+                          {tier.unit}
+                        </Typography>
                       </Typography>
+                      <Typography variant="caption" sx={{ color: pal.dark, fontWeight: 700, fontSize: '0.72rem' }}>
+                        Manual Verification
+                      </Typography>
+                    </Box>
 
-                      <Stack component="div" spacing={1.5} sx={{ mb: 3, flexGrow: 1 }}>
-                        {tier.features.map((feat, fIdx) => (
-                          <Box
-                            key={fIdx}
+                    {/* Ideal Page Types compact box */}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: 'block',
+                        bgcolor: alpha(theme.palette.background.default, 0.8),
+                        border: `1px solid ${theme.palette.divider}`,
+                        borderRadius: 1.5,
+                        p: 1,
+                        mb: 1.25,
+                        lineHeight: 1.35,
+                        color: 'text.secondary',
+                        fontSize: '0.74rem',
+                      }}
+                    >
+                      <Box component="span" sx={{ fontWeight: 700, color: 'text.primary', mr: 0.5 }}>
+                        Ideal for:
+                      </Box>
+                      {tier.targetPages}
+                    </Typography>
+
+                    <Divider sx={{ my: 1, borderColor: theme.palette.divider }} />
+
+                    {/* Criteria Checklist Header */}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 800,
+                        color: 'text.secondary',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        display: 'block',
+                        mb: 0.85,
+                        fontSize: '0.68rem',
+                      }}
+                    >
+                      CLASSIFICATION CRITERIA:
+                    </Typography>
+
+                    {/* Compact Criteria List */}
+                    <Stack component="div" spacing={0.85} sx={{ mb: 1.5, flexGrow: 1 }}>
+                      {tier.features.map((feat, fIdx) => (
+                        <Box
+                          key={fIdx}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                          }}
+                        >
+                          <CheckCircleIcon
                             sx={{
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: 1.25,
+                              color: pal.main,
+                              fontSize: 15,
+                              mt: '2px',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontSize: '0.76rem',
+                              lineHeight: 1.35,
+                              color: 'text.secondary',
+                              m: 0,
                             }}
                           >
-                            <CheckCircleIcon
+                            <Box
+                              component="span"
                               sx={{
-                                color: pal.main,
-                                fontSize: 17,
-                                mt: '1px',
-                                flexShrink: 0,
-                              }}
-                            />
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontSize: '0.8125rem',
-                                lineHeight: 1.45,
-                                color: 'text.secondary',
-                                m: 0,
+                                fontWeight: 700,
+                                color: 'text.primary',
+                                mr: 0.5,
                               }}
                             >
-                              <Box
-                                component="span"
-                                sx={{
-                                  fontWeight: 700,
-                                  color: 'text.primary',
-                                  mr: 0.75,
-                                }}
-                              >
-                                {feat.label}:
-                              </Box>
-                              {feat.detail}
-                            </Typography>
-                          </Box>
-                        ))}
-                      </Stack>
+                              {feat.label}:
+                            </Box>
+                            {feat.detail}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
 
-                      {/* Card Footer Note */}
-                      <Box
-                        sx={{
-                          pt: 1.5,
-                          borderTop: `1px dashed ${theme.palette.divider}`,
-                          textAlign: 'center',
-                        }}
+                    {/* Compact Card Footer Note */}
+                    <Box
+                      sx={{
+                        pt: 1,
+                        borderTop: `1px dashed ${theme.palette.divider}`,
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.7rem' }}
                       >
-                        <Typography
-                          variant="caption"
-                          sx={{ fontWeight: 700, color: 'text.secondary' }}
-                        >
-                          {tier.footerNote}
-                        </Typography>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              );
-            })}
-          </Grid>
-        </Box>
-      </Collapse>
-    </Box>
+                        {tier.footerNote}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      </DialogContent>
+
+      <DialogActions
+        sx={{
+          px: { xs: 2.5, sm: 3 },
+          py: 1.5,
+          borderTop: '1px solid',
+          borderColor: theme.palette.divider,
+        }}
+      >
+        <Button
+          onClick={onClose}
+          variant="contained"
+          color="primary"
+          size="small"
+          sx={{ fontWeight: 700, borderRadius: 2, textTransform: 'none', px: 3, py: 0.75 }}
+        >
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };

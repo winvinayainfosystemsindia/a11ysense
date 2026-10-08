@@ -13,6 +13,8 @@ import { alpha } from '@mui/material/styles';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PrintIcon from '@mui/icons-material/Print';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import Tooltip from '@mui/material/Tooltip';
 
 import { estimationService } from '../../service/estimationService';
 import type {
@@ -249,21 +251,60 @@ export const EstimationPage: React.FC = () => {
       {/* ── Page Header (Consistent with Audits and Projects pages) ── */}
       <Stack
         component="div"
-        direction={{ xs: 'column', sm: 'row' }}
+        direction={{ xs: 'column', md: 'row' }}
         sx={{
           justifyContent: 'space-between',
-          alignItems: { xs: 'flex-start', sm: 'center' },
+          alignItems: { xs: 'flex-start', md: 'center' },
           mb: 4,
           gap: 2,
         }}
       >
-        <Box>
-          <Typography
-            variant="h4"
-            sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.5px' }}
+        <Box sx={{ flex: 1, width: '100%' }}>
+          <Stack
+            component="div"
+            direction="row"
+            sx={{
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              mb: 0.5,
+              flexWrap: 'wrap',
+              gap: 1.5,
+            }}
           >
-            Estimation
-          </Typography>
+            <Typography
+              variant="h4"
+              sx={{ fontWeight: 800, letterSpacing: '-0.5px' }}
+            >
+              Estimation
+            </Typography>
+
+            {/* Info Button on the right side of the Box */}
+            <Tooltip title="View Complexity Classification Guide">
+              <Button
+                variant="outlined"
+                color="inherit"
+                size="small"
+                startIcon={<InfoOutlinedIcon color="primary" />}
+                onClick={() => setShowCriteriaGuide(true)}
+                sx={{
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  borderColor: theme.palette.divider,
+                  bgcolor: theme.palette.background.paper,
+                  color: theme.palette.text.primary,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                  '&:hover': {
+                    borderColor: theme.palette.primary.main,
+                    bgcolor: alpha(theme.palette.primary.main, 0.04),
+                  },
+                }}
+              >
+                Complexity Guide
+              </Button>
+            </Tooltip>
+          </Stack>
+
           <Typography variant="body1" color="text.secondary">
             Evaluate page complexity across Simple, Medium, and Complex tiers to generate commercial audit proposals.
           </Typography>
@@ -271,7 +312,7 @@ export const EstimationPage: React.FC = () => {
 
         {/* Action Buttons (Visible when results are ready) */}
         {result && (
-          <Stack component="div" direction="row" spacing={1.5} sx={{ flexWrap: 'wrap' }}>
+          <Stack component="div" direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', flexShrink: 0 }}>
             <Button
               variant="contained"
               color="success"
@@ -363,10 +404,10 @@ export const EstimationPage: React.FC = () => {
         </Card>
       )}
 
-      {/* ── Complexity Standards Collapsible Guide ── */}
+      {/* ── Complexity Standards Modal Dialog ── */}
       <ComplexityMatrixGuide
-        expanded={showCriteriaGuide}
-        onToggle={() => setShowCriteriaGuide((prev) => !prev)}
+        open={showCriteriaGuide}
+        onClose={() => setShowCriteriaGuide(false)}
       />
 
       {/* ── Results Section ── */}
