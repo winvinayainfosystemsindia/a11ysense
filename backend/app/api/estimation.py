@@ -167,7 +167,7 @@ async def _async_inspect_pages(urls: List[str]) -> List[Dict[str, Any]]:
         browser = await pw.chromium.launch(headless=True)
         context = await browser.new_context(
             bypass_csp=True,
-            viewport={"width": 1280, "height": 800},
+            viewport={"width": 1440, "height": 900},
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -180,7 +180,11 @@ async def _async_inspect_pages(urls: List[str]) -> List[Dict[str, Any]]:
             try:
                 logger.info(f"Navigating to {page_url} for complexity inspection")
                 await page.goto(page_url, wait_until="domcontentloaded", timeout=45000)
-                await asyncio.sleep(1.5)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    pass
+                await asyncio.sleep(2.0)
                 page_analysis = await analyze_page_complexity(page, page_url)
                 analyzed.append(page_analysis)
             except Exception as page_err:

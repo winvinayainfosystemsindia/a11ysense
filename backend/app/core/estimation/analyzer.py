@@ -21,17 +21,17 @@ COMPLEXITY_EVAL_JS = """
         return rect.width > 0 && rect.height > 0;
     };
 
-    // 1. Element counts (visible elements)
-    const links = Array.from(document.querySelectorAll('a[href]')).filter(isVisible);
-    const buttons = Array.from(document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]')).filter(isVisible);
-    const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]')).filter(isVisible);
-    const paragraphs = Array.from(document.querySelectorAll('p')).filter(isVisible);
-    const lists = Array.from(document.querySelectorAll('ul, ol')).filter(isVisible);
-    const images = Array.from(document.querySelectorAll('img, svg:not([role="button"]):not(button svg)')).filter(isVisible);
-    const forms = Array.from(document.querySelectorAll('form')).filter(isVisible);
-    const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea')).filter(isVisible);
-    const tables = Array.from(document.querySelectorAll('table, [role="table"], [role="grid"]')).filter(isVisible);
-    const media = Array.from(document.querySelectorAll('video, audio, iframe, embed, object')).filter(isVisible);
+    // 1. Element counts (DOM inventory of all matching elements on the page)
+    const links = Array.from(document.querySelectorAll('a[href]'));
+    const buttons = Array.from(document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]'));
+    const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'));
+    const paragraphs = Array.from(document.querySelectorAll('p'));
+    const lists = Array.from(document.querySelectorAll('ul, ol'));
+    const images = Array.from(document.querySelectorAll('img, svg'));
+    const forms = Array.from(document.querySelectorAll('form'));
+    const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea'));
+    const tables = Array.from(document.querySelectorAll('table, [role="table"], [role="grid"]'));
+    const media = Array.from(document.querySelectorAll('video, audio, iframe, embed, object'));
 
     const linksCount = links.length;
     const buttonsCount = buttons.length;
@@ -129,8 +129,10 @@ COMPLEXITY_EVAL_JS = """
     const mediumTriggers = [];
 
     // Basic forms
-    if (forms.length > 0 || inputs.length > 0) {
-        mediumTriggers.push(`Standard form with input fields detected (${inputs.length} fields)`);
+    const visibleForms = forms.filter(isVisible);
+    const visibleInputs = inputs.filter(isVisible);
+    if (visibleForms.length > 0 || visibleInputs.length > 0) {
+        mediumTriggers.push(`Standard form with input fields detected (${visibleInputs.length} fields)`);
     }
 
     // Data table with headers
@@ -140,8 +142,9 @@ COMPLEXITY_EVAL_JS = """
     }
 
     // Embedded video, audio, or iframe
-    if (media.length > 0 && carousels.length === 0 && thirdPartyWidgets.length === 0) {
-        mediumTriggers.push(`Embedded media or player detected (${media.length})`);
+    const visibleMedia = media.filter(isVisible);
+    if (visibleMedia.length > 0 && carousels.length === 0 && thirdPartyWidgets.length === 0) {
+        mediumTriggers.push(`Embedded media or player detected (${visibleMedia.length})`);
     }
 
     // Navigation that opens: dropdowns, accordions, tabs
@@ -220,12 +223,12 @@ async def analyze_page_complexity(page, url: str) -> Dict[str, Any]:
             pass
 
         try:
-            await page.wait_for_load_state("networkidle", timeout=3000)
+            await page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass
 
-        # Brief hydration delay for JavaScript frameworks
-        await page.wait_for_timeout(1000)
+        # Brief hydration delay for JavaScript frameworks and dynamic widgets
+        await page.wait_for_timeout(2000)
 
         title = await page.title() or "Untitled Page"
         data = await page.evaluate(COMPLEXITY_EVAL_JS)
