@@ -881,7 +881,7 @@ export const EstimationPage: React.FC = () => {
                     • Standard headings, paragraphs, and list hierarchies<br />
                     • Plain links (header, footer, basic navigational bar)<br />
                     • Informative/decorative images and plain buttons<br />
-                    • <strong>Total links + buttons ≤ 60</strong>
+                    • <strong>Total no. of Elements ≤ 50</strong>
                   </Typography>
                 </CardContent>
               </Card>
@@ -902,7 +902,7 @@ export const EstimationPage: React.FC = () => {
                     • Data tables with row and column headers<br />
                     • Single embedded video, audio player, or map iframe<br />
                     • Expanding navigation (dropdowns, accordions, tabs)<br />
-                    • Search box or <strong>total links/buttons &gt; 60</strong>
+                    • Search box or <strong>Total no. of Elements &gt; 50 and ≤ 90</strong>
                   </Typography>
                 </CardContent>
               </Card>
@@ -1282,9 +1282,9 @@ export const EstimationPage: React.FC = () => {
                     <TableCell align="center" sx={{ fontWeight: '800' }}>Manual Cost</TableCell>
                     <TableCell align="center" sx={{ fontWeight: '800' }}>API Cost</TableCell>
                     <TableCell align="center" sx={{ fontWeight: '800' }}>Platform Fee</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: '800' }}>Base Cost</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: '800' }}>Margin ({result.summary.profit_margin_pct}%)</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: '800', color: 'primary.main' }}>Final Quote</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: '800' }}>Base Cost (A)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: '800' }}>Margin  ({result.summary.profit_margin_pct}%) (B)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: '800', color: 'primary.main' }}>Total Cost (A+B)</TableCell>
                     <TableCell align="center" sx={{ fontWeight: '800' }}>Evidence</TableCell>
                   </TableRow>
                 </TableHead>
@@ -1373,7 +1373,7 @@ export const EstimationPage: React.FC = () => {
                             </Typography>
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" sx={{ color: '#059669', fontWeight: '600' }}>
                               ${p.base_cost.toFixed(2)}
                             </Typography>
                           </TableCell>
@@ -1482,7 +1482,7 @@ export const EstimationPage: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption" sx={{ fontWeight: '700', color: 'text.secondary' }}>
-                        {result.summary.simple_pages}S · {result.summary.medium_pages}M · {result.summary.complex_pages}C
+                        {result.summary.simple_pages} Simple · {result.summary.medium_pages} Medium · {result.summary.complex_pages} Complex
                       </Typography>
                     </TableCell>
                     <TableCell align="center" sx={{ fontWeight: '800' }}>
@@ -1497,7 +1497,7 @@ export const EstimationPage: React.FC = () => {
                     <TableCell align="center" sx={{ fontWeight: '800' }}>
                       ${result.summary.total_platform_cost.toFixed(2)}
                     </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: '800' }}>
+                    <TableCell align="right" sx={{ fontWeight: '800', color: '#059669' }}>
                       ${result.summary.total_base_cost.toFixed(2)}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: '800', color: '#059669' }}>
