@@ -91,7 +91,9 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
   const filteredDiscoveredPages = discoveredPages.filter((item) => {
     if (!filterKeyword) return true;
     const k = filterKeyword.toLowerCase();
-    return item.path.toLowerCase().includes(k) || item.url.toLowerCase().includes(k);
+    const titleMatch = (item.title || '').toLowerCase().includes(k);
+    const pathMatch = (item.path || '').toLowerCase().includes(k);
+    return titleMatch || pathMatch || item.url.toLowerCase().includes(k);
   });
 
   return (
@@ -382,8 +384,8 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
                             onChange={(e) => (e.target.checked ? onSelectAll() : onDeselectAll())}
                           />
                         </TableCell>
-                        <TableCell sx={{ bgcolor: theme.palette.grey[100], fontWeight: 800, width: 220 }}>
-                          Route Path
+                        <TableCell sx={{ bgcolor: theme.palette.grey[100], fontWeight: 800, width: 280 }}>
+                          Page Title
                         </TableCell>
                         <TableCell sx={{ bgcolor: theme.palette.grey[100], fontWeight: 800 }}>
                           Full Target URL
@@ -407,18 +409,8 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
                             <TableCell padding="checkbox">
                               <Checkbox checked={isChecked} />
                             </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={item.path}
-                                size="small"
-                                variant="outlined"
-                                sx={{
-                                  fontFamily: 'Consolas, monospace',
-                                  fontWeight: 700,
-                                  color: isChecked ? theme.palette.primary.main : theme.palette.text.secondary,
-                                  borderColor: isChecked ? theme.palette.primary.main : theme.palette.divider,
-                                }}
-                              />
+                            <TableCell sx={{ fontWeight: 600, color: 'text.primary', fontSize: '0.88rem' }}>
+                              {item.title || item.path || 'Page'}
                             </TableCell>
                             <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem', wordBreak: 'break-all' }}>
                               {item.url}

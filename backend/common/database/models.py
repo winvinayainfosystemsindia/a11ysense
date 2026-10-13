@@ -171,4 +171,35 @@ class PageCredential(Base):
     organization = relationship("Organization")
 
 
+class EstimationRecord(Base):
+    __tablename__ = "estimations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=False, default="Website Audit Estimation")
+    base_url = Column(String, nullable=False)
+    mode = Column(String, default="discover", nullable=False)  # discover or custom_urls
+    status = Column(String, default="completed", nullable=False)  # completed, draft, failed
+    hourly_rate = Column(Float, default=40.0, nullable=False)
+    platform_fee = Column(Float, default=10.0, nullable=False)
+    profit_margin_pct = Column(Float, default=30.0, nullable=False)
+    total_pages = Column(Integer, default=0, nullable=False)
+    simple_pages = Column(Integer, default=0, nullable=False)
+    medium_pages = Column(Integer, default=0, nullable=False)
+    complex_pages = Column(Integer, default=0, nullable=False)
+    total_manual_hours = Column(Float, default=0.0, nullable=False)
+    total_manual_cost = Column(Float, default=0.0, nullable=False)
+    total_api_cost = Column(Float, default=0.0, nullable=False)
+    total_platform_cost = Column(Float, default=0.0, nullable=False)
+    total_base_cost = Column(Float, default=0.0, nullable=False)
+    total_profit_margin = Column(Float, default=0.0, nullable=False)
+    total_quote = Column(Float, default=0.0, nullable=False)
+    pages = Column(JSON, nullable=False)
+    summary = Column(JSON, nullable=True)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+
+
 
