@@ -4,7 +4,10 @@ Provides deterministic resolution of WCAG criteria, levels, principles, and seve
 for both custom skills (screen_reader, keyboard_nav, landmark) and standard axe-core rules.
 """
 from typing import Optional, Dict, Any, List
-from backend.common.constants.wcag import WCAG_CRITERIA_MAP, parse_wcag_tags
+try:
+    from common.constants.wcag import WCAG_CRITERIA_MAP, parse_wcag_tags
+except ImportError:
+    from backend.common.constants.wcag import WCAG_CRITERIA_MAP, parse_wcag_tags
 
 
 RULE_CATALOG: Dict[str, Dict[str, Any]] = {

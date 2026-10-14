@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Chip,
   Typography,
@@ -15,6 +15,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DataTable from '../../common/table/DataTable';
 import type { ColumnDefinition } from '../../common/table/DataTable';
 import { ENV } from '../../../config/env';
+import { DefectDetailModal } from './DefectDetailModal';
 
 interface DefectsTableTabProps {
   violations: any[];
@@ -30,6 +31,7 @@ interface DefectsTableTabProps {
 
 const COLUMNS: ColumnDefinition<any>[] = [
   { id: 'defectIndex', label: 'DEFECT ID', sortable: false },
+  { id: 'defect_status', label: 'DEFECT STATUS', sortable: false },
   { id: 'testcase_id', label: 'ASSOCIATED TC ID', sortable: false },
   { id: 'page_title', label: 'PAGE TITLE', sortable: false },
   { id: 'page_url', label: 'URL', sortable: false },
@@ -44,7 +46,7 @@ const COLUMNS: ColumnDefinition<any>[] = [
   { id: 'help_url', label: 'HELP', sortable: false },
   { id: 'html_snippet', label: 'HTML SNIPPET', sortable: false },
   { id: 'screenshot', label: 'SCREENSHOT', sortable: false },
-  { id: 'actions', label: 'INSPECT', sortable: false, align: 'right' }
+  { id: 'actions', label: 'ACTIONS', sortable: false, align: 'right' }
 ];
 
 export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
@@ -58,6 +60,9 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
   setSelectedViolation,
   setActiveTab
 }) => {
+  const [selectedDefectId, setSelectedDefectId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const paginatedData = violations
     .slice(defectsPage * defectsRowsPerPage, defectsPage * defectsRowsPerPage + defectsRowsPerPage)
     .map((v, idx) => ({
@@ -65,16 +70,72 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
       defectIndex: defectsPage * defectsRowsPerPage + idx + 1
     }));
 
+  const handleOpenDefect = (codeOrId: string) => {
+    setSelectedDefectId(codeOrId);
+    setIsModalOpen(true);
+  };
+
   const renderRow = (v: any) => {
     const sevColor = v.severity?.toLowerCase() === 'critical' ? 'error' : v.severity?.toLowerCase() === 'serious' ? 'warning' : 'info';
+    const defectCode = v.defect_id && v.defect_id !== 'N/A' ? v.defect_id : `DEF-${String(v.defectIndex).padStart(3, '0')}`;
+    const defectStatus = v.defect_status || 'Open';
+
     return (
       <TableRow key={v.testcase_id} hover>
         {/* 1. Defect ID */}
         <TableCell sx={{ fontWeight: 'bold', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-          DEF-{String(v.defectIndex).padStart(3, '0')}
+          <Stack component="div" direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+            <Button
+              size="small"
+              onClick={() => handleOpenDefect(v.defect_id_uuid || defectCode)}
+              sx={{
+                fontWeight: 800,
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                textTransform: 'none',
+                minWidth: 'auto',
+                p: 0.5
+              }}
+            >
+              {defectCode}
+            </Button>
+            {v.reopen_count > 0 && (
+              <Tooltip title={`Reopened ${v.reopen_count} time(s)`}>
+                <Chip label={`↺ ${v.reopen_count}`} size="small" color="warning" sx={{ height: 18, fontSize: '0.65rem' }} />
+              </Tooltip>
+            )}
+          </Stack>
         </TableCell>
 
-        {/* 2. Associated Testcase ID */}
+        {/* 2. Defect Status */}
+        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+          <Chip
+            label={defectStatus}
+            size="small"
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.7rem',
+              bgcolor:
+                defectStatus === 'Fixed'
+                  ? 'rgba(34, 197, 94, 0.15)'
+                  : defectStatus === 'New'
+                  ? 'rgba(239, 68, 68, 0.15)'
+                  : defectStatus === 'Reopened'
+                  ? 'rgba(245, 158, 11, 0.15)'
+                  : 'rgba(56, 189, 248, 0.15)',
+              color:
+                defectStatus === 'Fixed'
+                  ? '#4ade80'
+                  : defectStatus === 'New'
+                  ? '#f87171'
+                  : defectStatus === 'Reopened'
+                  ? '#fbbf24'
+                  : '#38bdf8'
+            }}
+          />
+        </TableCell>
+
+        {/* 3. Associated Testcase ID */}
         <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
           {v.testcase_id}
         </TableCell>
@@ -253,38 +314,57 @@ export const DefectsTableTab: React.FC<DefectsTableTabProps> = ({
           )}
         </TableCell>
 
-        {/* 15. Inspect Button */}
-        <TableCell align="right">
-          <Button
-            size="small"
-            onClick={() => {
-              setSelectedViolation(v);
-              setActiveTab(0);
-            }}
-            sx={{ textTransform: 'none', fontWeight: '700', whiteSpace: 'nowrap' }}
-          >
-            View
-          </Button>
+        {/* 15. Actions */}
+        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+          <Stack component="div" direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => handleOpenDefect(v.defect_id_uuid || defectCode)}
+              sx={{ textTransform: 'none', fontWeight: '700', fontSize: '0.75rem', px: 1 }}
+            >
+              Timeline
+            </Button>
+            <Button
+              size="small"
+              onClick={() => {
+                setSelectedViolation(v);
+                setActiveTab(0);
+              }}
+              sx={{ textTransform: 'none', fontWeight: '700' }}
+            >
+              View
+            </Button>
+          </Stack>
         </TableCell>
       </TableRow>
     );
   };
 
   return (
-    <DataTable<any>
-      columns={COLUMNS}
-      data={paginatedData}
-      totalCount={violations.length}
-      page={defectsPage}
-      rowsPerPage={defectsRowsPerPage}
-      onPageChange={(_, page) => setDefectsPage(page)}
-      onRowsPerPageChange={(newRowsPerPage) => {
-        setDefectsRowsPerPage(newRowsPerPage);
-        setDefectsPage(0);
-      }}
-      searchTerm=""
-      emptyMessage="No violations detected!"
-      renderRow={renderRow}
-    />
+    <>
+      <DataTable<any>
+        columns={COLUMNS}
+        data={paginatedData}
+        totalCount={violations.length}
+        page={defectsPage}
+        rowsPerPage={defectsRowsPerPage}
+        onPageChange={(_, page) => setDefectsPage(page)}
+        onRowsPerPageChange={(newRowsPerPage) => {
+          setDefectsRowsPerPage(newRowsPerPage);
+          setDefectsPage(0);
+        }}
+        searchTerm=""
+        emptyMessage="No violations detected!"
+        renderRow={renderRow}
+      />
+      {isModalOpen && selectedDefectId && (
+        <DefectDetailModal
+          open={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          defectId={selectedDefectId}
+        />
+      )}
+    </>
   );
 };

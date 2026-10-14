@@ -15,6 +15,7 @@ import { useAuditDetails } from '../../components/audits/hooks/useAuditDetails';
 import { AuditHeader } from '../../components/audits/details/AuditHeader';
 import { AuditLiveProgress } from '../../components/audits/details/AuditLiveProgress';
 import { CompletedViewDashboard } from '../../components/audits/details/CompletedViewDashboard';
+import { RegressionSummaryBanner } from '../../components/audits/details/RegressionSummaryBanner';
 import { InteractiveExplorerTab } from '../../components/audits/details/InteractiveExplorerTab';
 import { TestCasesTableTab } from '../../components/audits/details/TestCasesTableTab';
 import { DefectsTableTab } from '../../components/audits/details/DefectsTableTab';
@@ -124,7 +125,8 @@ const AuditDetailsPage: React.FC = () => {
 
       {/* Completed View */}
       {(isCompleted || isStopped) && (
-        <Stack component="div" spacing={4}>
+        <Stack component="div" spacing={3}>
+          <RegressionSummaryBanner taskId={taskId} />
           <CompletedViewDashboard
             accessibilityScore={accessibilityScore}
             criticalCount={criticalCount}

@@ -25,10 +25,12 @@ import {
 } from '@mui/material';
 import LanguageIcon from '@mui/icons-material/Language';
 import AppShortcutIcon from '@mui/icons-material/AppShortcut';
+import TimelineIcon from '@mui/icons-material/Timeline';
 import DataTable, { type ColumnDefinition } from '../../components/common/table/DataTable';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { fetchProjects, createNewProject } from '../../store/slices/projectSlice';
 import type { ProjectResponse } from '../../model/project.model';
+import { ProjectRunsDrawer } from '../../components/projects/ProjectRunsDrawer';
 
 const ProjectsPage: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -47,6 +49,7 @@ const ProjectsPage: React.FC = () => {
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [selectedProjectForRuns, setSelectedProjectForRuns] = useState<ProjectResponse | null>(null);
 
   const userRole = localStorage.getItem('user_role') || 'Viewer';
   const isViewer = userRole.toLowerCase() === 'viewer';
@@ -96,6 +99,7 @@ const ProjectsPage: React.FC = () => {
     { id: 'name', label: 'Project Name', sortable: false },
     { id: 'project_type', label: 'Target Type', sortable: false },
     { id: 'created_at', label: 'Date Created', sortable: false },
+    { id: 'actions', label: 'RUNS & REGRESSION', sortable: false, align: 'right' }
   ];
 
   const renderRow = (project: ProjectResponse) => {
@@ -121,6 +125,17 @@ const ProjectsPage: React.FC = () => {
           />
         </TableCell>
         <TableCell sx={{ color: 'text.secondary', py: 2 }}>{dateFormatted}</TableCell>
+        <TableCell align="right" sx={{ py: 2 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<TimelineIcon />}
+            onClick={() => setSelectedProjectForRuns(project)}
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: '6px' }}
+          >
+            Runs & Trend
+          </Button>
+        </TableCell>
       </TableRow>
     );
   };
@@ -292,6 +307,15 @@ const ProjectsPage: React.FC = () => {
           {snackbarMessage}
         </Alert>
       </Snackbar>
+
+      {/* Project Runs & Trend Drawer */}
+      {selectedProjectForRuns && (
+        <ProjectRunsDrawer
+          open={Boolean(selectedProjectForRuns)}
+          onClose={() => setSelectedProjectForRuns(null)}
+          project={selectedProjectForRuns}
+        />
+      )}
     </Box>
   );
 };

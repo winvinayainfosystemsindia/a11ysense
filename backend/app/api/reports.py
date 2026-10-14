@@ -23,71 +23,11 @@ async def download_excel_report(task_id: str, db: Session = Depends(get_db)):
     Generates and downloads the executive Excel report with full test case & defect data.
     Loads testcase_report_{task_id}.json if available, falling back to DB for legacy audits.
     """
+    from backend.app.services.report_service import report_service
     testcases = await audit_orchestrator.get_testcase_report(task_id)
-    session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
-
-    if not testcases and not session:
+    audit_data = report_service.build_audit_data(db, task_id, testcases_fallback=testcases)
+    if not audit_data:
         raise HTTPException(status_code=404, detail="Audit session not found")
-
-    if testcases:
-        violations = [tc for tc in testcases if tc.get("status") == "FAIL"]
-        passes = [tc for tc in testcases if tc.get("status") == "PASS"]
-        not_applicable = [tc for tc in testcases if tc.get("status") == "NOT_APPLICABLE"]
-        manual_review = [tc for tc in testcases if tc.get("status") == "MANUAL_REVIEW"]
-
-        pages_scanned = sorted(list({
-            tc.get("page_url") for tc in testcases
-            if tc.get("page_url") and tc.get("page_url") not in ("All pages", "N/A")
-        }))
-        if not pages_scanned and session:
-            pages_scanned = [session.url]
-
-        audit_data = {
-            "task_id": task_id,
-            "url": session.url if session else (pages_scanned[0] if pages_scanned else ""),
-            "summary": session.summary if session else {},
-            "testcases": testcases,
-            "violations": violations,
-            "passes": passes,
-            "not_applicable": not_applicable,
-            "manual_review": manual_review,
-            "pages_scanned": pages_scanned
-        }
-    else:
-        # Fall back to DB only if JSON report is missing (e.g. legacy audit)
-        violations_db = db.query(ViolationRecord).filter(ViolationRecord.audit_session_id == session.id).all()
-        violations = []
-        for v in violations_db:
-            meta = v.metadata_json or {}
-            rule = resolve_rule(v.rule_id)
-            violations.append({
-                "rule_id": v.rule_id,
-                "impact": v.impact,
-                "description": v.description,
-                "help": v.help,
-                "help_url": v.help_url,
-                "nodes": v.nodes,
-                "metadata_json": meta,
-                "page_url": session.url,
-                "wcag_criteria": f"{rule.wcag_sc} {rule.wcag_sc_name}",
-                "wcag_level": rule.level,
-                "wcag_principle": rule.principle,
-                "expected_result": meta.get("expected_result", "Element must meet WCAG criteria."),
-                "actual_result": meta.get("actual_result", v.help),
-                "steps_to_reproduce": meta.get("steps_to_reproduce", "1. Navigate to page.\n2. Inspect element."),
-                "remediation_plan": meta.get("remediation_plan", "Fix accessibility defect."),
-                "remarks": "Legacy audit: re-run for the full report"
-            })
-
-        audit_data = {
-            "task_id": task_id,
-            "url": session.url,
-            "summary": session.summary or {},
-            "testcases": [],
-            "violations": violations,
-            "passes": [],
-            "pages_scanned": [session.url]
-        }
 
     excel_bytes = generate_excel_report(audit_data)
     filename = f"A11ySense_Audit_Report_{task_id}.xlsx"

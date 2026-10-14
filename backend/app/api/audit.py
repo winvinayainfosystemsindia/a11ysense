@@ -6,15 +6,19 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from common.database.connection import get_db
-from common.database.models import User, AuditProgress, CrawlProgress, AuditSession, Project
+from common.database.models import User, AuditProgress, CrawlProgress, AuditSession, Project, TestCase
 from common.auth.deps import get_current_user
 from common.schemas.audit import AuditRequest, CrawlDiscoveryRequest
 from backend.app.task_queue import task_queue
 from backend.app.core.audit.orchestrator import AuditOrchestrator
+from app.repository.testcase_repo import testcase_repo
+from app.repository.session_repo import audit_session_repo
+from app.core.regression.reconciler import compute_fingerprint, normalize_url
 
 logger = logging.getLogger("a11ysense.api.audit")
 router = APIRouter(tags=["Audit Engine"])
 orchestrator = AuditOrchestrator()
+
 
 @router.get("/api/audits")
 async def list_audits(
@@ -36,11 +40,20 @@ async def list_audits(
             "url": s.url,
             "timestamp": dt.isoformat() if dt else "",
             "status": s.status,
-            "accessibility_score": summary.get("accessibility_score", 100.0),
-            "total_violations": summary.get("total_violations", 0),
-            "project_name": project_name
+            "run_number": s.run_number or 1,
+            "run_type": s.run_type or "baseline",
+            "score": s.score if s.score is not None else summary.get("accessibility_score", 100.0),
+            "accessibility_score": s.score if s.score is not None else summary.get("accessibility_score", 100.0),
+            "total_violations": s.fail_count if s.fail_count is not None else summary.get("total_violations", 0),
+            "defects_new": s.defects_new,
+            "defects_fixed": s.defects_fixed,
+            "defects_reopened": s.defects_reopened,
+            "defects_open": s.defects_open,
+            "project_name": project_name,
+            "project_id": str(s.project_id) if s.project_id else None
         })
     return result
+
 
 @router.post("/api/audit/discover")
 @router.post("/crawl_discovery")
@@ -66,20 +79,22 @@ async def start_crawl_discovery(
         orchestrator.run_crawl_discovery_flow,
         crawl_task_id,
         req,
-        str(current_user.organization_id)
+        str(current_user.organization_id),
+        str(project_id) if project_id else None
     )
 
     return {
-        "crawl_task_id": crawl_task_id,
         "status": "crawling",
+        "crawl_task_id": crawl_task_id,
         "url": req.url,
+        "scan_target": req.scan_target,
         "pages_discovered": [],
-        "pages_depth_map": {},
         "sitemaps_found": [],
         "unauth_pages_discovered": [],
         "auth_pages_discovered": [],
         "error": None
     }
+
 
 @router.get("/api/audit/discover/{crawl_task_id}")
 @router.get("/crawl_discovery/{crawl_task_id}")
@@ -103,6 +118,7 @@ async def get_crawl_discovery_status(
         "error": rec.error
     }
 
+
 @router.post("/api/audit/start")
 @router.post("/start_audit")
 async def start_audit(
@@ -111,7 +127,7 @@ async def start_audit(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Starts WCAG 2.2 Level A+AA accessibility audit run."""
+    """Starts WCAG 2.2 Level A+AA accessibility audit run with regression sequencing."""
     task_id = f"task-{uuid.uuid4().hex[:12]}"
 
     eff_proj_id = project_id
@@ -119,17 +135,15 @@ async def start_audit(
         p = db.query(Project).filter(Project.organization_id == current_user.organization_id).first()
         eff_proj_id = p.id if p else None
 
-    # Bootstraps AuditSession so the running audit immediately displays in the Audits History table
-    session_rec = AuditSession(
+    # Bootstraps AuditSession with run sequencing and regression link
+    session_rec = audit_session_repo.bootstrap_session(
         task_id=task_id,
-        url=req.url,
-        status="auditing",
+        url=str(req.url),
+        org_id=str(current_user.organization_id),
+        proj_id=str(eff_proj_id) if eff_proj_id else None,
         depth=req.depth,
-        project_id=eff_proj_id,
-        organization_id=current_user.organization_id,
-        summary={"accessibility_score": 100, "total_violations": 0}
+        urls_subset=req.selected_urls
     )
-    db.add(session_rec)
 
     progress = AuditProgress(
         task_id=task_id,
@@ -144,10 +158,18 @@ async def start_audit(
         orchestrator.run_in_memory_audit_flow,
         task_id,
         req,
-        str(current_user.organization_id)
+        str(current_user.organization_id),
+        str(eff_proj_id) if eff_proj_id else None
     )
 
-    return {"status": "started", "task_id": task_id}
+    return {
+        "status": "started",
+        "task_id": task_id,
+        "run_number": session_rec.run_number,
+        "run_type": session_rec.run_type,
+        "previous_run_id": str(session_rec.previous_run_id) if session_rec.previous_run_id else None
+    }
+
 
 @router.get("/api/audit/status/{task_id}")
 @router.get("/task/{task_id}")
@@ -155,7 +177,7 @@ async def get_audit_status(
     task_id: str,
     db: Session = Depends(get_db)
 ):
-    """Poll audit run status and progress counters."""
+    """Poll audit run status, regression counters, and progress."""
     rec = db.query(AuditProgress).filter(AuditProgress.task_id == task_id).first()
     session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
 
@@ -164,16 +186,31 @@ async def get_audit_status(
 
     status_val = rec.status if rec else (session.status if session else "completed")
     url_val = rec.url if rec else (session.url if session else "")
-    pages_scanned = (rec.pages_scanned if rec else None) or ([url_val] if url_val else [])
-    pages_discovered = (rec.pages_discovered if rec else None) or pages_scanned
     error_val = rec.error if rec else None
+
+    pages_scanned = rec.pages_scanned if rec and rec.pages_scanned else []
+    pages_discovered = rec.pages_discovered if rec and rec.pages_discovered else []
     report_url = (rec.report_url if rec else None) or f"/api/reports/excel/{task_id}"
+
+    prev_run = session.previous_run if (session and session.previous_run_id) else None
+    score_delta = round((session.score or 0.0) - (prev_run.score or 0.0), 1) if prev_run else 0.0
 
     return {
         "task_id": task_id,
         "status": status_val,
         "url": url_val,
         "depth": rec.depth if rec else (session.depth if session else 1),
+        "run_number": session.run_number if session else 1,
+        "run_type": session.run_type if session else "baseline",
+        "previous_run_id": str(session.previous_run_id) if session and session.previous_run_id else None,
+        "previous_run_number": prev_run.run_number if prev_run else None,
+        "score": session.score if session else 100.0,
+        "score_delta": score_delta,
+        "defects_new": session.defects_new if session else 0,
+        "defects_fixed": session.defects_fixed if session else 0,
+        "defects_reopened": session.defects_reopened if session else 0,
+        "defects_open": session.defects_open if session else 0,
+        "defects_not_retested": session.defects_not_retested if session else 0,
         "pages_found": rec.pages_found if rec else 1,
         "pages_completed": rec.pages_completed if rec else 1,
         "pages_total": rec.pages_total if rec else 1,
@@ -184,6 +221,207 @@ async def get_audit_status(
         "summary": session.summary if session else None
     }
 
+
+@router.get("/api/audits/{task_id}/regression")
+async def get_audit_regression(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    """Returns regression summary vs previous run."""
+    session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Audit session not found")
+
+    prev = session.previous_run if session.previous_run_id else None
+    score_delta = round(session.score - (prev.score if prev else 0.0), 1) if prev else 0.0
+    scope_changed = bool(prev and prev.scope_fingerprint != session.scope_fingerprint)
+
+    return {
+        "task_id": session.task_id,
+        "run_number": session.run_number or 1,
+        "run_type": session.run_type,
+        "previous_run_id": str(session.previous_run_id) if session.previous_run_id else None,
+        "previous_run_number": prev.run_number if prev else None,
+        "score": session.score,
+        "previous_score": prev.score if prev else 0.0,
+        "score_delta": score_delta,
+        "defects_new": session.defects_new,
+        "defects_fixed": session.defects_fixed,
+        "defects_reopened": session.defects_reopened,
+        "defects_open": session.defects_open,
+        "defects_not_retested": session.defects_not_retested,
+        "scope_changed": scope_changed
+    }
+
+
+@router.get("/api/audits/{task_id}/testcases")
+@router.get("/task/{task_id}/testcases")
+async def get_task_testcases(
+    task_id: str,
+    status: Optional[str] = None,
+    rule_id: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """Get paginated, filterable test cases from DB."""
+    session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
+    if session:
+        db_items, total = testcase_repo.get_testcases_by_session(
+            db, session.id, status=status, rule_id=rule_id, limit=limit, offset=offset
+        )
+        counts = testcase_repo.count_testcases_by_status(db, session.id)
+
+        items = []
+        for tc in db_items:
+            def_code = tc.defect.defect_code if tc.defect else ("DEF-0001" if tc.status == "FAIL" else "N/A")
+            items.append({
+                "testcase_id": tc.testcase_code,
+                "display_name": tc.display_name or tc.testcase_code,
+                "rule_id": tc.rule_id,
+                "testcase_name": tc.testcase_name,
+                "status": tc.status,
+                "severity": tc.severity,
+                "criteria": tc.testcase_name,
+                "description": tc.description or "",
+                "expected_result": tc.expected_result or "",
+                "actual_result": tc.actual_result or "",
+                "steps_to_reproduce": tc.steps_to_reproduce or "",
+                "business_impact": tc.business_impact or "",
+                "remediation": tc.remediation or "",
+                "html_snippet": tc.html_snippet or "N/A",
+                "selector": tc.selector or "N/A",
+                "screenshot": tc.screenshot_path or "N/A",
+                "repeat_count": tc.repeat_count or 1,
+                "remarks": tc.remarks or "",
+                "help_url": tc.help_url or "",
+                "page_url": tc.page_url or "",
+                "page_title": tc.page_title or "",
+                "defect_id": def_code
+            })
+
+        return {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "counts": counts
+        }
+
+    # Fallback to json report
+    tc_json = await orchestrator.get_testcase_report(task_id)
+    if tc_json:
+        filtered = tc_json
+        if status:
+            filtered = [x for x in filtered if x.get("status") == status.upper()]
+        if rule_id:
+            filtered = [x for x in filtered if x.get("rule_id") == rule_id]
+        total = len(filtered)
+        paginated = filtered[offset:offset + limit]
+        counts = {
+            "PASS": sum(1 for x in tc_json if x.get("status") == "PASS"),
+            "FAIL": sum(1 for x in tc_json if x.get("status") == "FAIL"),
+            "NOT_APPLICABLE": sum(1 for x in tc_json if x.get("status") == "NOT_APPLICABLE"),
+            "MANUAL_REVIEW": sum(1 for x in tc_json if x.get("status") == "MANUAL_REVIEW")
+        }
+        return {
+            "items": paginated,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "counts": counts
+        }
+
+    return {"items": [], "total": 0, "limit": limit, "offset": offset, "counts": {}}
+
+
+@router.get("/api/audits/{task_id_a}/compare/{task_id_b}")
+async def compare_audits(
+    task_id_a: str,
+    task_id_b: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Diff comparison between two audit runs.
+    Returns:
+    - Fixed: defects that failed in run A but passed / absent in run B
+    - New: defects that failed in run B but were absent in run A
+    - Unchanged: defects failing in both runs
+    """
+    session_a = db.query(AuditSession).filter(AuditSession.task_id == task_id_a).first()
+    session_b = db.query(AuditSession).filter(AuditSession.task_id == task_id_b).first()
+
+    if not session_a or not session_b:
+        raise HTTPException(status_code=404, detail="One or both audit sessions not found")
+
+    tcs_a = testcase_repo.get_all_testcases_by_session(db, session_a.id)
+    tcs_b = testcase_repo.get_all_testcases_by_session(db, session_b.id)
+
+    fail_a = {tc.fingerprint or compute_fingerprint(tc.rule_id, tc.html_snippet or "", tc.page_url or ""): tc for tc in tcs_a if tc.status == "FAIL"}
+    fail_b = {tc.fingerprint or compute_fingerprint(tc.rule_id, tc.html_snippet or "", tc.page_url or ""): tc for tc in tcs_b if tc.status == "FAIL"}
+
+    fixed = []
+    for fp, tc in fail_a.items():
+        if fp not in fail_b:
+            fixed.append({
+                "testcase_code": tc.testcase_code,
+                "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
+                "title": tc.testcase_name,
+                "rule_id": tc.rule_id,
+                "page_url": tc.page_url,
+                "severity": tc.severity,
+                "status": "Fixed in Run #" + str(session_b.run_number or 2)
+            })
+
+    new_defects = []
+    for fp, tc in fail_b.items():
+        if fp not in fail_a:
+            new_defects.append({
+                "testcase_code": tc.testcase_code,
+                "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
+                "title": tc.testcase_name,
+                "rule_id": tc.rule_id,
+                "page_url": tc.page_url,
+                "severity": tc.severity,
+                "status": "New in Run #" + str(session_b.run_number or 2)
+            })
+
+    unchanged = []
+    for fp, tc in fail_b.items():
+        if fp in fail_a:
+            unchanged.append({
+                "testcase_code": tc.testcase_code,
+                "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
+                "title": tc.testcase_name,
+                "rule_id": tc.rule_id,
+                "page_url": tc.page_url,
+                "severity": tc.severity,
+                "status": "Still Failing"
+            })
+
+    return {
+        "run_a": {
+            "task_id": session_a.task_id,
+            "run_number": session_a.run_number or 1,
+            "score": session_a.score,
+            "total_violations": session_a.fail_count
+        },
+        "run_b": {
+            "task_id": session_b.task_id,
+            "run_number": session_b.run_number or 2,
+            "score": session_b.score,
+            "total_violations": session_b.fail_count
+        },
+        "fixed": fixed,
+        "new": new_defects,
+        "unchanged": unchanged,
+        "fixed_count": len(fixed),
+        "new_count": len(new_defects),
+        "unchanged_count": len(unchanged),
+        "score_delta": round(session_b.score - session_a.score, 1)
+    }
+
+
 @router.get("/task/{task_id}/token_usage")
 async def get_task_token_usage(
     task_id: str,
@@ -192,31 +430,21 @@ async def get_task_token_usage(
     """Get token usage stats for a task."""
     return await orchestrator.fetch_and_format_token_usage(task_id)
 
-@router.get("/task/{task_id}/testcases")
-async def get_task_testcases(
-    task_id: str,
-    db: Session = Depends(get_db)
-):
-    """Get generated test cases for a task."""
-    tc = await orchestrator.get_testcase_report(task_id)
-    if tc:
-        return tc
-    session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
-    if not session:
-        return []
-    return (session.summary or {}).get("test_cases", [])
 
 @router.post("/task/{task_id}/stop")
 async def stop_audit(task_id: str):
     return await orchestrator.stop_audit(task_id)
 
+
 @router.post("/task/{task_id}/pause")
 async def pause_audit(task_id: str):
     return await orchestrator.pause_audit(task_id)
 
+
 @router.post("/task/{task_id}/resume")
 async def resume_audit(task_id: str):
     return await orchestrator.resume_audit(task_id)
+
 
 @router.delete("/task/{task_id}")
 async def delete_audit(task_id: str):

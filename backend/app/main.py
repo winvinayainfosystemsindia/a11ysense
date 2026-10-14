@@ -127,6 +127,7 @@ from backend.app.api.reports import router as reports_router
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.users import router as users_router
 from backend.app.api.estimation import router as estimation_router
+from backend.app.api.defects import router as defects_router
 
 # Root prefixed routes (/auth, /api/projects, etc.)
 app.include_router(auth_router)
@@ -137,6 +138,7 @@ app.include_router(reports_router)
 app.include_router(dashboard_router)
 app.include_router(users_router)
 app.include_router(estimation_router)
+app.include_router(defects_router)
 
 # /v1 prefixed routes (/v1/auth, /v1/api/projects, etc.)
 app.include_router(auth_router, prefix="/v1")
@@ -147,6 +149,7 @@ app.include_router(reports_router, prefix="/v1")
 app.include_router(dashboard_router, prefix="/v1")
 app.include_router(users_router, prefix="/v1")
 app.include_router(estimation_router, prefix="/v1")
+app.include_router(defects_router, prefix="/v1")
 
 if __name__ == "__main__":
     import uvicorn

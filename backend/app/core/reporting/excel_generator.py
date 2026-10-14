@@ -450,6 +450,64 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
     ws_sum.cell(row=row_idx, column=3, value=qg_msg).font = REGULAR_FONT
 
     # =========================================================================
+    # OPTIONAL SHEET: Regression Summary (if regression data present)
+    # =========================================================================
+    regression_info = audit_data.get("regression")
+    if regression_info:
+        ws_reg = wb.create_sheet(title="Regression Summary")
+        ws_reg.views.sheetView[0].showGridLines = True
+        ws_reg.freeze_panes = "A2"
+        _set_col_widths(ws_reg, [18, 16, 26, 35, 14, 14, 30])
+
+        run_num = regression_info.get("run_number", 1)
+        prev_num = regression_info.get("previous_run_number")
+        score = regression_info.get("score", 100.0)
+        prev_score = regression_info.get("previous_score", 100.0)
+        score_delta = regression_info.get("score_delta", 0.0)
+        delta_str = f"+{score_delta}" if score_delta > 0 else f"{score_delta}"
+
+        # Title
+        ws_reg.merge_cells("A1:E1")
+        r_title = ws_reg["A1"]
+        r_title.value = f"A11ySense AI — Regression Summary (Run #{run_num} vs Run #{prev_num or 'Baseline'})"
+        r_title.font = TITLE_FONT
+        ws_reg.row_dimensions[1].height = 26
+
+        # Score comparison
+        ws_reg.cell(row=3, column=1, value="Current Score:").font = BOLD_FONT
+        sc_c = ws_reg.cell(row=3, column=2, value=score)
+        sc_c.font = CARD_VALUE_FONT
+        ws_reg.cell(row=3, column=3, value=f"Previous: {prev_score} (Delta: {delta_str})").font = REGULAR_FONT
+
+        # Table of counts
+        headers = ["Fixed Defects", "New Defects", "Reopened", "Still Open", "Not Retested"]
+        vals = [
+            regression_info.get("defects_fixed", 0),
+            regression_info.get("defects_new", 0),
+            regression_info.get("defects_reopened", 0),
+            regression_info.get("defects_open", 0),
+            regression_info.get("defects_not_retested", 0),
+        ]
+        ws_reg.row_dimensions[5].height = 22
+        for ci, (h, val) in enumerate(zip(headers, vals), start=1):
+            hc = ws_reg.cell(row=5, column=ci, value=h)
+            hc.fill = SECTION_HEADER_FILL
+            hc.font = BOLD_FONT
+            hc.alignment = Alignment(horizontal="center")
+            hc.border = THIN_BORDER
+
+            vc = ws_reg.cell(row=6, column=ci, value=val)
+            vc.font = BOLD_FONT
+            vc.alignment = Alignment(horizontal="center")
+            vc.border = THIN_BORDER
+            if h == "Fixed Defects":
+                vc.fill = PASS_FILL
+                vc.font = PASS_FONT
+            elif h in ("New Defects", "Reopened"):
+                vc.fill = FAIL_FILL
+                vc.font = FAIL_FONT
+
+    # =========================================================================
     # SHEET 2: Test Case Report (Dark Blue Header)
     # Exact 14 columns
     # =========================================================================
@@ -531,30 +589,59 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
 
     # =========================================================================
     # SHEET 3: Defects Report (Dark Red Header)
-    # Exact 16 columns with Data Validation Dropdown on Status
+    # Exact 16 columns (or 21 with regression metadata)
     # =========================================================================
     ws_def = wb.create_sheet(title="Defects Report")
     ws_def.views.sheetView[0].showGridLines = True
     ws_def.freeze_panes = "A2"
 
-    def_headers = [
-        "S.No",
-        "Defect ID",
-        "Testcase ID",
-        "Page URL",
-        "WCAG Criteria",
-        "Level",
-        "WCAG Principle",
-        "Element HTML Snippet",
-        "Description",
-        "Expected Result",
-        "Actual Result",
-        "Steps to Reproduce",
-        "Status",
-        "Severity",
-        "AI Suggestion to Fix",
-        "Remarks",
-    ]
+    has_reg = bool(audit_data.get("regression"))
+    if has_reg:
+        def_headers = [
+            "S.No",
+            "Defect ID",
+            "Testcase ID",
+            "Page URL",
+            "WCAG Criteria",
+            "Level",
+            "WCAG Principle",
+            "Element HTML Snippet",
+            "Description",
+            "Expected Result",
+            "Actual Result",
+            "Steps to Reproduce",
+            "Status",
+            "Severity",
+            "AI Suggestion to Fix",
+            "First Seen (Run)",
+            "Last Seen (Run)",
+            "Fixed In (Run)",
+            "Reopen Count",
+            "Age (days)",
+            "Remarks",
+        ]
+        def_widths = [6, 14, 14, 38, 26, 8, 16, 42, 45, 45, 45, 50, 14, 12, 50, 14, 14, 14, 14, 12, 30]
+    else:
+        def_headers = [
+            "S.No",
+            "Defect ID",
+            "Testcase ID",
+            "Page URL",
+            "WCAG Criteria",
+            "Level",
+            "WCAG Principle",
+            "Element HTML Snippet",
+            "Description",
+            "Expected Result",
+            "Actual Result",
+            "Steps to Reproduce",
+            "Status",
+            "Severity",
+            "AI Suggestion to Fix",
+            "Remarks",
+        ]
+        def_widths = DEF_COL_WIDTHS
+
     ws_def.append(def_headers)
     _apply_header_style(ws_def, len(def_headers), DARK_RED_FILL)
 
@@ -569,24 +656,56 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
         if not fix_suggestion and tc.get("fix_steps"):
             fix_suggestion = "\n".join(f"{si+1}. {st}" for si, st in enumerate(tc["fix_steps"]))
 
-        row_data = [
-            idx,
-            _safe_val(tc.get("defect_id", f"DEF-{idx:04d}")),
-            _safe_val(tc.get("testcase_id", f"TC-{idx:04d}")),
-            _safe_val(page_url),
-            _safe_val(tc.get("criteria", "N/A")),
-            _safe_val(tc.get("level", "A")),
-            _safe_val(tc.get("principle", "N/A")),
-            _safe_val(snippet),
-            _safe_val(tc.get("description", "")),
-            _safe_val(tc.get("expected_result", "")),
-            _safe_val(tc.get("actual_result", "")),
-            _safe_val(tc.get("steps_to_reproduce", "")),
-            "Open",  # Default status
-            sev_val,
-            _safe_val(fix_suggestion),
-            _safe_val(tc.get("remarks", "")),
-        ]
+        st_val = tc.get("defect_status") or "Open"
+        first_seen = tc.get("first_seen_run") or 1
+        last_seen = tc.get("last_seen_run") or 1
+        fixed_in = tc.get("fixed_in_run") or "-"
+        reopen_cnt = tc.get("reopen_count", 0)
+        age_d = tc.get("age_days", 0)
+
+        if has_reg:
+            row_data = [
+                idx,
+                _safe_val(tc.get("defect_id", f"DEF-{idx:04d}")),
+                _safe_val(tc.get("testcase_id", f"TC-{idx:04d}")),
+                _safe_val(page_url),
+                _safe_val(tc.get("criteria", "N/A")),
+                _safe_val(tc.get("level", "A")),
+                _safe_val(tc.get("principle", "N/A")),
+                _safe_val(snippet),
+                _safe_val(tc.get("description", "")),
+                _safe_val(tc.get("expected_result", "")),
+                _safe_val(tc.get("actual_result", "")),
+                _safe_val(tc.get("steps_to_reproduce", "")),
+                st_val,
+                sev_val,
+                _safe_val(fix_suggestion),
+                first_seen,
+                last_seen,
+                fixed_in,
+                reopen_cnt,
+                age_d,
+                _safe_val(tc.get("remarks", "")),
+            ]
+        else:
+            row_data = [
+                idx,
+                _safe_val(tc.get("defect_id", f"DEF-{idx:04d}")),
+                _safe_val(tc.get("testcase_id", f"TC-{idx:04d}")),
+                _safe_val(page_url),
+                _safe_val(tc.get("criteria", "N/A")),
+                _safe_val(tc.get("level", "A")),
+                _safe_val(tc.get("principle", "N/A")),
+                _safe_val(snippet),
+                _safe_val(tc.get("description", "")),
+                _safe_val(tc.get("expected_result", "")),
+                _safe_val(tc.get("actual_result", "")),
+                _safe_val(tc.get("steps_to_reproduce", "")),
+                st_val,
+                sev_val,
+                _safe_val(fix_suggestion),
+                _safe_val(tc.get("remarks", "")),
+            ]
         ws_def.append(row_data)
 
         for col_idx in range(1, len(def_headers) + 1):
@@ -610,7 +729,7 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
                     cell.fill = sev_fill
                 cell.font = sev_font
 
-    _set_col_widths(ws_def, DEF_COL_WIDTHS)
+    _set_col_widths(ws_def, def_widths)
     ws_def.auto_filter.ref = ws_def.dimensions
 
     # Add Data Validation Dropdown for Status (Open, In Progress, Resolved, Closed)

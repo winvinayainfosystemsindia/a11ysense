@@ -23,6 +23,10 @@ from common.utils.event_bus import publish_event, get_redis_client
 from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA, _AUDIT_SCOPE_CODES, WCAG_CRITERIA_MAP
 from common.constants.rule_catalog import resolve_rule, normalize_severity, principle_for
 from common.constants.sc_catalog import SC_CATALOG
+from common.database.connection import get_session_local
+from common.database.models import AuditSession, SuccessCriterion
+from backend.app.repository.testcase_repo import testcase_repo
+from backend.app.core.regression.reconciler import reconciler
 from backend.app.core.reporting.narrative import fallback_narrative
 from backend.app.core.reporting.quality_gate import check_report
 
@@ -359,16 +363,18 @@ class AuditOrchestrator:
 
             report_url = f"/api/reports/excel/{task_id}"
 
-            # Compile and save testcase reports
-            testcases = []
-            try:
-                testcases = await self.compile_and_save_testcase_report(task_id, refined_result, org_id=org_id, proj_id=proj_id)
-            except Exception as tc_err:
-                logger.error(f"Failed to generate testcase report: {str(tc_err)}")
-
             # Check if stopped early by user
             final_progress = audit_progress_repo.get(task_id)
             is_stopped = final_progress and final_progress.status == "stopped"
+
+            # Compile and save testcase reports
+            testcases = []
+            try:
+                testcases = await self.compile_and_save_testcase_report(
+                    task_id, refined_result, org_id=org_id, proj_id=proj_id, is_stopped=is_stopped
+                )
+            except Exception as tc_err:
+                logger.error(f"Failed to generate testcase report: {str(tc_err)}")
 
             # Publish the finalized audit result onto stream "audit:analyzed" if Redis is available
             if get_redis_client() is not None:
@@ -481,7 +487,10 @@ class AuditOrchestrator:
 
         # Bootstrap AuditSession record
         try:
-            audit_session_repo.bootstrap_session(task_id, str(request.url), org_id, proj_id, request.depth)
+            audit_session_repo.bootstrap_session(
+                task_id, str(request.url), org_id, proj_id, request.depth,
+                urls_subset=request.selected_urls
+            )
         except Exception as db_err:
             logger.error(f"Failed to bootstrap audit session: {db_err}")
 
@@ -686,7 +695,53 @@ class AuditOrchestrator:
         return {"status": "deleted", "task_id": task_id}
 
     async def get_testcase_report(self, task_id: str) -> list:
-        """Retrieve testcase report data from disk."""
+        """Retrieve testcase report data from database with fallback to disk."""
+        db = get_session_local()()
+        try:
+            session_rec = db.query(AuditSession).filter_by(task_id=task_id).first()
+            if session_rec:
+                tcs = testcase_repo.get_all_testcases_by_session(db, session_rec.id)
+                if tcs:
+                    result = []
+                    for tc in tcs:
+                        def_code = "N/A"
+                        if tc.status == "FAIL":
+                            def_code = tc.defect.defect_code if tc.defect else "DEF-0001"
+                        result.append({
+                            "testcase_id": tc.testcase_code,
+                            "display_name": tc.display_name or tc.testcase_code,
+                            "rule_id": tc.rule_id,
+                            "testcase_name": tc.testcase_name,
+                            "status": tc.status,
+                            "severity": tc.severity,
+                            "criteria": tc.testcase_name,
+                            "level": "A",
+                            "principle": "N/A",
+                            "description": tc.description or "",
+                            "expected_result": tc.expected_result or "",
+                            "actual_result": tc.actual_result or "",
+                            "steps_to_reproduce": tc.steps_to_reproduce or "",
+                            "business_impact": tc.business_impact or "",
+                            "remediation": tc.remediation or "",
+                            "html_snippet": tc.html_snippet or "N/A",
+                            "selector": tc.selector or "N/A",
+                            "screenshot": tc.screenshot_path or "N/A",
+                            "repeat_count": tc.repeat_count or 1,
+                            "remarks": tc.remarks or "",
+                            "help_url": tc.help_url or "",
+                            "page_url": tc.page_url or "",
+                            "page_title": tc.page_title or "",
+                            "defect_id": def_code,
+                            "input_tokens": tc.input_tokens or 0,
+                            "output_tokens": tc.output_tokens or 0,
+                            "refined_by": tc.refined_by or ""
+                        })
+                    return result
+        except Exception as e:
+            logger.warning(f"Failed to fetch testcases from DB for task {task_id}: {e}")
+        finally:
+            db.close()
+
         reports_dir = get_audit_storage_path(task_id)
         json_path = os.path.join(reports_dir, f"testcase_report_{task_id}.json")
         if os.path.exists(json_path):
@@ -765,7 +820,7 @@ class AuditOrchestrator:
             "business_impact": business_impact
         }
 
-    async def compile_and_save_testcase_report(self, task_id: str, result, org_id: str = None, proj_id: str = None) -> list:
+    async def compile_and_save_testcase_report(self, task_id: str, result, org_id: str = None, proj_id: str = None, is_stopped: bool = False) -> list:
         base_page_url = str(result.url) if result.url else ""
         base_page_title = (result.metadata or {}).get("page_title", "Page") if hasattr(result, "metadata") and result.metadata else "Page"
         pass_mode = os.getenv("REPORT_PASS_MODE", "per_element").lower()
@@ -1107,22 +1162,185 @@ class AuditOrchestrator:
                 "refined_by": "rule_catalog"
             })
 
-        # ── 4. Combine all into ordered testcases list and assign sequential IDs ──
+        # ── 4. Reconcile & Persist in PostgreSQL (if session exists) ─────────
         all_testcases = fail_testcases + pass_testcases + na_testcases + manual_testcases
 
-        tc_counter = 0
-        def_counter = 0
+        # Build list of scanned pages
+        pages_seen: dict = {}
         for tc in all_testcases:
-            tc_counter += 1
-            tc["testcase_id"] = f"TC-{tc_counter:04d}"
-            custom_id = self.generate_tc_custom_id(tc["page_url"], tc["page_title"], tc_counter)
-            tc["display_name"] = custom_id
+            p_url = tc.get("page_url")
+            if p_url and p_url not in ("All pages", "N/A"):
+                if p_url not in pages_seen:
+                    pages_seen[p_url] = {
+                        "url": p_url,
+                        "title": tc.get("page_title") or "Page",
+                        "depth": 1,
+                        "status": "scanned"
+                    }
+        if base_page_url and base_page_url not in pages_seen:
+            pages_seen[base_page_url] = {
+                "url": base_page_url,
+                "title": base_page_title,
+                "depth": 1,
+                "status": "scanned"
+            }
+        pages_list = list(pages_seen.values())
 
-            if tc["status"] == "FAIL":
-                def_counter += 1
-                tc["defect_id"] = f"DEF-{def_counter:04d}"
+        db = get_session_local()()
+        regression_counters = {
+            "defects_new": 0,
+            "defects_fixed": 0,
+            "defects_reopened": 0,
+            "defects_open": 0,
+            "defects_not_retested": 0
+        }
+        try:
+            session_rec = db.query(AuditSession).filter_by(task_id=task_id).first()
+            if session_rec:
+                # 4.1 Bulk create AuditPage records
+                pages_map = testcase_repo.bulk_create_pages(db, session_rec.id, pages_list)
+
+                # 4.2 Reconcile FAIL testcases against project defects
+                regression_counters = reconciler.reconcile_run(
+                    db=db,
+                    project_id=session_rec.project_id,
+                    session_id=session_rec.id,
+                    scanned_pages=pages_list,
+                    fail_testcases=fail_testcases,
+                    is_run_successful=not is_stopped
+                )
+
+                # 4.3 Success criteria mapping
+                sc_rows = db.query(SuccessCriterion).all()
+                sc_map = {sc.sc_code: sc.id for sc in sc_rows}
+
+                # 4.4 Number testcases and prepare DB records
+                tc_counter = 0
+                tc_records_to_insert = []
+                for tc in all_testcases:
+                    tc_counter += 1
+                    tc["testcase_id"] = f"TC-{tc_counter:04d}"
+                    custom_id = self.generate_tc_custom_id(tc["page_url"], tc["page_title"], tc_counter)
+                    tc["display_name"] = custom_id
+
+                    if tc["status"] != "FAIL":
+                        tc["defect_id"] = "N/A"
+                    elif "defect_id" not in tc or not tc["defect_id"]:
+                        tc["defect_id"] = f"DEF-{tc_counter:04d}"
+
+                    crit_code = tc.get("criteria", "").split(" ")[0].strip() if tc.get("criteria") else ""
+                    sc_id = sc_map.get(crit_code)
+                    page_obj = pages_map.get(tc.get("page_url"))
+                    page_id = page_obj.id if page_obj else None
+
+                    tc_records_to_insert.append({
+                        "audit_session_id": session_rec.id,
+                        "project_id": session_rec.project_id,
+                        "audit_page_id": page_id,
+                        "success_criterion_id": sc_id,
+                        "defect_id": tc.get("defect_id_uuid"),
+                        "testcase_code": tc["testcase_id"],
+                        "display_name": tc["display_name"],
+                        "rule_id": tc.get("rule_id", "Unknown"),
+                        "testcase_name": tc.get("testcase_name", ""),
+                        "status": tc["status"],
+                        "severity": tc.get("severity", "N/A"),
+                        "description": tc.get("description", ""),
+                        "expected_result": tc.get("expected_result", ""),
+                        "actual_result": tc.get("actual_result", ""),
+                        "steps_to_reproduce": tc.get("steps_to_reproduce", ""),
+                        "business_impact": tc.get("business_impact", ""),
+                        "remediation": tc.get("remediation", ""),
+                        "html_snippet": tc.get("html_snippet", ""),
+                        "selector": tc.get("selector", ""),
+                        "screenshot_path": tc.get("screenshot", ""),
+                        "repeat_count": tc.get("repeat_count", 1),
+                        "remarks": tc.get("remarks", ""),
+                        "help_url": tc.get("help_url", ""),
+                        "page_url": tc.get("page_url", ""),
+                        "page_title": tc.get("page_title", ""),
+                        "fingerprint": tc.get("fingerprint", ""),
+                        "input_tokens": tc.get("input_tokens", 0),
+                        "output_tokens": tc.get("output_tokens", 0),
+                        "refined_by": tc.get("refined_by", "")
+                    })
+
+                # Bulk insert testcases in batches
+                testcase_repo.bulk_create_testcases(db, tc_records_to_insert)
+
+                # 4.5 Build and insert run_criterion_results
+                criterion_results = []
+                for sc in sc_rows:
+                    code = sc.sc_code
+                    fails = sum(1 for tc in fail_testcases if tc.get("criteria", "").startswith(code))
+                    passes = sum(1 for tc in pass_testcases if tc.get("criteria", "").startswith(code))
+                    if fails > 0:
+                        st = "FAIL"
+                    elif passes > 0:
+                        st = "PASS"
+                    elif any(c["code"] == code for c in A11YSENSE_MANUAL_REVIEW_CRITERIA):
+                        st = "MANUAL_REVIEW"
+                    else:
+                        st = "NOT_APPLICABLE"
+
+                    criterion_results.append({
+                        "success_criterion_id": sc.id,
+                        "status": st,
+                        "pass_count": passes,
+                        "fail_count": fails
+                    })
+                testcase_repo.bulk_create_criterion_results(db, session_rec.id, criterion_results)
+
+                # 4.6 Update session counters
+                session_rec.total_testcases = len(all_testcases)
+                session_rec.fail_count = len(fail_testcases)
+                session_rec.pass_count = len(pass_testcases)
+                session_rec.na_count = len(na_testcases)
+                session_rec.manual_count = len(manual_testcases)
+                session_rec.score = (result.metadata or {}).get("accessibility_score", 100.0) if hasattr(result, "metadata") and result.metadata else 100.0
+                session_rec.defects_new = regression_counters["defects_new"]
+                session_rec.defects_fixed = regression_counters["defects_fixed"]
+                session_rec.defects_reopened = regression_counters["defects_reopened"]
+                session_rec.defects_open = regression_counters["defects_open"]
+                session_rec.defects_not_retested = regression_counters["defects_not_retested"]
+                if not is_stopped:
+                    session_rec.completed_at = datetime.utcnow()
+
+                db.commit()
+                logger.info(f"Successfully persisted audit run {task_id} into PostgreSQL with {len(all_testcases)} testcases.")
             else:
-                tc["defect_id"] = "N/A"
+                # Standalone or test environment without DB session row
+                tc_counter = 0
+                def_counter = 0
+                for tc in all_testcases:
+                    tc_counter += 1
+                    tc["testcase_id"] = f"TC-{tc_counter:04d}"
+                    custom_id = self.generate_tc_custom_id(tc["page_url"], tc["page_title"], tc_counter)
+                    tc["display_name"] = custom_id
+
+                    if tc["status"] == "FAIL":
+                        def_counter += 1
+                        tc["defect_id"] = f"DEF-{def_counter:04d}"
+                    else:
+                        tc["defect_id"] = "N/A"
+        except Exception as db_err:
+            db.rollback()
+            logger.error(f"Error persisting audit testcases to DB for task {task_id}: {db_err}", exc_info=True)
+            tc_counter = 0
+            def_counter = 0
+            for tc in all_testcases:
+                tc_counter += 1
+                if "testcase_id" not in tc:
+                    tc["testcase_id"] = f"TC-{tc_counter:04d}"
+                if "display_name" not in tc:
+                    tc["display_name"] = self.generate_tc_custom_id(tc["page_url"], tc["page_title"], tc_counter)
+                if tc["status"] == "FAIL" and ("defect_id" not in tc or not tc["defect_id"]):
+                    def_counter += 1
+                    tc["defect_id"] = f"DEF-{def_counter:04d}"
+                elif tc["status"] != "FAIL":
+                    tc["defect_id"] = "N/A"
+        finally:
+            db.close()
 
         # ── 5. Save JSON report to disk ───────────────────────────────────────
         reports_dir = get_audit_storage_path(task_id, org_id, proj_id)

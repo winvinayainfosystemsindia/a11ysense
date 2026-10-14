@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from common.database.connection import get_session_local
 from common.database.models import AuditSession, Organization, Project, ViolationRecord, AuditProgress
+from app.repository.project_repo import project_repo
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +25,10 @@ class AuditSessionRepo:
         url: str,
         org_id: Optional[str] = None,
         proj_id: Optional[str] = None,
-        depth: int = 1
+        depth: int = 1,
+        urls_subset: Optional[List[str]] = None
     ) -> AuditSession:
-        """Create a new AuditSession record with tenant resolution."""
+        """Create a new AuditSession record with tenant resolution, run sequencing, and regression linkage."""
         db = get_session_local()()
         try:
             resolved_org_id = None
@@ -48,12 +51,19 @@ class AuditSessionRepo:
                     logger.warning(f"Invalid proj_id UUID: {proj_id}")
             
             if not resolved_proj_id and resolved_org_id:
-                default_proj = db.query(Project).filter_by(
-                    name="Default Project",
-                    organization_id=resolved_org_id
-                ).first()
-                if default_proj:
-                    resolved_proj_id = default_proj.id
+                default_proj = project_repo.get_or_create_default_project(db, str(resolved_org_id))
+                resolved_proj_id = default_proj.id
+
+            # Run sequencing and regression linking
+            next_run = project_repo.get_next_run_number(db, str(resolved_proj_id))
+            last_run = project_repo.get_latest_completed_run(db, str(resolved_proj_id))
+            prev_run_id = last_run.id if last_run else None
+            run_type = "regression" if prev_run_id else "baseline"
+
+            # Compute scope fingerprint
+            scope_urls = sorted(urls_subset) if urls_subset else [url.strip().rstrip("/")]
+            scope_str = f"{scope_urls}|depth={depth}|scope=default"
+            scope_hash = hashlib.sha1(scope_str.encode("utf-8")).hexdigest()
 
             session_record = AuditSession(
                 task_id=task_id,
@@ -62,6 +72,10 @@ class AuditSessionRepo:
                 organization_id=resolved_org_id,
                 project_id=resolved_proj_id,
                 depth=depth,
+                run_number=next_run,
+                run_type=run_type,
+                previous_run_id=prev_run_id,
+                scope_fingerprint=scope_hash,
                 timestamp=datetime.utcnow()
             )
             db.add(session_record)
@@ -90,7 +104,23 @@ class AuditSessionRepo:
                     "summary": session_rec.summary,
                     "organization_id": session_rec.organization_id,
                     "project_id": session_rec.project_id,
-                    "depth": session_rec.depth or 1
+                    "depth": session_rec.depth or 1,
+                    "run_number": session_rec.run_number,
+                    "run_type": session_rec.run_type,
+                    "previous_run_id": session_rec.previous_run_id,
+                    "scope_fingerprint": session_rec.scope_fingerprint,
+                    "total_testcases": session_rec.total_testcases,
+                    "fail": session_rec.fail_count,
+                    "pass": session_rec.pass_count,
+                    "na": session_rec.na_count,
+                    "manual": session_rec.manual_count,
+                    "score": session_rec.score,
+                    "completed_at": session_rec.completed_at,
+                    "defects_new": session_rec.defects_new,
+                    "defects_fixed": session_rec.defects_fixed,
+                    "defects_reopened": session_rec.defects_reopened,
+                    "defects_open": session_rec.defects_open,
+                    "defects_not_retested": session_rec.defects_not_retested,
                 }
             return None
         except Exception as e:
@@ -121,16 +151,33 @@ class AuditSessionRepo:
         task_id: str,
         status: str,
         summary_data: Dict[str, Any],
-        violations: List[Any]
+        violations: List[Any],
+        counters: Optional[Dict[str, Any]] = None
     ) -> bool:
-        """Persist full AuditSession summary and individual ViolationRecord rows."""
+        """Persist full AuditSession summary, regression counters, and individual ViolationRecord rows."""
         db = get_session_local()()
         try:
             session_rec = db.query(AuditSession).filter_by(task_id=task_id).first()
             if session_rec:
                 session_rec.status = status
                 session_rec.summary = summary_data
+                if status == "completed":
+                    session_rec.completed_at = datetime.utcnow()
                 
+                # Update counters if provided
+                if counters:
+                    session_rec.total_testcases = counters.get("total_testcases", session_rec.total_testcases)
+                    session_rec.fail_count = counters.get("fail", session_rec.fail_count)
+                    session_rec.pass_count = counters.get("pass", session_rec.pass_count)
+                    session_rec.na_count = counters.get("na", session_rec.na_count)
+                    session_rec.manual_count = counters.get("manual", session_rec.manual_count)
+                    session_rec.score = counters.get("score", session_rec.score)
+                    session_rec.defects_new = counters.get("defects_new", session_rec.defects_new)
+                    session_rec.defects_fixed = counters.get("defects_fixed", session_rec.defects_fixed)
+                    session_rec.defects_reopened = counters.get("defects_reopened", session_rec.defects_reopened)
+                    session_rec.defects_open = counters.get("defects_open", session_rec.defects_open)
+                    session_rec.defects_not_retested = counters.get("defects_not_retested", session_rec.defects_not_retested)
+
                 # Delete existing violations for this session
                 db.query(ViolationRecord).filter_by(audit_session_id=session_rec.id).delete()
                 
@@ -138,13 +185,13 @@ class AuditSessionRepo:
                 for v in violations:
                     violation_rec = ViolationRecord(
                         audit_session_id=session_rec.id,
-                        rule_id=v.id,
-                        impact=v.impact,
-                        description=v.description,
-                        help=v.help,
-                        help_url=getattr(v, 'helpUrl', getattr(v, 'help_url', None)),
-                        nodes=v.nodes,
-                        metadata_json=v.metadata
+                        rule_id=getattr(v, 'id', None) or v.get('id', 'unknown'),
+                        impact=getattr(v, 'impact', None) or (v.get('impact') if isinstance(v, dict) else None),
+                        description=getattr(v, 'description', '') or (v.get('description', '') if isinstance(v, dict) else ''),
+                        help=getattr(v, 'help', '') or (v.get('help', '') if isinstance(v, dict) else ''),
+                        help_url=getattr(v, 'helpUrl', getattr(v, 'help_url', None)) or (v.get('helpUrl') or v.get('help_url') if isinstance(v, dict) else None),
+                        nodes=getattr(v, 'nodes', []) or (v.get('nodes', []) if isinstance(v, dict) else []),
+                        metadata_json=getattr(v, 'metadata', None) or (v.get('metadata') if isinstance(v, dict) else None)
                     )
                     db.add(violation_rec)
                 
