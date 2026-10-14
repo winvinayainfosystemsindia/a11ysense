@@ -1303,6 +1303,15 @@ class AuditOrchestrator:
                 session_rec.defects_reopened = regression_counters["defects_reopened"]
                 session_rec.defects_open = regression_counters["defects_open"]
                 session_rec.defects_not_retested = regression_counters["defects_not_retested"]
+                session_rec.status = "completed" if not is_stopped else "stopped"
+                session_rec.summary = {
+                    "accessibility_score": session_rec.score,
+                    "total_violations": len(fail_testcases),
+                    "passes_count": len(pass_testcases),
+                    "not_applicable_count": len(na_testcases),
+                    "manual_review_count": len(manual_testcases),
+                    "total_testcases": len(all_testcases)
+                }
                 if not is_stopped:
                     session_rec.completed_at = datetime.utcnow()
 

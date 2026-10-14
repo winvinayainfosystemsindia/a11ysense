@@ -52,7 +52,8 @@ export const useAuditDetails = () => {
       setTaskDetail(taskData);
 
       if (isTerminal(taskData.status)) {
-        const tcData = await auditService.getTaskTestcases(taskId).catch(() => []);
+        const raw: any = await auditService.getTaskTestcases(taskId).catch(() => []);
+        const tcData = Array.isArray(raw) ? raw : (raw?.items || []);
         if (tcData && tcData.length > 0) {
           setTestcases(tcData);
         }
@@ -206,14 +207,17 @@ export const useAuditDetails = () => {
   // KPI Calculations
   // Pass-rate score: the % of accessibility checks (testcases) that passed.
   const calculatedScore = useMemo(() => {
-    if (testcases.length === 0) return taskDetail?.summary?.accessibility_score ?? 100;
+    if (testcases.length === 0) {
+      if (taskDetail?.score !== undefined && taskDetail?.score !== null) return taskDetail.score;
+      return taskDetail?.summary?.accessibility_score ?? 100;
+    }
     const passedCount = testcases.filter(tc => tc.status === 'PASS').length;
     return parseFloat(((passedCount / testcases.length) * 100).toFixed(1));
   }, [testcases, taskDetail]);
 
-  const accessibilityScore = testcases.length > 0
-    ? calculatedScore
-    : (taskDetail?.summary?.accessibility_score ?? 100);
+  const accessibilityScore = taskDetail?.score !== undefined && taskDetail?.score !== null
+    ? taskDetail.score
+    : (taskDetail?.summary?.accessibility_score ?? calculatedScore);
 
   const criticalCount = useMemo(() => {
     if (testcases.length > 0) {

@@ -76,7 +76,7 @@ class TestCaseRepository:
         session_id: uuid.UUID,
         status: Optional[str] = None,
         rule_id: Optional[str] = None,
-        limit: int = 100,
+        limit: Optional[int] = 100,
         offset: int = 0
     ) -> Tuple[List[TestCase], int]:
         query = db.query(TestCase).filter(TestCase.audit_session_id == session_id)
@@ -86,7 +86,10 @@ class TestCaseRepository:
             query = query.filter(TestCase.rule_id == rule_id)
 
         total = query.count()
-        results = query.order_by(TestCase.testcase_code.asc()).offset(offset).limit(limit).all()
+        query = query.order_by(TestCase.testcase_code.asc()).offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        results = query.all()
         return results, total
 
     def get_all_testcases_by_session(

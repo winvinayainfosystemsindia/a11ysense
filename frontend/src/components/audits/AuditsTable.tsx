@@ -208,7 +208,7 @@ const AuditsTable: React.FC<AuditsTableProps> = ({ audits, isLoading, onRefresh 
           {audit.url}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          ID: {audit.task_id.split('-')[0]}...
+          ID: {audit.task_id.replace(/^task-/, '').slice(0, 8)}...
         </Typography>
       </TableCell>
 

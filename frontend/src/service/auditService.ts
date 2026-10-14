@@ -15,6 +15,17 @@ export interface AuditTaskDetail {
   url: string;
   depth: number;
   status: string;
+  run_number?: number;
+  run_type?: string;
+  previous_run_id?: string | null;
+  previous_run_number?: number | null;
+  score?: number;
+  score_delta?: number;
+  defects_new?: number;
+  defects_fixed?: number;
+  defects_reopened?: number;
+  defects_open?: number;
+  defects_not_retested?: number;
   created_at?: string;
   pages_found?: number;
   pages_completed?: number;
@@ -49,7 +60,7 @@ export const auditService = {
     return response.data;
   },
 
-  getTaskTestcases: async (taskId: string): Promise<any[]> => {
+  getTaskTestcases: async (taskId: string): Promise<any> => {
     const response = await api.get(`/task/${taskId}/testcases`);
     return response.data;
   },

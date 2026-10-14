@@ -44,7 +44,7 @@ export const AuditHeader: React.FC<AuditHeaderProps> = ({
       <Box>
         <Stack component="div" direction="row" spacing={2} sx={{ alignItems: 'center', mb: 1 }}>
           <Typography variant="h4" sx={{ fontWeight: '800', letterSpacing: '-0.5px' }}>
-            Audit #{taskId.split('-')[0].toUpperCase()}
+            {taskDetail.run_number ? `Audit Run #${taskDetail.run_number}` : `Audit #${taskId.replace(/^task-/, '').slice(0, 8)}`}
           </Typography>
           <Chip
             label={taskDetail.status.replace('_', ' ').toUpperCase()}
@@ -57,7 +57,7 @@ export const AuditHeader: React.FC<AuditHeaderProps> = ({
           {taskDetail.url}
         </Typography>
         <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
-          Started At: {new Date(taskDetail.created_at || '').toLocaleString()}
+          Started At: {taskDetail.created_at ? new Date(taskDetail.created_at).toLocaleString() : 'N/A'}
         </Typography>
       </Box>
 

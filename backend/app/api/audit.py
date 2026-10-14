@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -195,6 +196,26 @@ async def get_audit_status(
     prev_run = session.previous_run if (session and session.previous_run_id) else None
     score_delta = round((session.score or 0.0) - (prev_run.score or 0.0), 1) if prev_run else 0.0
 
+    created_at_dt = None
+    if session and session.created_at:
+        created_at_dt = session.created_at
+    elif rec and getattr(rec, "created_at", None):
+        created_at_dt = rec.created_at
+    else:
+        created_at_dt = datetime.utcnow()
+    created_at_val = created_at_dt.isoformat() if hasattr(created_at_dt, "isoformat") else str(created_at_dt)
+
+    summary_val = None
+    if session and session.summary:
+        summary_val = session.summary
+    elif session:
+        summary_val = {
+            "accessibility_score": session.score if session.score is not None else 100.0,
+            "total_violations": session.fail_count if session.fail_count is not None else 0,
+            "passes_count": session.pass_count if session.pass_count is not None else 0,
+            "total_testcases": session.total_testcases if session.total_testcases is not None else 0
+        }
+
     return {
         "task_id": task_id,
         "status": status_val,
@@ -218,7 +239,8 @@ async def get_audit_status(
         "pages_discovered": pages_discovered,
         "report_url": report_url,
         "error": error_val,
-        "summary": session.summary if session else None
+        "summary": summary_val,
+        "created_at": created_at_val
     }
 
 
@@ -260,15 +282,17 @@ async def get_task_testcases(
     task_id: str,
     status: Optional[str] = None,
     rule_id: Optional[str] = None,
-    limit: int = 100,
+    limit: Optional[int] = None,
     offset: int = 0,
+    paginated: bool = False,
     db: Session = Depends(get_db)
 ):
-    """Get paginated, filterable test cases from DB."""
+    """Get test cases from DB (flat list by default, or paginated if requested)."""
     session = db.query(AuditSession).filter(AuditSession.task_id == task_id).first()
     if session:
+        effective_limit = limit if limit is not None else (100 if paginated else None)
         db_items, total = testcase_repo.get_testcases_by_session(
-            db, session.id, status=status, rule_id=rule_id, limit=limit, offset=offset
+            db, session.id, status=status, rule_id=rule_id, limit=effective_limit, offset=offset
         )
         counts = testcase_repo.count_testcases_by_status(db, session.id)
 
@@ -300,10 +324,13 @@ async def get_task_testcases(
                 "defect_id": def_code
             })
 
+        if not paginated:
+            return items
+
         return {
             "items": items,
             "total": total,
-            "limit": limit,
+            "limit": effective_limit,
             "offset": offset,
             "counts": counts
         }
@@ -317,7 +344,11 @@ async def get_task_testcases(
         if rule_id:
             filtered = [x for x in filtered if x.get("rule_id") == rule_id]
         total = len(filtered)
-        paginated = filtered[offset:offset + limit]
+        if not paginated:
+            return filtered
+
+        effective_limit = limit if limit is not None else 100
+        paginated_items = filtered[offset:offset + effective_limit]
         counts = {
             "PASS": sum(1 for x in tc_json if x.get("status") == "PASS"),
             "FAIL": sum(1 for x in tc_json if x.get("status") == "FAIL"),
@@ -325,14 +356,14 @@ async def get_task_testcases(
             "MANUAL_REVIEW": sum(1 for x in tc_json if x.get("status") == "MANUAL_REVIEW")
         }
         return {
-            "items": paginated,
+            "items": paginated_items,
             "total": total,
-            "limit": limit,
+            "limit": effective_limit,
             "offset": offset,
             "counts": counts
         }
 
-    return {"items": [], "total": 0, "limit": limit, "offset": offset, "counts": {}}
+    return [] if not paginated else {"items": [], "total": 0, "limit": limit or 100, "offset": offset, "counts": {}}
 
 
 @router.get("/api/audits/{task_id_a}/compare/{task_id_b}")
