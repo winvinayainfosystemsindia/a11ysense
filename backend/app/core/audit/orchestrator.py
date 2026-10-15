@@ -13,23 +13,34 @@ from urllib.parse import urlparse
 from fastapi.responses import StreamingResponse
 
 from common.schemas.audit import AuditRequest, AuditTask, AuditResult, Violation
-from backend.app.core.audit.manager import ManagerAgent
-from backend.app.repository.audit_repo import audit_progress_repo
-from backend.app.repository.session_repo import audit_session_repo
-from backend.app.repository.crawl_progress_repo import crawl_progress_repo
+try:
+    from app.core.audit.manager import ManagerAgent
+    from app.repository.audit_repo import audit_progress_repo
+    from app.repository.session_repo import audit_session_repo
+    from app.repository.crawl_progress_repo import crawl_progress_repo
+    from app.core.llm import usage as llm_usage
+    from app.repository.testcase_repo import testcase_repo
+    from app.core.regression.reconciler import reconciler
+    from app.core.reporting.narrative import fallback_narrative
+    from app.core.reporting.quality_gate import check_report
+except ImportError:
+    from backend.app.core.audit.manager import ManagerAgent
+    from backend.app.repository.audit_repo import audit_progress_repo
+    from backend.app.repository.session_repo import audit_session_repo
+    from backend.app.repository.crawl_progress_repo import crawl_progress_repo
+    from backend.app.core.llm import usage as llm_usage
+    from backend.app.repository.testcase_repo import testcase_repo
+    from backend.app.core.regression.reconciler import reconciler
+    from backend.app.core.reporting.narrative import fallback_narrative
+    from backend.app.core.reporting.quality_gate import check_report
 
 from common.config import get_service_url, get_storage_path, get_audit_storage_path
 from common.utils.event_bus import publish_event, get_redis_client
 from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA, _AUDIT_SCOPE_CODES, WCAG_CRITERIA_MAP
 from common.constants.rule_catalog import resolve_rule, normalize_severity, principle_for, wcag_fields_for_row, RULE_CATALOG
-from backend.app.core.llm import usage as llm_usage
 from common.constants.sc_catalog import SC_CATALOG
 from common.database.connection import get_session_local
 from common.database.models import AuditSession, SuccessCriterion
-from backend.app.repository.testcase_repo import testcase_repo
-from backend.app.core.regression.reconciler import reconciler
-from backend.app.core.reporting.narrative import fallback_narrative
-from backend.app.core.reporting.quality_gate import check_report
 
 logger = logging.getLogger(__name__)
 manager_agent = ManagerAgent()
@@ -140,7 +151,10 @@ class AuditOrchestrator:
             "cached_calls": totals.get("cached_calls", 0),
             "cost_usd_total": totals.get("cost_usd", 0.0),
             "cost_by_provider": by_provider,
+            "cost_by_category": usage.get("by_category") or {},
             "breakdown": usage.get("by_model") or {},
+            "matrix": usage.get("matrix") or [],
+            "totals": totals,
         }
 
     async def run_in_memory_audit_flow(

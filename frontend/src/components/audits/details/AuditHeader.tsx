@@ -4,6 +4,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PauseIcon from '@mui/icons-material/Pause';
 import StopIcon from '@mui/icons-material/Stop';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
 import type { AuditTaskDetail } from '../../../service/auditService';
 
 interface AuditHeaderProps {
@@ -19,6 +20,7 @@ interface AuditHeaderProps {
   handlePause: () => void;
   handleResume: () => void;
   handleStop: () => void;
+  handleOpenCostModal?: () => void;
 }
 
 export const AuditHeader: React.FC<AuditHeaderProps> = ({
@@ -32,7 +34,8 @@ export const AuditHeader: React.FC<AuditHeaderProps> = ({
   handleExportReport,
   handlePause,
   handleResume,
-  handleStop
+  handleStop,
+  handleOpenCostModal
 }) => {
   return (
     <Stack
@@ -64,8 +67,19 @@ export const AuditHeader: React.FC<AuditHeaderProps> = ({
       <Stack component="div" direction="row" spacing={2}>
         {(isCompleted || isStopped) && (
           <>
+            {handleOpenCostModal && (
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<SmartToyIcon />}
+                onClick={handleOpenCostModal}
+                sx={{ fontWeight: '700', borderRadius: '8px', px: 2.5, py: 1 }}
+              >
+                AI Cost Breakdown
+              </Button>
+            )}
             <Button
-              variant="outlined"
+              variant="contained"
               color="primary"
               startIcon={<FileDownloadIcon />}
               onClick={handleExportReport}

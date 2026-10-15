@@ -294,7 +294,13 @@ class AuditorAgent(BaseAgent):
 
         for attempt in range(1, 3):
             try:
-                ai_response = await self.call_llm(prompt, system_message=system_msg, session_id=session_id, agent_type="auditor")
+                ai_response = await self.call_llm(
+                    prompt,
+                    system_message=system_msg,
+                    session_id=session_id,
+                    agent_type="auditor",
+                    category="testcase"
+                )
                 parsed = self.parse_json(ai_response)
                 problems = validate_testcase(parsed)
                 if not problems:
@@ -326,7 +332,13 @@ class AuditorAgent(BaseAgent):
 
         for attempt in range(1, 3):
             try:
-                ai_response = await self.call_llm(prompt, system_message=system_msg, session_id=session_id, agent_type="auditor")
+                ai_response = await self.call_llm(
+                    prompt,
+                    system_message=system_msg,
+                    session_id=session_id,
+                    agent_type="auditor",
+                    category="defect"
+                )
                 parsed = self.parse_json(ai_response)
                 problems = validate_defect(parsed)
                 if not problems:

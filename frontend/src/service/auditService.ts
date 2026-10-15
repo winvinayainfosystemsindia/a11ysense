@@ -35,13 +35,67 @@ export interface AuditTaskDetail {
   pages_depth_map?: Record<string, number>;
   error?: string;
   summary?: any;
+  token_usage?: TokenUsage;
+}
+
+export interface ProviderUsage {
+  calls: number;
+  cached_calls?: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  label?: string;
+}
+
+export interface CategoryUsage {
+  category: string;
+  label: string;
+  calls: number;
+  cached_calls?: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+}
+
+export interface MatrixItem {
+  category: string;
+  category_label: string;
+  provider: string;
+  provider_label: string;
+  model: string;
+  calls: number;
+  cached_calls?: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
 }
 
 export interface TokenUsage {
+  task_id?: string;
   tokens_total: number;
-  tokens_prompt: number;
-  tokens_completion: number;
-  cost_estimate_usd: number;
+  tokens_sent?: number;
+  tokens_received?: number;
+  tokens_prompt?: number;
+  tokens_completion?: number;
+  llm_calls?: number;
+  cached_calls?: number;
+  cost_usd_total?: number;
+  cost_estimate_usd?: number;
+  cost_by_provider?: Record<string, ProviderUsage>;
+  cost_by_category?: Record<string, CategoryUsage>;
+  breakdown?: Record<string, any>;
+  matrix?: MatrixItem[];
+  totals?: {
+    calls: number;
+    cached_calls?: number;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cost_usd: number;
+  };
 }
 
 export const auditService = {

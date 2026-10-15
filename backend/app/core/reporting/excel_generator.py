@@ -515,6 +515,54 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
         c5.border = THIN_BORDER
         row_idx += 1
 
+        # Operational Purpose Breakdown (Defects, Testcases, Other)
+        by_category = llm_usage_data.get("by_category") or {}
+        if by_category:
+            row_idx += 2
+            ws_sum.cell(row=row_idx, column=1, value="AI USAGE BY AUDIT OPERATION").font = SECTION_FONT
+            row_idx += 1
+
+            cat_headers = ["Audit Operation", "API Calls", "Input Tokens", "Output Tokens", "Cost (USD)"]
+            for ci, h in enumerate(cat_headers, start=1):
+                c = ws_sum.cell(row=row_idx, column=ci, value=h)
+                c.fill = SECTION_HEADER_FILL
+                c.font = BOLD_FONT
+                c.border = THIN_BORDER
+                c.alignment = Alignment(horizontal="center" if ci in (2, 3, 4, 5) else "left")
+            row_idx += 1
+
+            for cat_key in ["defect", "testcase", "other"]:
+                cdata = by_category.get(cat_key)
+                if not cdata:
+                    continue
+                label = cdata.get("label") or cat_key.capitalize()
+                calls = cdata.get("calls", 0)
+                in_tok = cdata.get("input_tokens", 0)
+                out_tok = cdata.get("output_tokens", 0)
+                cost_val = cdata.get("cost_usd", 0.0)
+
+                c1 = ws_sum.cell(row=row_idx, column=1, value=label)
+                c1.font = BOLD_FONT
+                c1.border = THIN_BORDER
+
+                c2 = ws_sum.cell(row=row_idx, column=2, value=calls)
+                c2.alignment = Alignment(horizontal="center")
+                c2.border = THIN_BORDER
+
+                c3 = ws_sum.cell(row=row_idx, column=3, value=f"{in_tok:,}")
+                c3.alignment = Alignment(horizontal="center")
+                c3.border = THIN_BORDER
+
+                c4 = ws_sum.cell(row=row_idx, column=4, value=f"{out_tok:,}")
+                c4.alignment = Alignment(horizontal="center")
+                c4.border = THIN_BORDER
+
+                c5 = ws_sum.cell(row=row_idx, column=5, value=f"${cost_val:.4f}")
+                c5.font = BOLD_FONT
+                c5.alignment = Alignment(horizontal="center")
+                c5.border = THIN_BORDER
+                row_idx += 1
+
     # =========================================================================
     # OPTIONAL SHEET: Regression Summary (if regression data present)
     # =========================================================================

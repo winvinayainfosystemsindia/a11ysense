@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -6,15 +6,20 @@ import {
   CircularProgress,
   Tabs,
   Tab,
-  Stack
+  Stack,
+  Card,
+  Chip
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import { useAuditDetails } from '../../components/audits/hooks/useAuditDetails';
 
 // Child components
 import { AuditHeader } from '../../components/audits/details/AuditHeader';
 import { AuditLiveProgress } from '../../components/audits/details/AuditLiveProgress';
 import { CompletedViewDashboard } from '../../components/audits/details/CompletedViewDashboard';
+import { LLMCostBreakdownModal } from '../../components/audits/details/LLMCostBreakdownModal';
 import { RegressionSummaryBanner } from '../../components/audits/details/RegressionSummaryBanner';
 import { InteractiveExplorerTab } from '../../components/audits/details/InteractiveExplorerTab';
 import { TestCasesTableTab } from '../../components/audits/details/TestCasesTableTab';
@@ -72,8 +77,11 @@ const AuditDetailsPage: React.FC = () => {
     isCompleted,
     isStopped,
     isRunning,
-    isPaused
+    isPaused,
+    tokenUsage
   } = useAuditDetails();
+
+  const [isCostModalOpen, setIsCostModalOpen] = useState(false);
 
   if (loading) {
     return (
@@ -116,6 +124,7 @@ const AuditDetailsPage: React.FC = () => {
         handlePause={handlePause}
         handleResume={handleResume}
         handleStop={handleStop}
+        handleOpenCostModal={() => setIsCostModalOpen(true)}
       />
 
       {/* Live Progress Card for Running/Paused states */}
@@ -133,6 +142,76 @@ const AuditDetailsPage: React.FC = () => {
             totalIssuesCount={totalIssuesCount}
             pagesScannedCount={pagesScannedCount}
             pagesDiscoveredCount={pagesDiscoveredCount}
+          />
+
+          {/* Quick AI Cost Action Bar */}
+          <Card
+            variant="outlined"
+            sx={{
+              p: 2,
+              px: 3,
+              borderRadius: '14px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+              background: 'linear-gradient(90deg, rgba(30, 41, 59, 0.03) 0%, rgba(56, 189, 248, 0.06) 100%)',
+              border: '1px solid',
+              borderColor: 'rgba(56, 189, 248, 0.25)'
+            }}
+          >
+            <Stack component="div" direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+              <Box
+                sx={{
+                  p: 1,
+                  borderRadius: '10px',
+                  bgcolor: 'primary.main',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <SmartToyIcon fontSize="small" />
+              </Box>
+              <Box>
+                <Stack component="div" direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: '800' }}>
+                    AI & LLM Cost: ${((tokenUsage?.cost_usd_total ?? taskDetail?.token_usage?.cost_usd_total) || 0).toFixed(4)}
+                  </Typography>
+                  <Chip
+                    label={`${((tokenUsage?.tokens_total ?? taskDetail?.token_usage?.tokens_total) || 0).toLocaleString()} Tokens`}
+                    size="small"
+                    sx={{ height: 22, fontSize: '0.75rem', fontWeight: '700', bgcolor: 'rgba(56, 189, 248, 0.15)', color: 'info.dark' }}
+                  />
+                  <Chip
+                    label={`${((tokenUsage?.llm_calls ?? taskDetail?.token_usage?.llm_calls) || 0)} API Calls`}
+                    size="small"
+                    sx={{ height: 22, fontSize: '0.75rem', fontWeight: '700', bgcolor: 'action.hover' }}
+                  />
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  Real-time cost & token tracking across Claude Sonnet, Gemini, and audit tasks (Defects, Testcases, Other)
+                </Typography>
+              </Box>
+            </Stack>
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              startIcon={<MonetizationOnIcon />}
+              onClick={() => setIsCostModalOpen(true)}
+              sx={{ fontWeight: '700', borderRadius: '8px', textTransform: 'none', px: 2.5, py: 0.8 }}
+            >
+              View AI Cost Breakdown
+            </Button>
+          </Card>
+
+          <LLMCostBreakdownModal
+            open={isCostModalOpen}
+            onClose={() => setIsCostModalOpen(false)}
+            tokenUsage={tokenUsage || taskDetail?.token_usage}
           />
 
           {/* Navigation Tabs */}

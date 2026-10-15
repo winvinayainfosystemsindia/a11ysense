@@ -41,7 +41,13 @@ class ManagerAgent(BaseAgent):
         thought_response = "Deterministic audit plan: scan pages, run accessibility tools, collect and refine violations."
         try:
             thought_prompt = f"I need to audit {request.url}. What is the plan?"
-            thought_response = await self.call_llm(thought_prompt, system_message=self.full_system_prompt, session_id=task_id, agent_type="manager")
+            thought_response = await self.call_llm(
+                thought_prompt,
+                system_message=self.full_system_prompt,
+                session_id=task_id,
+                agent_type="manager",
+                category="other"
+            )
             logger.info(f"Manager Thought: {thought_response}")
         except Exception as e:
             logger.info(f"Manager thought skipped (LLM unavailable): {e}")

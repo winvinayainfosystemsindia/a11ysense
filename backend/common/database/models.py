@@ -304,6 +304,7 @@ class LLMUsage(Base):
     output_tokens = Column(Integer, default=0, nullable=False)
     cached = Column(Boolean, default=False, nullable=False)
     cost_usd = Column(Float, default=0.0, nullable=False)
+    category = Column(String(50), default="other", nullable=False, index=True)  # defect, testcase, other
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

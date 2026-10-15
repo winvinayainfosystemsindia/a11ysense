@@ -190,6 +190,12 @@ class ReportService:
                 "accessibility_score": 100 if not violations else max(0, 100 - len(violations) * 5)
             }
 
+            usage_info = {}
+            try:
+                usage_info = llm_usage.summarize(task_id)
+            except Exception:
+                pass
+
             return {
                 "task_id": task_id,
                 "url": url,
@@ -201,6 +207,7 @@ class ReportService:
                 "manual_review": manual_review,
                 "pages_scanned": pages_scanned,
                 "regression": None,
+                "llm_usage": usage_info,
                 "session": {
                     "id": str(session.id) if session else "",
                     "project_id": str(session.project_id) if session and session.project_id else "",

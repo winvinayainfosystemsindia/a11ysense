@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { auditService } from '../../../service/auditService';
-import type { AuditTaskDetail } from '../../../service/auditService';
+import type { AuditTaskDetail, TokenUsage } from '../../../service/auditService';
 import { ENV } from '../../../config/env';
 
 export const useAuditDetails = () => {
@@ -9,6 +9,7 @@ export const useAuditDetails = () => {
   const navigate = useNavigate();
 
   const [taskDetail, setTaskDetail] = useState<AuditTaskDetail | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null);
   const [testcases, setTestcases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -50,6 +51,13 @@ export const useAuditDetails = () => {
     try {
       const taskData = await auditService.getTaskStatus(taskId);
       setTaskDetail(taskData);
+      if (taskData.token_usage) {
+        setTokenUsage(taskData.token_usage);
+      } else {
+        auditService.getTokenUsage(taskId).then(tu => {
+          if (tu) setTokenUsage(tu);
+        }).catch(() => {});
+      }
 
       if (isTerminal(taskData.status)) {
         const raw: any = await auditService.getTaskTestcases(taskId).catch(() => []);
@@ -291,6 +299,7 @@ export const useAuditDetails = () => {
     isCompleted,
     isStopped,
     isRunning,
-    isPaused
+    isPaused,
+    tokenUsage
   };
 };

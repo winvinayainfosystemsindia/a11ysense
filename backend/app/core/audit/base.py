@@ -51,7 +51,16 @@ class BaseAgent:
             docs.append(f"--- SKILL: {md_file.stem} ---\n{md_file.read_text(encoding='utf-8')}")
         return "\n\n".join(docs)
 
-    async def call_llm(self, prompt: str, system_message: str = "", use_vision: bool = False, image_data: str = None, session_id: str = None, agent_type: str = None) -> str:
+    async def call_llm(
+        self,
+        prompt: str,
+        system_message: str = "",
+        use_vision: bool = False,
+        image_data: str = None,
+        session_id: str = None,
+        agent_type: str = None,
+        category: str = "other"
+    ) -> str:
         """
         Generic LLM call dispatcher using unified in-process LLMClient.
         """
@@ -62,7 +71,9 @@ class BaseAgent:
             system_message=system_message,
             use_vision=use_vision,
             image_data=image_data,
-            provider=self.provider
+            provider=self.provider,
+            task_id=session_id,
+            category=category
         )
         self.last_input_tokens = res.get("input_tokens", 0)
         self.last_output_tokens = res.get("output_tokens", 0)

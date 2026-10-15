@@ -57,6 +57,13 @@ def _pricing_table() -> Dict[str, Tuple[float, float]]:
     return table
 
 
+CATEGORY_LABELS: Dict[str, str] = {
+    "defect": "Defect Remediation & Analysis",
+    "testcase": "Test Case Synthesis & Evaluation",
+    "other": "Other Operations (Planning, Summary, Vision)",
+}
+
+
 def compute_cost(provider: str, model: str, input_tokens: int, output_tokens: int) -> float:
     price_in, price_out = _pricing_table().get(model) or PROVIDER_FALLBACK_PRICING.get(provider, (0.0, 0.0))
     return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
@@ -69,16 +76,19 @@ def record_call(
     output_tokens: int,
     cached: bool = False,
     task_id: Optional[str] = None,
+    category: str = "other",
 ) -> None:
-    """Persist one LLM call. Never raises: usage tracking must not break an audit."""
+    """Persist one LLM call with its operational category (defect, testcase, other)."""
     task_id = task_id or get_current_task()
     if not task_id:
         return
+    cat = (category or "other").strip().lower()
+    if cat not in CATEGORY_LABELS:
+        cat = "other"
     try:
         from common.database.connection import get_session_local
         from common.database.models import LLMUsage
 
-        # Cached responses cost nothing; their tokens are kept for visibility only.
         cost = 0.0 if cached else compute_cost(provider, model, input_tokens or 0, output_tokens or 0)
         db = get_session_local()()
         try:
@@ -90,6 +100,7 @@ def record_call(
                 output_tokens=int(output_tokens or 0),
                 cached=bool(cached),
                 cost_usd=cost,
+                category=cat,
             ))
             db.commit()
         finally:
@@ -99,12 +110,28 @@ def record_call(
 
 
 def summarize(task_id: str) -> Dict[str, Any]:
-    """Aggregate recorded LLM usage for a task, split by provider and model."""
+    """Aggregate recorded LLM usage for a task, split by provider, model, and category (defect, testcase, other)."""
     from common.database.connection import get_session_local
     from common.database.models import LLMUsage
 
     by_provider: Dict[str, Dict[str, Any]] = {}
     by_model: Dict[str, Dict[str, Any]] = {}
+    # Pre-populate all standard categories so frontend always has clean keys
+    by_category: Dict[str, Dict[str, Any]] = {
+        cat: {
+            "category": cat,
+            "label": label,
+            "calls": 0,
+            "cached_calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cost_usd": 0.0,
+        }
+        for cat, label in CATEGORY_LABELS.items()
+    }
+    matrix_map: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+
     db = get_session_local()()
     try:
         rows = db.query(LLMUsage).filter(LLMUsage.task_id == task_id).all()
@@ -120,23 +147,60 @@ def summarize(task_id: str) -> Dict[str, Any]:
         return store[key]
 
     for r in rows:
-        for store, key, extra in (
-            (by_provider, r.provider, {"label": PROVIDER_LABELS.get(r.provider, r.provider)}),
-            (by_model, r.model, {"provider": r.provider}),
-        ):
-            b = _bucket(store, key, extra)
-            if r.cached:
-                b["cached_calls"] += 1
-                continue  # cached replies cost nothing and consume no tokens
-            b["calls"] += 1
-            b["input_tokens"] += r.input_tokens
-            b["output_tokens"] += r.output_tokens
-            b["total_tokens"] += r.input_tokens + r.output_tokens
-            b["cost_usd"] += r.cost_usd
+        cat = (getattr(r, "category", None) or "other").strip().lower()
+        if cat not in by_category:
+            cat = "other"
 
-    for store in (by_provider, by_model):
+        # Bucket by provider
+        bp = _bucket(by_provider, r.provider, {"label": PROVIDER_LABELS.get(r.provider, r.provider)})
+        # Bucket by model
+        bm = _bucket(by_model, r.model, {"provider": r.provider})
+        # Bucket by category
+        bc = by_category[cat]
+
+        # Matrix key: (category, provider, model)
+        mkey = (cat, r.provider, r.model)
+        if mkey not in matrix_map:
+            matrix_map[mkey] = {
+                "category": cat,
+                "category_label": CATEGORY_LABELS.get(cat, cat.title()),
+                "provider": r.provider,
+                "provider_label": PROVIDER_LABELS.get(r.provider, r.provider.title()),
+                "model": r.model,
+                "calls": 0,
+                "cached_calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cost_usd": 0.0,
+            }
+        bmat = matrix_map[mkey]
+
+        if r.cached:
+            bp["cached_calls"] += 1
+            bm["cached_calls"] += 1
+            bc["cached_calls"] += 1
+            bmat["cached_calls"] += 1
+            continue
+
+        in_tok = int(r.input_tokens or 0)
+        out_tok = int(r.output_tokens or 0)
+        cost = float(r.cost_usd or 0.0)
+
+        for b in (bp, bm, bc, bmat):
+            b["calls"] += 1
+            b["input_tokens"] += in_tok
+            b["output_tokens"] += out_tok
+            b["total_tokens"] += in_tok + out_tok
+            b["cost_usd"] += cost
+
+    for store in (by_provider, by_model, by_category):
         for b in store.values():
             b["cost_usd"] = round(b["cost_usd"], 6)
+
+    matrix = list(matrix_map.values())
+    for item in matrix:
+        item["cost_usd"] = round(item["cost_usd"], 6)
 
     totals = {
         "calls": sum(b["calls"] for b in by_provider.values()),
@@ -146,4 +210,12 @@ def summarize(task_id: str) -> Dict[str, Any]:
         "cost_usd": round(sum(b["cost_usd"] for b in by_provider.values()), 6),
     }
     totals["total_tokens"] = totals["input_tokens"] + totals["output_tokens"]
-    return {"task_id": task_id, "by_provider": by_provider, "by_model": by_model, "totals": totals}
+
+    return {
+        "task_id": task_id,
+        "by_provider": by_provider,
+        "by_category": by_category,
+        "by_model": by_model,
+        "matrix": matrix,
+        "totals": totals,
+    }

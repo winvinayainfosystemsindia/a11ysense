@@ -97,7 +97,9 @@ class LLMClient:
         use_vision: bool = False,
         image_data: Optional[str] = None,
         provider: Optional[str] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        task_id: Optional[str] = None,
+        category: str = "other"
     ) -> Dict[str, Any]:
         """
         Generates text completion using the specified or fallback provider chain.
@@ -115,6 +117,7 @@ class LLMClient:
                 llm_usage.record_call(
                     cached_res.get("provider", target_provider), cached_res.get("model", "cached"),
                     cached_res.get("input_tokens", 0), cached_res.get("output_tokens", 0), cached=True,
+                    task_id=task_id, category=category,
                 )
                 return cached_res
 
@@ -166,6 +169,7 @@ class LLMClient:
                 llm_usage.record_call(
                     result.get("provider", prov), result.get("model", ""),
                     result.get("input_tokens", 0), result.get("output_tokens", 0), cached=False,
+                    task_id=task_id, category=category,
                 )
                 if use_cache and result.get("text"):
                     self.cache.set(prompt, result, system_message, target_provider, use_vision)

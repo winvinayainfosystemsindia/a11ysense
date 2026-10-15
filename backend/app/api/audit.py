@@ -217,6 +217,12 @@ async def get_audit_status(
             "total_testcases": session.total_testcases if session.total_testcases is not None else 0
         }
 
+    token_usage_val = None
+    try:
+        token_usage_val = await orchestrator.fetch_and_format_token_usage(task_id)
+    except Exception as e:
+        logger.warning(f"Could not fetch token usage for {task_id}: {e}")
+
     return {
         "task_id": task_id,
         "status": status_val,
@@ -241,6 +247,7 @@ async def get_audit_status(
         "report_url": report_url,
         "error": error_val,
         "summary": summary_val,
+        "token_usage": token_usage_val,
         "created_at": created_at_val
     }
 
