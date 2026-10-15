@@ -6,8 +6,9 @@ from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from common.database.models import AuditSession, ViolationRecord, TestCase, Defect
 from app.repository.testcase_repo import testcase_repo
-from backend.app.core.reporting.excel_generator import generate_excel_report
-from backend.app.core.audit.orchestrator import audit_orchestrator
+from app.core.audit.orchestrator import audit_orchestrator
+from common.constants.rule_catalog import wcag_fields_for_row
+from app.core.llm import usage as llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class ReportService:
                     if d.created_at:
                         defect_age_days = max(0, (session.created_at - d.created_at).days)
 
+                wf = wcag_fields_for_row(tc)
                 tc_dict = {
                     "testcase_id": tc.testcase_code,
                     "display_name": tc.display_name or tc.testcase_code,
@@ -70,9 +72,9 @@ class ReportService:
                     "testcase_name": tc.testcase_name,
                     "status": tc.status,
                     "severity": tc.severity,
-                    "criteria": tc.testcase_name,
-                    "level": "A",
-                    "principle": "N/A",
+                    "criteria": wf["criteria"],
+                    "level": wf["level"],
+                    "principle": wf["principle"],
                     "description": tc.description or "",
                     "expected_result": tc.expected_result or "",
                     "actual_result": tc.actual_result or "",
@@ -138,6 +140,12 @@ class ReportService:
                 "defects_not_retested": session.defects_not_retested,
             }
 
+            usage_info = {}
+            try:
+                usage_info = llm_usage.summarize(task_id)
+            except Exception:
+                pass
+
             return {
                 "task_id": task_id,
                 "url": session.url,
@@ -149,6 +157,7 @@ class ReportService:
                 "manual_review": manual_review,
                 "pages_scanned": pages_scanned,
                 "regression": regression_info,
+                "llm_usage": usage_info,
                 "session": {
                     "id": str(session.id),
                     "project_id": str(session.project_id),

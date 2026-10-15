@@ -449,6 +449,72 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
     qg_msg = f"{crit_ser_count} Critical/Serious barriers identified." if crit_ser_count > 0 else "No high-impact barriers found."
     ws_sum.cell(row=row_idx, column=3, value=qg_msg).font = REGULAR_FONT
 
+    # AI / LLM Cost Breakdown (Claude Sonnet vs Gemini)
+    llm_usage_data = audit_data.get("llm_usage") or {}
+    by_provider = llm_usage_data.get("by_provider") or {}
+    if by_provider:
+        row_idx += 3
+        ws_sum.cell(row=row_idx, column=1, value="AI & LLM AUDIT COST SUMMARY").font = SECTION_FONT
+        row_idx += 1
+
+        cost_headers = ["Provider / Model", "API Calls", "Input Tokens", "Output Tokens", "Cost (USD)"]
+        for ci, h in enumerate(cost_headers, start=1):
+            c = ws_sum.cell(row=row_idx, column=ci, value=h)
+            c.fill = SECTION_HEADER_FILL
+            c.font = BOLD_FONT
+            c.border = THIN_BORDER
+            c.alignment = Alignment(horizontal="center" if ci in (2, 3, 4, 5) else "left")
+        row_idx += 1
+
+        total_cost = 0.0
+        for prov_key, pdata in by_provider.items():
+            label = pdata.get("label") or prov_key.capitalize()
+            calls = pdata.get("calls", 0)
+            in_tok = pdata.get("input_tokens", 0)
+            out_tok = pdata.get("output_tokens", 0)
+            cost_val = pdata.get("cost_usd", 0.0)
+            total_cost += cost_val
+
+            c1 = ws_sum.cell(row=row_idx, column=1, value=label)
+            c1.font = BOLD_FONT
+            c1.border = THIN_BORDER
+
+            c2 = ws_sum.cell(row=row_idx, column=2, value=calls)
+            c2.alignment = Alignment(horizontal="center")
+            c2.border = THIN_BORDER
+
+            c3 = ws_sum.cell(row=row_idx, column=3, value=f"{in_tok:,}")
+            c3.alignment = Alignment(horizontal="center")
+            c3.border = THIN_BORDER
+
+            c4 = ws_sum.cell(row=row_idx, column=4, value=f"{out_tok:,}")
+            c4.alignment = Alignment(horizontal="center")
+            c4.border = THIN_BORDER
+
+            c5 = ws_sum.cell(row=row_idx, column=5, value=f"${cost_val:.4f}")
+            c5.font = BOLD_FONT
+            c5.alignment = Alignment(horizontal="center")
+            c5.border = THIN_BORDER
+            row_idx += 1
+
+        # Total cost row
+        c1 = ws_sum.cell(row=row_idx, column=1, value="Total AI Audit Cost")
+        c1.font = BOLD_FONT
+        c1.fill = CARD_HEADER_FILL
+        c1.border = THIN_BORDER
+
+        ws_sum.merge_cells(start_row=row_idx, start_column=2, end_row=row_idx, end_column=4)
+        for col in range(2, 5):
+            ws_sum.cell(row=row_idx, column=col).border = THIN_BORDER
+            ws_sum.cell(row=row_idx, column=col).fill = CARD_HEADER_FILL
+
+        c5 = ws_sum.cell(row=row_idx, column=5, value=f"${total_cost:.4f}")
+        c5.font = BOLD_FONT
+        c5.fill = CARD_HEADER_FILL
+        c5.alignment = Alignment(horizontal="center")
+        c5.border = THIN_BORDER
+        row_idx += 1
+
     # =========================================================================
     # OPTIONAL SHEET: Regression Summary (if regression data present)
     # =========================================================================

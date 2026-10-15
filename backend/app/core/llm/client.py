@@ -8,6 +8,7 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional, List
 from backend.app.core.llm.cache import LLMCache
+from backend.app.core.llm import usage as llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,10 @@ class LLMClient:
             cached_res = self.cache.get(prompt, system_message, target_provider, use_vision)
             if cached_res:
                 cached_res["cached"] = True
+                llm_usage.record_call(
+                    cached_res.get("provider", target_provider), cached_res.get("model", "cached"),
+                    cached_res.get("input_tokens", 0), cached_res.get("output_tokens", 0), cached=True,
+                )
                 return cached_res
 
         providers_to_try = [target_provider]
@@ -158,6 +163,10 @@ class LLMClient:
                     result = await self._generate_groq(prompt, system_message)
 
                 result["cached"] = False
+                llm_usage.record_call(
+                    result.get("provider", prov), result.get("model", ""),
+                    result.get("input_tokens", 0), result.get("output_tokens", 0), cached=False,
+                )
                 if use_cache and result.get("text"):
                     self.cache.set(prompt, result, system_message, target_provider, use_vision)
                 return result

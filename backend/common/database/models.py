@@ -273,6 +273,11 @@ class TestCase(Base):
     output_tokens = Column(Integer, default=0, nullable=False)
     refined_by = Column(String, nullable=True)
 
+    # Authoritative WCAG facts captured at audit time
+    wcag_criteria = Column(String, nullable=True)
+    wcag_level = Column(String, nullable=True)
+    wcag_principle = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
@@ -285,6 +290,21 @@ class TestCase(Base):
     page = relationship("AuditPage", back_populates="testcases")
     success_criterion = relationship("SuccessCriterion")
     defect = relationship("Defect", back_populates="testcases")
+
+
+class LLMUsage(Base):
+    """One row per LLM API call made during an audit (used for per-provider cost reporting)."""
+    __tablename__ = "llm_usage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id = Column(String, nullable=False, index=True)
+    provider = Column(String, nullable=False)  # claude, gemini, groq
+    model = Column(String, nullable=False)
+    input_tokens = Column(Integer, default=0, nullable=False)
+    output_tokens = Column(Integer, default=0, nullable=False)
+    cached = Column(Boolean, default=False, nullable=False)
+    cost_usd = Column(Float, default=0.0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class RunCriterionResult(Base):

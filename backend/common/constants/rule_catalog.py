@@ -3,11 +3,82 @@ Rule Catalog & WCAG Metadata Resolution for A11ySense AI.
 Provides deterministic resolution of WCAG criteria, levels, principles, and severities
 for both custom skills (screen_reader, keyboard_nav, landmark) and standard axe-core rules.
 """
+import re
 from typing import Optional, Dict, Any, List
 try:
-    from common.constants.wcag import WCAG_CRITERIA_MAP, parse_wcag_tags
+    from common.constants.wcag import (
+        WCAG_CRITERIA_MAP, parse_wcag_tags,
+        A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA,
+    )
 except ImportError:
-    from backend.common.constants.wcag import WCAG_CRITERIA_MAP, parse_wcag_tags
+    from backend.common.constants.wcag import (
+        WCAG_CRITERIA_MAP, parse_wcag_tags,
+        A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA,
+    )
+
+# Authoritative conformance level per success criterion (WCAG 2.2 A/AA set).
+SC_LEVELS: Dict[str, str] = {
+    c["code"]: c["level"] for c in (A11YSENSE_AUDIT_SCOPE + A11YSENSE_MANUAL_REVIEW_CRITERIA)
+}
+SC_LEVELS.setdefault("4.1.1", "A")
+
+
+def sc_level(sc_code: Optional[str]) -> str:
+    """Returns the real WCAG conformance level (A / AA) for a success criterion code."""
+    return SC_LEVELS.get((sc_code or "").strip(), "AA")
+
+
+# axe-core / custom-skill rules that are NOT in RULE_CATALOG, mapped to the success
+# criterion they enforce. None = best practice (no WCAG success criterion).
+AXE_RULE_SC: Dict[str, Optional[str]] = {
+    # 4.1.2 Name, Role, Value
+    "aria-prohibited-attr": "4.1.2", "aria-roles": "4.1.2", "aria-conditional-attr": "4.1.2",
+    "aria-command-name": "4.1.2", "aria-dialog-name": "4.1.2", "aria-input-field-name": "4.1.2",
+    "aria-toggle-field-name": "4.1.2", "aria-meter-name": "4.1.2", "aria-progressbar-name": "4.1.2",
+    "aria-tooltip-name": "4.1.2", "aria-treeitem-name": "4.1.2", "aria-hidden-body": "4.1.2",
+    "duplicate-id-aria": "4.1.2", "nested-interactive": "4.1.2", "input-button-name": "4.1.2",
+    "select-name": "4.1.2", "frame-title": "4.1.2",
+    # 1.3.1 Info and Relationships
+    "aria-required-parent": "1.3.1", "aria-required-children": "1.3.1", "listitem": "1.3.1",
+    "list": "1.3.1", "definition-list": "1.3.1", "dlitem": "1.3.1", "td-headers-attr": "1.3.1",
+    "th-has-data-cells": "1.3.1", "td-has-header": "1.3.1",
+    # 1.1.1 Non-text Content
+    "role-img-alt": "1.1.1", "input-image-alt": "1.1.1", "area-alt": "1.1.1", "object-alt": "1.1.1",
+    "svg-img-alt": "1.1.1", "server-side-image-map": "1.1.1",
+    # Other criteria
+    "html-lang-valid": "3.1.1", "html-xml-lang-mismatch": "3.1.1", "valid-lang": "3.1.2",
+    "autocomplete-valid": "1.3.5", "avoid-inline-spacing": "1.4.12", "meta-viewport": "1.4.4",
+    "link-in-text-block": "1.4.1", "scrollable-region-focusable": "2.1.1", "frame-focusable-content": "2.1.1",
+    "form-field-multiple-labels": "3.3.2", "label-content-name-mismatch": "2.5.3",
+    "video-caption": "1.2.2", "audio-caption": "1.2.1", "blink": "2.2.2", "marquee": "2.2.2",
+    "meta-refresh": "2.2.1",
+    # Custom skill ids
+    "link-purpose": "2.4.4", "focus-order": "2.4.3", "focus-visible": "2.4.7",
+    # Best practice (no WCAG success criterion)
+    "region": None, "landmark-unique": None, "landmark-one-main": None, "landmark-banner-is-top-level": None,
+    "landmark-contentinfo-is-top-level": None, "landmark-main-is-top-level": None,
+    "landmark-no-duplicate-banner": None, "landmark-no-duplicate-contentinfo": None,
+    "landmark-no-duplicate-main": None, "landmark-unique-name-pass": None, "landmark-single-pass": None,
+    "page-has-heading-one": None, "skip-link": None, "tabindex": None, "accesskeys": None,
+    "label-title-only": None, "image-redundant-alt": None, "presentation-role-conflict": None,
+    "aria-deprecated-role": None, "aria-allowed-role": None, "meta-viewport-large": None,
+    "duplicate-id": None, "scope-attr-valid": None,
+}
+
+# Plain-English problem wording for rules that have no RULE_CATALOG entry.
+PLAIN_ISSUES: Dict[str, str] = {
+    "aria-prohibited-attr": "uses a label or attribute that is not allowed for this kind of element",
+    "region": "has content that sits outside any page landmark region",
+    "landmark-unique": "shares the same landmark type and name as another landmark",
+    "label-title-only": "is labelled only by a tooltip or placeholder, with no visible label",
+    "aria-roles": "uses a role that does not exist",
+    "aria-required-parent": "is missing the parent element its role requires",
+    "aria-required-children": "is missing child elements its role requires",
+    "nested-interactive": "has a clickable control placed inside another clickable control",
+    "duplicate-id-aria": "shares an id with another element that is referenced by a label",
+    "link-in-text-block": "is a link inside text that is only distinguished by colour",
+    "avoid-inline-spacing": "blocks users from changing text spacing",
+}
 
 
 RULE_CATALOG: Dict[str, Dict[str, Any]] = {
@@ -338,7 +409,7 @@ def resolve_rule(
         if sc_code and sc_code in WCAG_CRITERIA_MAP:
             criteria = WCAG_CRITERIA_MAP[sc_code]
             principle = principle_for(sc_code)
-            level = "A" if sc_code in ("1.1.1", "1.2.1", "1.3.1", "2.1.1", "2.1.2", "2.4.1", "2.4.2", "2.4.4", "2.5.3", "4.1.1", "4.1.2") else "AA"
+            level = sc_level(sc_code)
         elif kind == "best-practice" or not sc_code:
             criteria = "Best Practice"
             level = "Best Practice"
@@ -376,6 +447,18 @@ def resolve_rule(
             "sc_code": sc_num
         }
 
+    # 3b. Known axe/custom rule → success criterion map (used when no tags are supplied)
+    if rule_id in AXE_RULE_SC and AXE_RULE_SC[rule_id]:
+        sc_code = AXE_RULE_SC[rule_id]
+        return {
+            "criteria": WCAG_CRITERIA_MAP.get(sc_code, sc_code),
+            "level": sc_level(sc_code),
+            "principle": principle_for(sc_code),
+            "severity": normalize_severity(impact),
+            "kind": "wcag",
+            "sc_code": sc_code
+        }
+
     # If only best-practice tag or no WCAG tag present
     if has_best_practice_tag or rule_id in ("heading-order", "empty-heading", "landmark-one-main"):
         return {
@@ -396,3 +479,45 @@ def resolve_rule(
         "kind": "best-practice",
         "sc_code": None
     }
+
+
+def _facts_from_code(sc_code: str) -> Dict[str, str]:
+    return {
+        "criteria": WCAG_CRITERIA_MAP.get(sc_code, sc_code),
+        "level": sc_level(sc_code),
+        "principle": principle_for(sc_code),
+    }
+
+
+_BEST_PRACTICE_FACTS = {"criteria": "Best Practice", "level": "Best Practice", "principle": "N/A"}
+
+
+def resolve_stored_testcase(rule_id: Optional[str], testcase_name: Optional[str] = None) -> Dict[str, str]:
+    """
+    Re-derives WCAG criteria / level / principle for a stored test case row that has no
+    persisted WCAG columns (audits created before those columns existed).
+    """
+    rid = (rule_id or "").strip()
+    if rid.startswith("wcag-"):
+        return _facts_from_code(rid[5:])
+    if rid in RULE_CATALOG or rid in AXE_RULE_SC:
+        facts = resolve_rule(rid)
+        return {k: facts[k] for k in ("criteria", "level", "principle")}
+    # PASS rows store their criteria text in testcase_name, e.g. "4.1.2 Name, Role, Value"
+    m = re.match(r"^(\d\.\d\.\d+)\b", (testcase_name or "").strip())
+    if m:
+        return _facts_from_code(m.group(1))
+    return dict(_BEST_PRACTICE_FACTS)
+
+
+def wcag_fields_for_row(tc: Any) -> Dict[str, str]:
+    """Returns {criteria, level, principle} for a TestCase ORM row (persisted values first)."""
+    crit = getattr(tc, "wcag_criteria", None)
+    if crit:
+        return {
+            "criteria": crit,
+            "level": getattr(tc, "wcag_level", None) or "A",
+            "principle": getattr(tc, "wcag_principle", None) or "N/A",
+        }
+    return resolve_stored_testcase(getattr(tc, "rule_id", None), getattr(tc, "testcase_name", None))
+

@@ -15,6 +15,7 @@ from backend.app.core.audit.orchestrator import AuditOrchestrator
 from app.repository.testcase_repo import testcase_repo
 from app.repository.session_repo import audit_session_repo
 from app.core.regression.reconciler import compute_fingerprint, normalize_url
+from common.constants.rule_catalog import wcag_fields_for_row
 
 logger = logging.getLogger("a11ysense.api.audit")
 router = APIRouter(tags=["Audit Engine"])
@@ -299,6 +300,7 @@ async def get_task_testcases(
         items = []
         for tc in db_items:
             def_code = tc.defect.defect_code if tc.defect else ("DEF-0001" if tc.status == "FAIL" else "N/A")
+            wf = wcag_fields_for_row(tc)
             items.append({
                 "testcase_id": tc.testcase_code,
                 "display_name": tc.display_name or tc.testcase_code,
@@ -306,7 +308,9 @@ async def get_task_testcases(
                 "testcase_name": tc.testcase_name,
                 "status": tc.status,
                 "severity": tc.severity,
-                "criteria": tc.testcase_name,
+                "criteria": wf["criteria"],
+                "level": wf["level"],
+                "principle": wf["principle"],
                 "description": tc.description or "",
                 "expected_result": tc.expected_result or "",
                 "actual_result": tc.actual_result or "",

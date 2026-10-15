@@ -21,7 +21,8 @@ from backend.app.repository.crawl_progress_repo import crawl_progress_repo
 from common.config import get_service_url, get_storage_path, get_audit_storage_path
 from common.utils.event_bus import publish_event, get_redis_client
 from common.constants import parse_wcag_tags, A11YSENSE_AUDIT_SCOPE, A11YSENSE_MANUAL_REVIEW_CRITERIA, _AUDIT_SCOPE_CODES, WCAG_CRITERIA_MAP
-from common.constants.rule_catalog import resolve_rule, normalize_severity, principle_for
+from common.constants.rule_catalog import resolve_rule, normalize_severity, principle_for, wcag_fields_for_row, RULE_CATALOG
+from backend.app.core.llm import usage as llm_usage
 from common.constants.sc_catalog import SC_CATALOG
 from common.database.connection import get_session_local
 from common.database.models import AuditSession, SuccessCriterion
@@ -32,6 +33,22 @@ from backend.app.core.reporting.quality_gate import check_report
 
 logger = logging.getLogger(__name__)
 manager_agent = ManagerAgent()
+
+
+def _tags_of(obj: Any) -> list:
+    """axe tags of a violation/pass whether it is a dict or a model object."""
+    tags = obj.get("tags") if isinstance(obj, dict) else getattr(obj, "tags", None)
+    return list(tags or [])
+
+
+def _canon_page_url(url: Optional[str]) -> Optional[str]:
+    """'https://x.com/' and 'https://x.com' are the same page; drop a bare trailing slash."""
+    if not url or url in ("All pages", "N/A"):
+        return url
+    parsed = urlparse(url)
+    if not parsed.query and not parsed.fragment and url.endswith("/"):
+        return url.rstrip("/")
+    return url
 
 
 class AuditOrchestrator:
@@ -92,39 +109,38 @@ class AuditOrchestrator:
             crawl_progress_repo.mark_failed(crawl_task_id, str(e))
 
     async def fetch_and_format_token_usage(self, task_id: str) -> dict:
-        """Fetch token usage from the LLM service for the given task."""
+        """
+        Token usage + dollar cost for the audit, split per LLM provider (Claude / Gemini / Groq).
+        Read from the llm_usage ledger that LLMClient writes on every call.
+        """
         progress = audit_progress_repo.get(task_id)
         url = progress.url if progress else ""
         created_at_dt = progress.created_at if progress else None
         audited_at = created_at_dt.isoformat() if created_at_dt else datetime.utcnow().isoformat()
 
-        # In-process token summary from progress record
-        tokens_sent = 0
-        tokens_received = 0
-        tokens_total = 0
-        llm_calls = 0
-        provider = "mock"
-        breakdown = {}
+        try:
+            usage = llm_usage.summarize(task_id)
+        except Exception as e:
+            logger.warning(f"Could not read LLM usage for {task_id}: {e}")
+            usage = {"by_provider": {}, "by_model": {}, "totals": {}}
 
-        if progress and getattr(progress, "token_usage", None):
-            tok = progress.token_usage
-            provider = tok.get("provider", "mock")
-            tokens_sent = tok.get("tokens_sent", 0)
-            tokens_received = tok.get("tokens_received", 0)
-            tokens_total = tok.get("tokens_total", 0)
-            llm_calls = tok.get("llm_calls", 0)
-            breakdown = tok.get("breakdown", {})
+        totals = usage.get("totals") or {}
+        by_provider = usage.get("by_provider") or {}
+        primary = max(by_provider, key=lambda p: by_provider[p]["calls"]) if by_provider else "none"
 
         return {
             "task_id": task_id,
             "url": url,
             "audited_at": audited_at,
-            "provider": provider,
-            "tokens_sent": tokens_sent,
-            "tokens_received": tokens_received,
-            "tokens_total": tokens_total,
-            "llm_calls": llm_calls,
-            "breakdown": breakdown
+            "provider": primary,
+            "tokens_sent": totals.get("input_tokens", 0),
+            "tokens_received": totals.get("output_tokens", 0),
+            "tokens_total": totals.get("total_tokens", 0),
+            "llm_calls": totals.get("calls", 0),
+            "cached_calls": totals.get("cached_calls", 0),
+            "cost_usd_total": totals.get("cost_usd", 0.0),
+            "cost_by_provider": by_provider,
+            "breakdown": usage.get("by_model") or {},
         }
 
     async def run_in_memory_audit_flow(
@@ -278,6 +294,9 @@ class AuditOrchestrator:
         import httpx
         from common.utils.correlation import get_correlation_headers
         headers = get_correlation_headers()
+
+        # Attribute every LLM call made during this audit (incl. child tasks) to this task id
+        llm_usage.set_current_task(task_id)
 
         # Mark AuditSession as auditing
         try:
@@ -714,9 +733,9 @@ class AuditOrchestrator:
                             "testcase_name": tc.testcase_name,
                             "status": tc.status,
                             "severity": tc.severity,
-                            "criteria": tc.testcase_name,
-                            "level": "A",
-                            "principle": "N/A",
+                            "criteria": wcag_fields_for_row(tc)["criteria"],
+                            "level": wcag_fields_for_row(tc)["level"],
+                            "principle": wcag_fields_for_row(tc)["principle"],
                             "description": tc.description or "",
                             "expected_result": tc.expected_result or "",
                             "actual_result": tc.actual_result or "",
@@ -834,9 +853,10 @@ class AuditOrchestrator:
         if getattr(result, "violations", None):
             for v in result.violations:
                 v_id = v.get("id", "") if isinstance(v, dict) else getattr(v, "id", "")
-                rule = resolve_rule(v_id)
                 v_meta = v.get("metadata") if isinstance(v, dict) else getattr(v, "metadata", None)
                 v_meta = v_meta or {}
+                v_impact = v.get("impact") if isinstance(v, dict) else getattr(v, "impact", None)
+                rule = resolve_rule(v_id, tags=_tags_of(v), impact=v_impact, existing_metadata=v_meta)
 
                 raw_nodes = v.get("nodes") if isinstance(v, dict) else getattr(v, "nodes", None)
                 if not raw_nodes:
@@ -886,7 +906,7 @@ class AuditOrchestrator:
                         steps = v_meta.get("steps_to_reproduce", "")
                         if isinstance(steps, list):
                             steps = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
-                        friendly_name = v_meta.get("friendly_name") or rule.title
+                        friendly_name = v_meta.get("friendly_name") or rule.get("criteria") or v_id
                         business_impact = v_meta.get("business_impact", "")
                         fix_steps = v_meta.get("fix_steps") or []
                         remediation = v_meta.get("remediation") or ("\n".join(fix_steps) if fix_steps else "")
@@ -906,7 +926,7 @@ class AuditOrchestrator:
                         }
                         if node_dict.get("context") and isinstance(node_dict["context"], dict):
                             node_ctx_payload.update(node_dict["context"])
-                        fb = fallback_narrative(rule, node_ctx_payload)
+                        fb = fallback_narrative({**RULE_CATALOG.get(v_id, {}), **rule, "id": v_id}, node_ctx_payload)
                         desc = fb["description"]
                         expected = fb["expected_result"]
                         actual = fb["actual_result"]
@@ -968,7 +988,7 @@ class AuditOrchestrator:
         if getattr(result, "passes", None):
             for p in result.passes:
                 p_id = p.get('id', '') if isinstance(p, dict) else getattr(p, 'id', '')
-                p_rule = resolve_rule(p_id)
+                p_rule = resolve_rule(p_id, tags=_tags_of(p))
                 sc_code = p_rule.get("sc_code")
                 if sc_code:
                     passed_sc_map.setdefault(sc_code, []).append(p)
@@ -980,7 +1000,7 @@ class AuditOrchestrator:
             # Per-element pass mode
             for p in result.passes:
                 p_id = p.get('id', 'Unknown') if isinstance(p, dict) else getattr(p, 'id', 'Unknown')
-                p_rule = resolve_rule(p_id)
+                p_rule = resolve_rule(p_id, tags=_tags_of(p))
                 p_nodes = p.get('nodes', []) if isinstance(p, dict) else getattr(p, 'nodes', [])
                 if not isinstance(p_nodes, list):
                     p_nodes = [p_nodes]
@@ -1165,6 +1185,11 @@ class AuditOrchestrator:
         # ── 4. Reconcile & Persist in PostgreSQL (if session exists) ─────────
         all_testcases = fail_testcases + pass_testcases + na_testcases + manual_testcases
 
+        # 'https://x.com' and 'https://x.com/' are one page: merge them everywhere
+        for _tc in all_testcases:
+            _tc["page_url"] = _canon_page_url(_tc.get("page_url"))
+        base_page_url = _canon_page_url(base_page_url)
+
         # Build list of scanned pages
         pages_seen: dict = {}
         for tc in all_testcases:
@@ -1262,7 +1287,10 @@ class AuditOrchestrator:
                         "fingerprint": tc.get("fingerprint", ""),
                         "input_tokens": tc.get("input_tokens", 0),
                         "output_tokens": tc.get("output_tokens", 0),
-                        "refined_by": tc.get("refined_by", "")
+                        "refined_by": tc.get("refined_by", ""),
+                        "wcag_criteria": tc.get("criteria", ""),
+                        "wcag_level": tc.get("level", ""),
+                        "wcag_principle": tc.get("principle", "")
                     })
 
                 # Bulk insert testcases in batches
@@ -1356,7 +1384,7 @@ class AuditOrchestrator:
         json_path = os.path.join(reports_dir, f"testcase_report_{task_id}.json")
         try:
             with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(all_testcases, f, separators=(',', ':'), ensure_ascii=False)
+                json.dump(all_testcases, f, separators=(',', ':'), ensure_ascii=False, default=str)
         except Exception as e:
             logger.error(f"Failed to write JSON testcase report: {str(e)}")
 
@@ -1373,6 +1401,10 @@ class AuditOrchestrator:
                 logger.info(f"Quality Gate passed with 0 issues for task {task_id}")
         except Exception as qg_err:
             logger.error(f"Quality Gate execution failed for task {task_id}: {str(qg_err)}")
+
+        for _tc in all_testcases:
+            if _tc.get("defect_id_uuid") is not None:
+                _tc["defect_id_uuid"] = str(_tc["defect_id_uuid"])
 
         return all_testcases
 

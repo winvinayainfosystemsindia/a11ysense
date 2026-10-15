@@ -4,7 +4,7 @@ Enforces plain English standards, screen reader perspectives, and developer reme
 """
 import re
 from typing import Dict, Any, List
-from backend.common.constants.rule_catalog import RULE_CATALOG, resolve_rule
+from backend.common.constants.rule_catalog import RULE_CATALOG, PLAIN_ISSUES, resolve_rule
 from backend.common.constants.sc_catalog import SC_CATALOG
 from backend.app.core.skills.implementations.element_context import extract_context_from_html, quick_key_for
 
@@ -233,8 +233,25 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
 
     parsed_html_ctx = extract_context_from_html(html_snippet) if html_snippet else {}
 
-    sc_code = rule_info.get("sc_code") or rule_info.get("wcag_sc") or "1.1.1"
-    sc_entry = SC_CATALOG.get(sc_code, SC_CATALOG.get("1.1.1"))
+    # Merge catalog wording + resolved WCAG facts so every caller (rule id string, catalog
+    # entry, or resolve_rule() dict) ends up with a real sc_code / plain_issue.
+    if rule_id:
+        resolved = resolve_rule(rule_id)
+        merged = {"sc_code": resolved.get("sc_code")}
+        merged.update(RULE_CATALOG.get(rule_id, {}))
+        merged.update({k: v for k, v in (rule_info or {}).items() if v is not None})
+        rule_info = merged
+
+    sc_code = rule_info.get("sc_code") or rule_info.get("wcag_sc") or None
+    sc_entry = SC_CATALOG.get(sc_code) if sc_code else None
+    if not sc_entry:
+        # Best-practice rule (no WCAG criterion): neutral expectation, never the 1.1.1 image text.
+        sc_entry = {
+            "expected": (
+                "This item should follow accessibility best practice so that screen reader and keyboard "
+                "users can find it, understand it and use it without confusion."
+            )
+        }
 
     # Extract name, role, and parent context
     visible_text = (
@@ -263,9 +280,9 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
         or (rule_id == "keyboard-non-focusable-interactive" and "menu" in html_snippet.lower())
     )
     parent_menu = element_ctx.get("parent_menu") or ""
-    page_url = element_ctx.get("page_url") or "https://lemonn.co.in/"
+    page_url = element_ctx.get("page_url") or "the audited page"
     quick_key = element_ctx.get("screen_reader_quick_key") or quick_key_for(element_ctx or parsed_html_ctx)
-    plain_issue = rule_info.get("plain_issue", "does not meet accessibility requirements")
+    plain_issue = rule_info.get("plain_issue") or PLAIN_ISSUES.get(rule_id) or "does not meet accessibility requirements"
 
     # Friendly element label (non-technical)
     if is_radio:
@@ -300,7 +317,7 @@ def fallback_narrative(rule_or_id: Any, element_ctx: Any = None) -> Dict[str, An
         steps = [
             f"Open {page_url} in a browser.",
             "Start NVDA or JAWS screen reader.",
-            f"Press Tab until you hear '{parent_menu or 'Trade & Invest'}, dropdown' or reach the navigation menu.",
+            f"Press Tab until you hear '{parent_menu or 'the parent menu name'}, dropdown' or reach the navigation menu.",
             "Press Enter or Space to open the menu.",
             "Press the Down Arrow key to move through the menu items.",
             f"Listen for '{clean_name or 'item'}, link'.",
