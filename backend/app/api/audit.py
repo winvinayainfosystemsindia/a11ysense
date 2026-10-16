@@ -14,7 +14,13 @@ from backend.app.task_queue import task_queue
 from backend.app.core.audit.orchestrator import AuditOrchestrator
 from app.repository.testcase_repo import testcase_repo
 from app.repository.session_repo import audit_session_repo
-from app.core.regression.reconciler import compute_fingerprint, normalize_url
+from app.core.regression import (
+    compute_fingerprint,
+    normalize_url,
+    fingerprint_batch,
+    MatchItem,
+    match_groups,
+)
 from common.constants.rule_catalog import wcag_fields_for_row
 
 logger = logging.getLogger("a11ysense.api.audit")
@@ -280,7 +286,8 @@ async def get_audit_regression(
         "defects_reopened": session.defects_reopened,
         "defects_open": session.defects_open,
         "defects_not_retested": session.defects_not_retested,
-        "scope_changed": scope_changed
+        "scope_changed": scope_changed,
+        "dynamic_groups_matched": (session.summary or {}).get("dynamic_groups_matched", 0) if session.summary else 0
     }
 
 
@@ -399,47 +406,70 @@ async def compare_audits(
     tcs_a = testcase_repo.get_all_testcases_by_session(db, session_a.id)
     tcs_b = testcase_repo.get_all_testcases_by_session(db, session_b.id)
 
-    fail_a = {tc.fingerprint or compute_fingerprint(tc.rule_id, tc.html_snippet or "", tc.page_url or ""): tc for tc in tcs_a if tc.status == "FAIL"}
-    fail_b = {tc.fingerprint or compute_fingerprint(tc.rule_id, tc.html_snippet or "", tc.page_url or ""): tc for tc in tcs_b if tc.status == "FAIL"}
+    fails_a = [tc for tc in tcs_a if tc.status == "FAIL"]
+    fails_b = [tc for tc in tcs_b if tc.status == "FAIL"]
+
+    recs_a = [
+        {"rule_id": tc.rule_id, "html": tc.html_snippet or "", "page_url": tc.page_url or "", "criteria": tc.wcag_criteria or ""}
+        for tc in fails_a
+    ]
+    recs_b = [
+        {"rule_id": tc.rule_id, "html": tc.html_snippet or "", "page_url": tc.page_url or "", "criteria": tc.wcag_criteria or ""}
+        for tc in fails_b
+    ]
+
+    fps_a = fingerprint_batch(recs_a) if recs_a else []
+    fps_b = fingerprint_batch(recs_b) if recs_b else []
+
+    items_a = [
+        MatchItem(ref=tc, fp=r.fp, dynamic=r.dynamic, order=r.occurrence)
+        for tc, r in zip(fails_a, fps_a)
+    ]
+    items_b = [
+        MatchItem(ref=tc, fp=r.fp, dynamic=r.dynamic, order=r.occurrence)
+        for tc, r in zip(fails_b, fps_b)
+    ]
+
+    m_res = match_groups(items_a, items_b)
 
     fixed = []
-    for fp, tc in fail_a.items():
-        if fp not in fail_b:
-            fixed.append({
-                "testcase_code": tc.testcase_code,
-                "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
-                "title": tc.testcase_name,
-                "rule_id": tc.rule_id,
-                "page_url": tc.page_url,
-                "severity": tc.severity,
-                "status": "Fixed in Run #" + str(session_b.run_number or 2)
-            })
+    for p_item in m_res.unmatched_prev:
+        tc = p_item.ref
+        fixed.append({
+            "testcase_code": tc.testcase_code,
+            "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
+            "title": tc.testcase_name,
+            "rule_id": tc.rule_id,
+            "page_url": tc.page_url,
+            "severity": tc.severity,
+            "status": "Fixed in Run #" + str(session_b.run_number or 2)
+        })
 
     new_defects = []
-    for fp, tc in fail_b.items():
-        if fp not in fail_a:
-            new_defects.append({
-                "testcase_code": tc.testcase_code,
-                "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
-                "title": tc.testcase_name,
-                "rule_id": tc.rule_id,
-                "page_url": tc.page_url,
-                "severity": tc.severity,
-                "status": "New in Run #" + str(session_b.run_number or 2)
-            })
+    for c_item in m_res.new:
+        tc = c_item.ref
+        new_defects.append({
+            "testcase_code": tc.testcase_code,
+            "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
+            "title": tc.testcase_name,
+            "rule_id": tc.rule_id,
+            "page_url": tc.page_url,
+            "severity": tc.severity,
+            "status": "New in Run #" + str(session_b.run_number or 2)
+        })
 
     unchanged = []
-    for fp, tc in fail_b.items():
-        if fp in fail_a:
-            unchanged.append({
-                "testcase_code": tc.testcase_code,
-                "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
-                "title": tc.testcase_name,
-                "rule_id": tc.rule_id,
-                "page_url": tc.page_url,
-                "severity": tc.severity,
-                "status": "Still Failing"
-            })
+    for _p_item, c_item in m_res.pairs:
+        tc = c_item.ref
+        unchanged.append({
+            "testcase_code": tc.testcase_code,
+            "defect_code": tc.defect.defect_code if tc.defect else "DEF-0001",
+            "title": tc.testcase_name,
+            "rule_id": tc.rule_id,
+            "page_url": tc.page_url,
+            "severity": tc.severity,
+            "status": "Still Failing"
+        })
 
     return {
         "run_a": {
@@ -460,6 +490,7 @@ async def compare_audits(
         "fixed_count": len(fixed),
         "new_count": len(new_defects),
         "unchanged_count": len(unchanged),
+        "dynamic_groups_matched": m_res.dynamic_groups_matched,
         "score_delta": round(session_b.score - session_a.score, 1)
     }
 

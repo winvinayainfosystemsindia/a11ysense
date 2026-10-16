@@ -621,6 +621,9 @@ def generate_excel_report(audit_data: Dict[str, Any]) -> bytes:
                 vc.fill = FAIL_FILL
                 vc.font = FAIL_FONT
 
+        dynamic_groups = regression_info.get("dynamic_groups_matched", 0)
+        ws_reg.cell(row=8, column=1, value=f"Dynamic-content groups matched: {dynamic_groups}").font = BOLD_FONT
+
     # =========================================================================
     # SHEET 2: Test Case Report (Dark Blue Header)
     # Exact 14 columns

@@ -385,7 +385,7 @@ def test_reconciler_loose_matching_and_severity_update(db_session, test_project)
     tc1 = {
         "rule_id": "link-name",
         "page_url": target_url,
-        "html_snippet": "<a href='/edit' class='v1'></a>",
+        "html_snippet": "<a href='/edit' data-v1='1'></a>",
         "criteria": "2.4.4 Link Purpose (In Context)",
         "testcase_name": "Edit Profile Link",
         "severity": "Moderate"
@@ -403,12 +403,12 @@ def test_reconciler_loose_matching_and_severity_update(db_session, test_project)
     orig_fp = d.fingerprint
     assert d.severity == "Moderate"
 
-    # Run 2: Exact HTML snippet changed from class='v1' to class='v2-updated',
+    # Run 2: Exact HTML snippet changed from data-v1='1' to data-v2='2',
     # and severity is updated to 'Critical'
     tc2 = {
         "rule_id": "link-name",
         "page_url": target_url,
-        "html_snippet": "<a href='/edit' class='v2-updated'></a>",
+        "html_snippet": "<a href='/edit' data-v2='2'></a>",
         "criteria": "2.4.4 Link Purpose (In Context)",
         "testcase_name": "Edit Profile Link",
         "severity": "Critical"

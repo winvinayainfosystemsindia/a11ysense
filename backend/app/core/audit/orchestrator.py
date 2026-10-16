@@ -1352,7 +1352,8 @@ class AuditOrchestrator:
                     "passes_count": len(pass_testcases),
                     "not_applicable_count": len(na_testcases),
                     "manual_review_count": len(manual_testcases),
-                    "total_testcases": len(all_testcases)
+                    "total_testcases": len(all_testcases),
+                    "dynamic_groups_matched": regression_counters.get("dynamic_groups_matched", 0)
                 }
                 if not is_stopped:
                     session_rec.completed_at = datetime.utcnow()

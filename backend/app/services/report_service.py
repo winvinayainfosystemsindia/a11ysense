@@ -138,6 +138,7 @@ class ReportService:
                 "defects_reopened": session.defects_reopened,
                 "defects_open": session.defects_open,
                 "defects_not_retested": session.defects_not_retested,
+                "dynamic_groups_matched": (session.summary or {}).get("dynamic_groups_matched", 0) if session.summary else 0,
             }
 
             usage_info = {}

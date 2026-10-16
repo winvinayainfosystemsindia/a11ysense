@@ -1,0 +1,59 @@
+{
+  "_comment": "Rules used to build stable defect fingerprints for regression matching. Edit this file to add patterns - no code change needed. Regexes are Python 're' syntax, applied case-insensitively and in order.",
+  "version": 2,
+
+  "ignored_attributes": ["class", "style", "target"],
+  "include_criterion_in_fingerprint": false,
+  "max_name_length": 120,
+  "max_text_name_length": 40,
+  "container_tags_ignore_text": ["nav", "div", "ul", "ol", "section", "header", "footer", "main", "aside", "form", "table", "body", "html"],
+
+  "dynamic_text_rules": [
+    {
+      "name": "ordinal",
+      "pattern": "\\b\\d+\\s+of\\s+\\d+\\b",
+      "replacement": "<N> of <M>"
+    },
+    {
+      "name": "trend",
+      "pattern": "\\b(?:increased|decreased|up|down|gained|lost|rose|fell)\\s+by\\s+[+-]?\\d+(?:,\\d{2,3})*(?:\\.\\d+)?\\s*%",
+      "replacement": "<TREND>"
+    },
+    {
+      "name": "price",
+      "pattern": "(?:\u20b9|\\$|\u20ac|\u00a3|\\brs\\.?|\\binr)\\s*\\d+(?:,\\d{2,3})*(?:\\.\\d+)?",
+      "replacement": "<PRICE>"
+    },
+    {
+      "name": "percent",
+      "pattern": "[+-]?\\d+(?:,\\d{2,3})*(?:\\.\\d+)?\\s*%",
+      "replacement": "<PCT>"
+    },
+    {
+      "name": "number",
+      "pattern": "\\d+(?:,\\d{2,3})*(?:\\.\\d+)?",
+      "replacement": "<NUM>"
+    }
+  ],
+
+  "entity": {
+    "enabled": true,
+    "_comment": "A label like 'BAJAJ FINANCE LIMITED, Price <PRICE>, ...' is an entity + data template. The entity (text before the first separator, after an optional 'Stock <N> of <M>:' prefix) is replaced by <ENTITY> only when the element is part of a repeating template.",
+    "prefix_pattern": "^(?:[a-z]+\\s+)?<n> of <m>:\\s*",
+    "separator": ",",
+    "min_repeats": 3,
+    "require_dynamic_token": true,
+    "list_tags": ["li"],
+    "list_roles": ["listitem", "option", "row", "gridcell", "article", "slide"],
+    "list_class_hints": ["card", "carousel", "slider", "swiper", "slide", "grid", "ticker", "list"],
+    "ordinal_is_list_hint": true
+  },
+
+  "href": {
+    "_comment": "Last path segment under these prefixes is replaced with '*' (e.g. /stocks/bajfinance -> /stocks/*).",
+    "dynamic_prefixes": ["/stocks/", "/stock/", "/mutual-funds/", "/etfs/", "/companies/"],
+    "rules": [
+      {"pattern": "(?<=/)\\d+(?=/|$)", "replacement": "<id>"}
+    ]
+  }
+}
