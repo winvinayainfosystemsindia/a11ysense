@@ -68,7 +68,6 @@ export const CreateEstimateModal: React.FC<CreateEstimateModalProps> = ({
   // Step 2: URL Discovery / Input
   const [baseUrl, setBaseUrl] = useState('');
   const [discoveryDepth, setDiscoveryDepth] = useState<number>(1);
-  const [maxDiscovery, setMaxDiscovery] = useState<number>(30);
   const [discovering, setDiscovering] = useState(false);
   const [discoveredPages, setDiscoveredPages] = useState<DiscoveredUrlItem[]>([]);
   const [selectedUrls, setSelectedUrls] = useState<Record<string, boolean>>({});
@@ -115,7 +114,6 @@ export const CreateEstimateModal: React.FC<CreateEstimateModalProps> = ({
       const data = await estimationService.discover({
         url: baseUrl.trim(),
         depth: discoveryDepth,
-        max_pages: maxDiscovery,
       });
       setDiscoveredPages(data.urls);
       const initialSelected: Record<string, boolean> = {};
@@ -370,7 +368,7 @@ export const CreateEstimateModal: React.FC<CreateEstimateModalProps> = ({
                 {/* Discovery configuration */}
                 <form onSubmit={handleDiscover}>
                   <Grid container spacing={2} component="div" sx={{ alignItems: 'flex-start', mb: 2 }}>
-                    <Grid size={{ xs: 12, sm: 6 }} component="div">
+                    <Grid size={{ xs: 12, sm: 8 }} component="div">
                       <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
                         BASE ROOT URL
                       </Typography>
@@ -392,7 +390,7 @@ export const CreateEstimateModal: React.FC<CreateEstimateModalProps> = ({
                       />
                     </Grid>
 
-                    <Grid size={{ xs: 6, sm: 3 }} component="div">
+                    <Grid size={{ xs: 12, sm: 4 }} component="div">
                       <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
                         CRAWL DEPTH
                       </Typography>
@@ -408,20 +406,6 @@ export const CreateEstimateModal: React.FC<CreateEstimateModalProps> = ({
                         <option value={2}>Level 2 (Sub-pages)</option>
                         <option value={3}>Level 3 (Deep)</option>
                       </TextField>
-                    </Grid>
-
-                    <Grid size={{ xs: 6, sm: 3 }} component="div">
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                        MAX PAGES
-                      </Typography>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        type="number"
-                        value={maxDiscovery}
-                        onChange={(e) => setMaxDiscovery(Math.min(100, Math.max(1, Number(e.target.value))))}
-                        slotProps={{ htmlInput: { min: 1, max: 100 } }}
-                      />
                     </Grid>
                   </Grid>
 

@@ -29,8 +29,8 @@ router = APIRouter(prefix="/api/estimation", tags=["Estimation"])
 class EstimationRequest(BaseModel):
     url: Optional[str] = None
     urls: Optional[List[str]] = None
-    depth: int = Field(default=1, ge=1, le=3)
-    max_pages: int = Field(default=10, ge=1, le=50)
+    depth: int = Field(default=1, ge=1, le=5)
+    max_pages: Optional[int] = Field(default=None, ge=1)
     hourly_rate: float = Field(default=DEFAULT_HOURLY_RATE, ge=0.0)
     platform_fee: float = Field(default=DEFAULT_PLATFORM_FEE_PER_PAGE, ge=0.0)
     profit_margin_pct: float = Field(default=DEFAULT_PROFIT_MARGIN_PCT, ge=0.0)
@@ -43,8 +43,8 @@ class EstimationRequest(BaseModel):
 
 class DiscoverRequest(BaseModel):
     url: str
-    depth: int = Field(default=1, ge=1, le=3)
-    max_pages: int = Field(default=30, ge=1, le=100)
+    depth: int = Field(default=1, ge=1, le=5)
+    max_pages: Optional[int] = Field(default=None, ge=1)
 
 
 class RecalculateRequest(BaseModel):
@@ -107,7 +107,7 @@ def _normalize_discovered_link(href: str, base_netloc: str) -> Optional[str]:
     return clean
 
 
-async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: int = 30) -> List[Dict[str, Any]]:
+async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: Optional[int] = None) -> List[Dict[str, Any]]:
     from playwright.async_api import async_playwright
     import asyncio
 
@@ -125,6 +125,7 @@ async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: int = 3
         "title": _format_fallback_title("/", clean_root)
     }
     queue = [(clean_root, 0)]
+    visited = set()
 
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
@@ -136,11 +137,17 @@ async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: int = 3
         page = await context.new_page()
         page.set_default_timeout(30000)
 
-        while queue and len(discovered) < max_pages:
+        while queue:
+            if max_pages is not None and max_pages > 0 and len(discovered) >= max_pages:
+                break
             current_url, current_depth = queue.pop(0)
+            if current_url in visited:
+                continue
+            visited.add(current_url)
+
             try:
                 await page.goto(current_url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.5)
 
                 # Capture actual DOM page title
                 try:
@@ -172,9 +179,9 @@ async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: int = 3
                             link_text = _format_fallback_title(path, norm)
                         discovered[norm] = {"path": path, "title": link_text}
 
-                        if current_depth + 1 < depth and len(discovered) < max_pages:
+                        if current_depth + 1 < depth and (max_pages is None or max_pages <= 0 or len(discovered) < max_pages):
                             queue.append((norm, current_depth + 1))
-                        if len(discovered) >= max_pages:
+                        if max_pages is not None and max_pages > 0 and len(discovered) >= max_pages:
                             break
             except Exception as e:
                 logger.warning(f"Error exploring {current_url}: {e}")
@@ -191,7 +198,7 @@ async def _async_discover_urls(base_url: str, depth: int = 1, max_pages: int = 3
     return result
 
 
-def _discover_urls_worker(base_url: str, depth: int, max_pages: int) -> List[Dict[str, Any]]:
+def _discover_urls_worker(base_url: str, depth: int, max_pages: Optional[int] = None) -> List[Dict[str, Any]]:
     import sys, asyncio
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -468,7 +475,9 @@ async def analyze_and_estimate(request: EstimationRequest, db: Session = Depends
         if request.depth > 1:
             try:
                 discovered_items = await asyncio.to_thread(_discover_urls_worker, target_url, request.depth, request.max_pages)
-                discovered_urls = [d["url"] for d in discovered_items][:request.max_pages]
+                discovered_urls = [d["url"] for d in discovered_items]
+                if request.max_pages is not None and request.max_pages > 0:
+                    discovered_urls = discovered_urls[:request.max_pages]
             except Exception as e:
                 logger.warning(f"URL discovery fallback to root URL: {e}")
                 discovered_urls = [target_url]

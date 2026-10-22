@@ -40,8 +40,8 @@ interface EstimationUrlInputCardProps {
   onBaseUrlChange: (url: string) => void;
   discoveryDepth: number;
   onDiscoveryDepthChange: (depth: number) => void;
-  maxDiscovery: number;
-  onMaxDiscoveryChange: (max: number) => void;
+  maxDiscovery?: number;
+  onMaxDiscoveryChange?: (max: number) => void;
   discovering: boolean;
   onDiscover: (e?: React.FormEvent) => void;
   discoveredPages: DiscoveredUrlItem[];
@@ -64,8 +64,6 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
   onBaseUrlChange,
   discoveryDepth,
   onDiscoveryDepthChange,
-  maxDiscovery,
-  onMaxDiscoveryChange,
   discovering,
   onDiscover,
   discoveredPages,
@@ -201,7 +199,7 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
           <Box>
             <form onSubmit={onDiscover}>
               <Grid container spacing={2.5} component="div" sx={{ alignItems: 'flex-start' }}>
-                <Grid size={{ xs: 12, md: 6 }} component="div">
+                <Grid size={{ xs: 12, md: 7 }} component="div">
                   <Typography
                     variant="caption"
                     sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}
@@ -227,7 +225,7 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
                   />
                 </Grid>
 
-                <Grid size={{ xs: 6, md: 2 }} component="div">
+                <Grid size={{ xs: 6, md: 3 }} component="div">
                   <Typography
                     variant="caption"
                     sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}
@@ -248,22 +246,6 @@ export const EstimationUrlInputCard: React.FC<EstimationUrlInputCardProps> = ({
                 </Grid>
 
                 <Grid size={{ xs: 6, md: 2 }} component="div">
-                  <Typography
-                    variant="caption"
-                    sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.75 }}
-                  >
-                    MAX DISCOVERY
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    value={maxDiscovery}
-                    onChange={(e) => onMaxDiscoveryChange(Math.max(5, Number(e.target.value)))}
-                    slotProps={{ htmlInput: { min: 5, max: 100 } }}
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12, md: 2 }} component="div">
                   <Typography variant="caption" sx={{ visibility: 'hidden', display: 'block', mb: 0.75 }}>
                     ACTION
                   </Typography>

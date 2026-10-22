@@ -99,5 +99,23 @@ def test_estimation_persistence_and_crud():
     finally:
         db.close()
 
+
+def test_discover_request_unlimited_pages():
+    from backend.app.api.estimation import DiscoverRequest, EstimationRequest
+
+    # Valid without max_pages (defaults to None -> unlimited)
+    req = DiscoverRequest(url="https://example.com", depth=2)
+    assert req.max_pages is None
+
+    # Valid with explicit max_pages if provided
+    req_with_limit = DiscoverRequest(url="https://example.com", depth=1, max_pages=50)
+    assert req_with_limit.max_pages == 50
+
+    # EstimationRequest without max_pages
+    est_req = EstimationRequest(url="https://example.com", depth=2)
+    assert est_req.max_pages is None
+
+
 if __name__ == "__main__":
     test_estimation_persistence_and_crud()
+    test_discover_request_unlimited_pages()
