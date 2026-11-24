@@ -1,0 +1,216 @@
+screen_name,screen_type,title,tier,est_hours,why,visible_elements,buttons,form_controls,tabs,lists_tables,modals,custom_widgets,auth_steps,live_content,headings
+com.android.vending.derived.apk.id,Activity Screen,Id Screen,Complex,5.5,auth_steps=1; custom_widgets=1; live_content=1,11,4,0,0,0,0,1,1,1,0
+com.digio.digio_permissions.PermissionsActivity,Activity Screen,Permissions Activity,Complex,5.5,modals=1,15,0,0,0,0,1,0,0,0,0
+com.digio.digioupi.ui.DigioPaymentActivity,Activity Screen,Digio Payment Activity,Complex,5.5,auth_steps=1; custom_widgets=1,15,0,0,0,0,0,1,1,0,0
+com.digio.esignMandate.EsignMandateActivity,Activity Screen,Esign Mandate Activity,Complex,5.5,auth_steps=2; custom_widgets=1,15,0,0,0,0,0,1,2,0,0
+com.digio.esignbiometric.EsignBiometricActivity,Activity Screen,Esign Biometric Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.ecs.dbsekycapi.ESignActivity,Activity Screen,E Sign Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.facebook.react.devsupport.DevSettingsActivity,Activity Screen,Dev Settings Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.google.android.play.core.common.PlayCoreDialogWrapperActivity,Activity Screen,Play Core Dialog Wrapper Activity,Complex,5.5,modals=1,15,0,0,0,0,1,0,0,0,0
+com.moengage.pushbase.activities.PushClickDialogTracker,Activity Screen,Push Click Dialog Tracker,Complex,5.5,modals=1,15,0,0,0,0,1,0,0,0,0
+com.moengage.pushbase.internal.activity.PermissionActivity,Activity Screen,Permission Activity,Complex,5.5,modals=1,1,0,0,0,0,1,0,0,0,0
+com.nsdl.egov.esignaar.BTDiscoveryActivity,Activity Screen,Bt Discovery Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.nsdl.egov.esignaar.FaceAuthenticationActivity,Activity Screen,Face Authentication Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.nsdl.egov.esignaar.IrisActivation,Activity Screen,Iris Activation Screen,Complex,5.5,auth_steps=2,4,1,0,0,0,0,0,2,0,0
+com.nsdl.egov.esignaar.IrisAuthenticationActivity,Activity Screen,Iris Authentication Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.nsdl.egov.esignaar.NsdlDeviceDetectActivity,Activity Screen,Nsdl Device Detect Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.nsdl.egov.esignaar.OTPActivity,Activity Screen,Otp Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+com.nsdl.egov.esignaar.WithoutOTGSupportBiometricActivity,Activity Screen,Without Otg Support Biometric Activity,Complex,5.5,auth_steps=2,15,0,0,0,0,0,0,2,0,0
+in.digio.digiocamerakit.digiCamera.views.DigioPreviewActivity,Activity Screen,Digio Preview Activity,Complex,5.5,auth_steps=2; live_content=1,15,0,0,0,0,0,0,2,1,0
+in.digio.digiocamerakit.digiCamera.views.DigioVideoActivity,Activity Screen,Digio Video Activity,Complex,5.5,auth_steps=2; live_content=1,15,0,0,0,0,0,0,2,1,0
+in.digio.digiocamerakit.digiCamera.views.DigioVideoPreviewActivity,Activity Screen,Digio Video Preview Activity,Complex,5.5,auth_steps=2; live_content=1,15,0,0,0,0,0,0,2,1,0
+layout/aadhaar_screens,Feature Workflow Screen,Aadhaar Screens,Complex,5.5,auth_steps=1; custom_widgets=1,20,2,4,0,1,0,1,1,0,0
+layout/activity_digio_camera,Feature Workflow Screen,Digio Camera Screen,Complex,5.5,auth_steps=3; custom_widgets=1,19,1,0,0,0,0,1,3,0,0
+layout/activity_digio_preview,Feature Workflow Screen,Digio Preview,Complex,5.5,auth_steps=2; live_content=2,36,1,0,0,0,0,0,2,2,0
+layout/activity_digio_video_preview,Feature Workflow Screen,Digio Video Preview,Complex,5.5,custom_widgets=1; live_content=1,15,0,0,0,0,0,1,0,1,0
+layout/activity_esign_biometric,Feature Workflow Screen,Esign Biometric Screen,Complex,5.5,auth_steps=1,1,0,0,0,0,0,0,1,0,0
+layout/activity_esign_layout,Feature Workflow Screen,Esign Screen,Complex,5.5,auth_steps=1; custom_widgets=1,36,3,3,0,1,0,1,1,0,0
+layout/activity_esign_otp,Feature Workflow Screen,Esign Otp Screen,Complex,5.5,auth_steps=1,1,0,0,0,0,0,0,1,0,0
+layout/activity_moe_debugger,Feature Workflow Screen,Moe Debugger Screen,Complex,5.5,custom_widgets=1,35,3,0,0,1,0,1,0,0,1
+layout/activity_moe_rich_landing,Feature Workflow Screen,Moe Rich Landing Screen,Complex,5.5,live_content=1,2,0,0,0,0,0,0,0,1,0
+layout/activity_ui_ux_mask_biometric,Feature Workflow Screen,Ui Ux Mask Biometric Screen,Complex,5.5,auth_steps=1,25,4,3,0,1,0,0,1,0,0
+layout/activity_ui_ux_mask_face,Feature Workflow Screen,Ui Ux Mask Face Screen,Complex,5.5,auth_steps=1,17,4,2,0,1,0,0,1,0,0
+layout/activity_ui_ux_mask_iris,Feature Workflow Screen,Ui Ux Mask Iris Screen,Complex,5.5,auth_steps=1,17,4,2,0,1,0,0,1,0,0
+layout/activity_ui_ux_mask_otp,Feature Workflow Screen,Ui Ux Mask Otp Screen,Complex,5.5,auth_steps=2,32,6,3,0,1,0,0,2,0,0
+layout/activity_ui_ux_mask_withoutotgsupportbiometric,Feature Workflow Screen,Ui Ux Mask Withoutotgsupportbiometric Screen,Complex,5.5,auth_steps=1,25,4,3,0,1,0,0,1,0,0
+layout/alert_title_layout,UI Layout Screen,Alert Title Screen,Complex,5.5,auth_steps=2; modals=1,2,0,0,0,0,1,0,2,0,0
+layout/bluetooth_device_dialog,Modal / Dialog Sheet,Bluetooth Device Screen,Complex,5.5,modals=1,7,1,3,0,0,1,0,0,0,0
+layout/bottom_sheet_permission_denied,Modal / Dialog Sheet,Bottom Sheet Permission Denied,Complex,5.5,modals=1,8,2,0,0,0,1,0,0,0,0
+layout/cameraview_layout,UI Layout Screen,Cameraview,Complex,5.5,auth_steps=2,3,0,0,0,0,0,0,2,0,0
+layout/custom_dialog,Modal / Dialog Sheet,Custom Screen,Complex,5.5,modals=1,2,1,0,0,0,1,0,0,0,0
+layout/dialog_for_waiting,Modal / Dialog Sheet,For Waiting Screen,Complex,5.5,modals=1; custom_widgets=1,3,0,0,0,0,1,1,0,0,0
+layout/digio_crop_image_view,UI Layout Screen,Digio Crop Image View,Complex,5.5,custom_widgets=1,4,0,0,0,0,0,1,0,0,0
+layout/digio_instructions_modal,Modal / Dialog Sheet,Digio Instructions Modal Screen,Complex,5.5,auth_steps=1; modals=1,19,1,0,0,1,1,0,1,0,0
+layout/digio_loader,UI Layout Screen,Digio Loader Screen,Complex,5.5,custom_widgets=1,7,0,0,0,0,0,1,0,0,0
+layout/digio_penny_drop_layout,UI Layout Screen,Digio Penny Drop Screen,Complex,5.5,auth_steps=1; custom_widgets=1,16,0,0,0,2,0,1,1,0,0
+layout/digio_penny_drop_status,UI Layout Screen,Digio Penny Drop Status Screen,Complex,5.5,auth_steps=1; custom_widgets=1,10,0,0,0,0,0,1,1,0,0
+layout/digio_penydrop_loader,UI Layout Screen,Digio Penydrop Loader Screen,Complex,5.5,custom_widgets=1,7,0,0,0,0,0,1,0,0,0
+layout/digio_preview_video,UI Layout Screen,Digio Preview Video,Complex,5.5,custom_widgets=1; live_content=1,15,0,0,0,0,0,1,0,1,0
+layout/digio_upi_activity,Feature Workflow Screen,Digio Upi Screen,Complex,5.5,auth_steps=1; custom_widgets=1,2,0,0,0,0,0,1,1,0,0
+layout/digio_upi_layout,UI Layout Screen,Digio Upi Screen,Complex,5.5,auth_steps=1; custom_widgets=1,29,0,0,0,2,0,1,1,0,0
+layout/digio_webview,UI Layout Screen,Digio Webview,Complex,5.5,custom_widgets=1; live_content=1,11,0,0,0,0,0,1,0,1,0
+layout/esign_bottom_dialog,Modal / Dialog Sheet,Esign Bottom Screen,Complex,5.5,auth_steps=1; modals=1,10,0,0,0,0,1,0,1,0,0
+layout/esignnsdlactivity,Feature Workflow Screen,Esignnsdlactivity,Complex,5.5,auth_steps=1,4,1,0,0,0,0,0,1,0,0
+layout/fingerprint_dialog_layout,Modal / Dialog Sheet,Fingerprint Dialog,Complex,5.5,auth_steps=1; modals=1,6,0,0,0,1,1,0,1,0,0
+layout/force_exit_dialog,Modal / Dialog Sheet,Force Exit Screen,Complex,5.5,modals=1,4,1,0,0,0,1,0,0,0,0
+layout/iris_device_dialog,Modal / Dialog Sheet,Iris Device Screen,Complex,5.5,auth_steps=1; modals=1,7,1,3,0,0,1,0,1,0,0
+layout/m3_alert_dialog,Modal / Dialog Sheet,M 3 Alert Screen,Complex,5.5,modals=1,13,0,0,0,1,1,0,0,0,0
+layout/m3_alert_dialog_actions,Modal / Dialog Sheet,M 3 Alert Dialog Actions,Complex,5.5,modals=1,6,4,0,0,1,1,0,0,0,0
+layout/m3_alert_dialog_title,Modal / Dialog Sheet,M 3 Alert Dialog Title,Complex,5.5,modals=1,5,0,0,0,0,1,0,0,0,0
+layout/m3_side_sheet_dialog,Modal / Dialog Sheet,M 3 Side Sheet,Complex,5.5,modals=1,4,0,0,0,0,1,0,0,0,0
+layout/material_clockface_textview,UI Layout Screen,Material Clockface Textview,Complex,5.5,auth_steps=1,1,0,0,0,0,0,0,1,0,0
+layout/material_clockface_view,UI Layout Screen,Material Clockface View,Complex,5.5,auth_steps=1; custom_widgets=1,2,0,0,0,0,0,1,1,0,0
+layout/material_timepicker,UI Layout Screen,Material Timepicker Screen,Complex,5.5,auth_steps=2; custom_widgets=1,5,0,0,0,0,0,1,2,0,0
+layout/material_timepicker_dialog,Modal / Dialog Sheet,Material Timepicker Screen,Complex,5.5,modals=1; custom_widgets=1,7,3,0,0,0,1,1,0,0,0
+layout/md_dialog_base,Modal / Dialog Sheet,Md Dialog Base,Complex,5.5,modals=2,4,0,0,0,0,2,0,0,0,0
+layout/md_dialog_stub_buttons,Modal / Dialog Sheet,Md Dialog Stub Buttons,Complex,5.5,modals=4,5,4,1,0,0,4,0,0,0,0
+layout/md_dialog_stub_message,Modal / Dialog Sheet,Md Dialog Stub Message,Complex,5.5,modals=1,1,0,0,0,0,1,0,0,0,0
+layout/md_dialog_stub_recyclerview,Modal / Dialog Sheet,Md Dialog Stub Recyclerview,Complex,5.5,modals=1,1,0,0,0,1,1,0,0,0,0
+layout/md_dialog_stub_scrollview,Modal / Dialog Sheet,Md Dialog Stub Scrollview,Complex,5.5,modals=1,2,0,0,0,1,1,0,0,0,0
+layout/md_dialog_stub_title,Modal / Dialog Sheet,Md Dialog Stub Title,Complex,5.5,modals=2,3,0,0,0,0,2,0,0,0,0
+layout/md_listitem,UI Layout Screen,Md Listitem Screen,Complex,5.5,modals=1,2,0,0,0,0,1,0,0,0,0
+layout/moe_rich_push_progressbar_collapsed_layout_decroated_style,UI Layout Screen,Moe Rich Push Progressbar Collapsed Layout Decroated Style Screen,Complex,5.5,custom_widgets=1,5,0,0,0,0,0,1,0,0,0
+layout/moe_rich_push_progressbar_collapsed_small_layout_decroated_style,UI Layout Screen,Moe Rich Push Progressbar Collapsed Small Layout Decroated Style Screen,Complex,5.5,custom_widgets=1,5,0,0,0,0,0,1,0,0,0
+layout/moe_rich_push_progressbar_content_base_layout,UI Layout Screen,Moe Rich Push Progressbar Content Base Screen,Complex,5.5,custom_widgets=1,6,0,0,0,0,0,1,0,0,0
+layout/moe_rich_push_progressbar_expanded_base_decorated_style,UI Layout Screen,Moe Rich Push Progressbar Expanded Base Decorated Style Screen,Complex,5.5,custom_widgets=1,5,0,0,0,0,0,1,0,0,0
+layout/moe_rich_push_view_flipper_five,UI Layout Screen,Moe Rich Push View Flipper Five,Complex,5.5,auth_steps=2,26,0,0,0,0,0,0,2,0,0
+layout/moe_rich_push_view_flipper_four,UI Layout Screen,Moe Rich Push View Flipper Four,Complex,5.5,auth_steps=2,21,0,0,0,0,0,0,2,0,0
+layout/moe_rich_push_view_flipper_three,UI Layout Screen,Moe Rich Push View Flipper Three,Complex,5.5,auth_steps=2,16,0,0,0,0,0,0,2,0,0
+layout/moe_rich_push_view_flipper_two,UI Layout Screen,Moe Rich Push View Flipper Two,Complex,5.5,auth_steps=2,11,0,0,0,0,0,0,2,0,0
+layout/otp_screens,Feature Workflow Screen,Otp Screens,Complex,5.5,auth_steps=2; custom_widgets=1,17,2,2,0,1,0,1,2,0,0
+layout/preference_dialog_edittext,Modal / Dialog Sheet,Preference Dialog Edittext,Complex,5.5,modals=1,4,0,1,0,1,1,0,0,0,0
+layout/preference_dropdown,UI Layout Screen,Preference Dropdown Screen,Complex,5.5,auth_steps=1,8,0,1,0,0,0,0,1,0,0
+layout/preference_dropdown_material,UI Layout Screen,Preference Dropdown Material Screen,Complex,5.5,auth_steps=1,3,0,1,0,0,0,0,1,0,0
+layout/preference_widget_seekbar,UI Layout Screen,Preference Widget Seekbar Screen,Complex,5.5,custom_widgets=1,8,0,0,0,0,0,1,0,0,0
+layout/preference_widget_seekbar_material,UI Layout Screen,Preference Widget Seekbar Material Screen,Complex,5.5,custom_widgets=1,9,0,0,0,0,0,1,0,0,0
+layout/rd_service_bottom_sheet_dialog,Modal / Dialog Sheet,Rd Service Bottom Sheet,Complex,5.5,modals=1,9,2,0,0,0,1,0,0,0,0
+layout/rd_service_list_bottom_dialog,Modal / Dialog Sheet,Rd Service List Bottom Screen,Complex,5.5,modals=1,7,1,0,0,1,1,0,0,0,0
+layout/redbox_view,UI Layout Screen,Redbox View,Complex,5.5,custom_widgets=1,10,3,0,0,1,0,1,0,0,0
+layout/share_code_screens,Feature Workflow Screen,Share Code Screens,Complex,5.5,custom_widgets=1,14,1,2,0,1,0,1,0,0,0
+layout/activity_bt_discovery,Feature Workflow Screen,Bt Discovery Screen,Medium,2.5,lists_tables=1,9,1,0,0,1,0,0,0,0,0
+layout/ime_secondary_split_test_activity,Feature Workflow Screen,Ime Secondary Split Test Screen,Medium,2.5,form_controls=1,3,1,1,0,0,0,0,0,0,0
+layout/material_time_input,UI Layout Screen,Material Time Input Screen,Medium,2.5,form_controls=2,3,0,2,0,0,0,0,0,0,0
+layout/preference_recyclerview,UI Layout Screen,Preference Recyclerview,Medium,2.5,lists_tables=1,1,0,0,0,1,0,0,0,0,0
+layout/preference_widget_checkbox,UI Layout Screen,Preference Widget Checkbox Screen,Medium,2.5,form_controls=1,1,0,1,0,0,0,0,0,0,0
+layout/preference_widget_switch,UI Layout Screen,Preference Widget Switch Screen,Medium,2.5,form_controls=1,1,0,1,0,0,0,0,0,0,0
+layout/preference_widget_switch_compat,UI Layout Screen,Preference Widget Switch Compat Screen,Medium,2.5,form_controls=1,1,0,1,0,0,0,0,0,0,0
+android.windowOptOutEdgeToEdgeEnforcement,Activity Screen,Window Opt Out Edge To Edge Enforcement Screen,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+android.windowOptOutEdgeToEdgeEnforcement,Activity Screen,Window Opt Out Edge To Edge Enforcement Screen,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+android.windowOptOutEdgeToEdgeEnforcement,Activity Screen,Window Opt Out Edge To Edge Enforcement Screen,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.ecs.rdlibrary.ECSBioCaptureActivity,Activity Screen,Ecs Bio Capture Activity,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.ecs.rdlibrary.ECSBioInfoActivity,Activity Screen,Ecs Bio Info Activity,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.google.android.gms.auth.api.signin.internal.SignInHubActivity,Activity Screen,Sign In Hub Activity,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.google.android.gms.common.api.GoogleApiActivity,Activity Screen,Google Api Activity,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.google.mlkit.vision.DEPENDENCIES,Activity Screen,Dependencies Screen,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.moe.pushlibrary.activities.MoEActivity,Activity Screen,Mo E Activity,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.moengage.inapp.internal.activity.MoEInAppActivity,Activity Screen,Mo E In App Activity,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+com.moengage.pushbase.activities.PushTracker,Activity Screen,Push Tracker Screen,Simple,1.0,"elements=15, static/simple content",15,0,0,0,0,0,0,0,0,0
+in.digio.sdk.gateway.DigioActivity,Activity Screen,Digio Activity,Simple,1.0,"elements=5, static/simple content",5,2,0,0,0,0,0,0,0,0
+layout/activity_main_aardemo,Feature Workflow Screen,Main Aardemo Screen,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/activity_native_camera,Feature Workflow Screen,Native Camera Screen,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/activity_offline_kyc,Feature Workflow Screen,Offline Kyc Screen,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/autofill_inline_suggestion,UI Layout Screen,Autofill Inline Suggestion Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/dev_loading_view,UI Layout Screen,Dev Loading View,Simple,1.0,"elements=3, static/simple content",3,1,0,0,0,0,0,0,0,0
+layout/digio_camera_workflow,Feature Workflow Screen,Digio Camera Workflow,Simple,1.0,"elements=5, static/simple content",5,2,0,0,0,0,0,0,0,0
+layout/digio_crop_image_activity,Feature Workflow Screen,Digio Crop Image Screen,Simple,1.0,"elements=7, static/simple content",7,2,0,0,0,0,0,0,0,0
+layout/digio_error_screen,Feature Workflow Screen,Digio Error Screen,Simple,1.0,"elements=6, static/simple content",6,1,0,0,0,0,0,0,0,0
+layout/digio_status_layout,UI Layout Screen,Digio Status Screen,Simple,1.0,"elements=10, static/simple content",10,0,0,0,0,0,0,0,0,0
+layout/expand_button,UI Layout Screen,Expand Button Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/fps_view,UI Layout Screen,Fps View,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/image_frame,UI Layout Screen,Image Frame Screen,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/ime_base_split_test_activity,Feature Workflow Screen,Ime Base Split Test Screen,Simple,1.0,"elements=1, static/simple content",1,0,0,0,0,0,0,0,0,0
+layout/material_clock_display,UI Layout Screen,Material Clock Display Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/material_clock_period_toggle,UI Layout Screen,Material Clock Period Toggle Screen,Simple,1.0,"elements=3, static/simple content",3,3,0,0,0,0,0,0,0,0
+layout/material_radial_view_group,UI Layout Screen,Material Radial View Group,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/material_textinput_timepicker,UI Layout Screen,Material Textinput Timepicker Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/material_timepicker_textinput_display,UI Layout Screen,Material Timepicker Textinput Display Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_action_button_layout_decorated_style,UI Layout Screen,Moe Rich Push Action Button Layout Decorated Style Screen,Simple,1.0,"elements=4, static/simple content",4,3,0,0,0,0,0,0,0,0
+layout/moe_rich_push_auto_start_card,UI Layout Screen,Moe Rich Push Auto Start Card Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_button_layout,UI Layout Screen,Moe Rich Push Button Screen,Simple,1.0,"elements=3, static/simple content",3,2,0,0,0,0,0,0,0,0
+layout/moe_rich_push_button_layout_layout_big,UI Layout Screen,Moe Rich Push Button Layout Layout Big Screen,Simple,1.0,"elements=3, static/simple content",3,2,0,0,0,0,0,0,0,0
+layout/moe_rich_push_decorated_style_marker_layout,UI Layout Screen,Moe Rich Push Decorated Style Marker Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_decorated_view_button_layout,UI Layout Screen,Moe Rich Push Decorated View Button,Simple,1.0,"elements=4, static/simple content",4,3,0,0,0,0,0,0,0,0
+layout/moe_rich_push_header_view,UI Layout Screen,Moe Rich Push Header View,Simple,1.0,"elements=10, static/simple content",10,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_header_view_layout_big,UI Layout Screen,Moe Rich Push Header View Layout Big,Simple,1.0,"elements=10, static/simple content",10,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_collapsed,UI Layout Screen,Moe Rich Push Image Banner Collapsed Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_collapsed_layout_big,UI Layout Screen,Moe Rich Push Image Banner Collapsed Layout Big Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_collapsed_layout_decorated_style,UI Layout Screen,Moe Rich Push Image Banner Collapsed Layout Decorated Style Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_collapsed_small_layout_decorated_style,UI Layout Screen,Moe Rich Push Image Banner Collapsed Small Layout Decorated Style Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_expanded,UI Layout Screen,Moe Rich Push Image Banner Expanded Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_expanded_layout_big,UI Layout Screen,Moe Rich Push Image Banner Expanded Layout Big Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_expanded_layout_decorated_style,UI Layout Screen,Moe Rich Push Image Banner Expanded Layout Decorated Style Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_expanded_layout_decorated_style_with_dismiss,UI Layout Screen,Moe Rich Push Image Banner Expanded Layout Decorated Style With Dismiss Screen,Simple,1.0,"elements=5, static/simple content",5,1,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_header_layout_big,UI Layout Screen,Moe Rich Push Image Banner Header Layout Big Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_text_expanded,UI Layout Screen,Moe Rich Push Image Banner Text Expanded Screen,Simple,1.0,"elements=8, static/simple content",8,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_text_expanded_layout_big,UI Layout Screen,Moe Rich Push Image Banner Text Expanded Layout Big Screen,Simple,1.0,"elements=8, static/simple content",8,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_text_expanded_layout_decorated_style,UI Layout Screen,Moe Rich Push Image Banner Text Expanded Layout Decorated Style Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_image_banner_text_expanded_layout_decorated_style_with_dismiss,UI Layout Screen,Moe Rich Push Image Banner Text Expanded Layout Decorated Style With Dismiss Screen,Simple,1.0,"elements=8, static/simple content",8,1,0,0,0,0,0,0,0,0
+layout/moe_rich_push_manual_carousel_card,UI Layout Screen,Moe Rich Push Manual Carousel Card Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_five_image_position_five,UI Layout Screen,Moe Rich Push Marker Five Image Position Five Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_five_image_position_four,UI Layout Screen,Moe Rich Push Marker Five Image Position Four Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_five_image_position_one,UI Layout Screen,Moe Rich Push Marker Five Image Position One Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_five_image_position_three,UI Layout Screen,Moe Rich Push Marker Five Image Position Three Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_five_image_position_two,UI Layout Screen,Moe Rich Push Marker Five Image Position Two Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_four_image_position_four,UI Layout Screen,Moe Rich Push Marker Four Image Position Four Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_four_image_position_one,UI Layout Screen,Moe Rich Push Marker Four Image Position One Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_four_image_position_three,UI Layout Screen,Moe Rich Push Marker Four Image Position Three Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_four_image_position_two,UI Layout Screen,Moe Rich Push Marker Four Image Position Two Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_layout,UI Layout Screen,Moe Rich Push Marker Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_three_image_position_one,UI Layout Screen,Moe Rich Push Marker Three Image Position One Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_three_image_position_three,UI Layout Screen,Moe Rich Push Marker Three Image Position Three Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_three_image_position_two,UI Layout Screen,Moe Rich Push Marker Three Image Position Two Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_two_image_position_one,UI Layout Screen,Moe Rich Push Marker Two Image Position One Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_marker_two_image_position_two,UI Layout Screen,Moe Rich Push Marker Two Image Position Two Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_progressbar_collapsed_layout,UI Layout Screen,Moe Rich Push Progressbar Collapsed Screen,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_progressbar_expanded_with_action_buttons,UI Layout Screen,Moe Rich Push Progressbar Expanded With Action Buttons Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_progressbar_expanded_with_action_buttons_decorated_style,UI Layout Screen,Moe Rich Push Progressbar Expanded With Action Buttons Decorated Style Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_progressbar_expanded_without_action_buttons,UI Layout Screen,Moe Rich Push Progressbar Expanded Without Action Buttons Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_progressbar_expanded_without_action_buttons_decorated_style,UI Layout Screen,Moe Rich Push Progressbar Expanded Without Action Buttons Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_simple_carousel_auto_start_expanded_view,UI Layout Screen,Moe Rich Push Simple Carousel Auto Start Expanded View,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_simple_carousel_auto_start_expanded_view_layout_big,UI Layout Screen,Moe Rich Push Simple Carousel Auto Start Expanded View Layout Big,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_simple_carousel_decorated_style_expanded_view_with_dismiss_cta_layout,UI Layout Screen,Moe Rich Push Simple Carousel Decorated Style Expanded View With Dismiss Cta,Simple,1.0,"elements=10, static/simple content",10,1,0,0,0,0,0,0,0,0
+layout/moe_rich_push_simple_carousel_decorated_style_expanded_view_without_dismiss_cta_layout,UI Layout Screen,Moe Rich Push Simple Carousel Decorated Style Expanded View Without Dismiss Cta,Simple,1.0,"elements=8, static/simple content",8,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_simple_carousel_manual_expanded_view,UI Layout Screen,Moe Rich Push Simple Carousel Manual Expanded View,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_simple_carousel_manual_expanded_view_layout_big,UI Layout Screen,Moe Rich Push Simple Carousel Manual Expanded View Layout Big,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_single_image,UI Layout Screen,Moe Rich Push Single Image Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_picture_with_action_button,UI Layout Screen,Moe Rich Push Stylized Basic Big Picture With Action Button Screen,Simple,1.0,"elements=11, static/simple content",11,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_picture_with_action_button_decorated_style,UI Layout Screen,Moe Rich Push Stylized Basic Big Picture With Action Button Decorated Style Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_picture_with_action_button_layout_big,UI Layout Screen,Moe Rich Push Stylized Basic Big Picture With Action Button Layout Big Screen,Simple,1.0,"elements=8, static/simple content",8,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_picture_without_action_button,UI Layout Screen,Moe Rich Push Stylized Basic Big Picture Without Action Button Screen,Simple,1.0,"elements=10, static/simple content",10,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_picture_without_action_button_decorated_style,UI Layout Screen,Moe Rich Push Stylized Basic Big Picture Without Action Button Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_picture_without_action_button_layout_big,UI Layout Screen,Moe Rich Push Stylized Basic Big Picture Without Action Button Layout Big Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_text,UI Layout Screen,Moe Rich Push Stylized Basic Big Text Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_text_big_layout,UI Layout Screen,Moe Rich Push Stylized Basic Big Text Big Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_big_text_decorated_style,UI Layout Screen,Moe Rich Push Stylized Basic Big Text Decorated Style Screen,Simple,1.0,"elements=7, static/simple content",7,1,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_collapsed,UI Layout Screen,Moe Rich Push Stylized Basic Collapsed Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_collapsed_layout_big,UI Layout Screen,Moe Rich Push Stylized Basic Collapsed Layout Big Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_collapsed_layout_decorated_style,UI Layout Screen,Moe Rich Push Stylized Basic Collapsed Layout Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_collapsed_small_layout_decorated_style,UI Layout Screen,Moe Rich Push Stylized Basic Collapsed Small Layout Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_expanded_layout_big,UI Layout Screen,Moe Rich Push Stylized Basic Expanded Layout Big Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_stylized_basic_expanded_layout_decorated_style,UI Layout Screen,Moe Rich Push Stylized Basic Expanded Layout Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_collapsed_layout,UI Layout Screen,Moe Rich Push Timer Collapsed Screen,Simple,1.0,"elements=2, static/simple content",2,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_collapsed_layout_decorated_style,UI Layout Screen,Moe Rich Push Timer Collapsed Layout Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_collapsed_small_layout_decorated_style,UI Layout Screen,Moe Rich Push Timer Collapsed Small Layout Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_content_base_layout,UI Layout Screen,Moe Rich Push Timer Content Base Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_expanded_base_decorated_style,UI Layout Screen,Moe Rich Push Timer Expanded Base Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_expanded_decorated_style_with_action_buttons,UI Layout Screen,Moe Rich Push Timer Expanded Decorated Style With Action Buttons Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_expanded_decorated_style_without_action_buttons,UI Layout Screen,Moe Rich Push Timer Expanded Decorated Style Without Action Buttons Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_expanded_with_action_buttons,UI Layout Screen,Moe Rich Push Timer Expanded With Action Buttons Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_expanded_without_action_buttons,UI Layout Screen,Moe Rich Push Timer Expanded Without Action Buttons Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_with_title_collapsed_layout_decroated_style,UI Layout Screen,Moe Rich Push Timer With Title Collapsed Layout Decroated Style Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_with_title_collapsed_small_layout_decroated_style,UI Layout Screen,Moe Rich Push Timer With Title Collapsed Small Layout Decroated Style Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_with_title_expanded_base_decorated_style,UI Layout Screen,Moe Rich Push Timer With Title Expanded Base Decorated Style Screen,Simple,1.0,"elements=4, static/simple content",4,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_with_title_expanded_with_action_buttons_decorated_style,UI Layout Screen,Moe Rich Push Timer With Title Expanded With Action Buttons Decorated Style Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/moe_rich_push_timer_with_title_expanded_without_action_buttons_decorated_style,UI Layout Screen,Moe Rich Push Timer With Title Expanded Without Action Buttons Decorated Style Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/o_kyc_fragment,Fragment / Sub-screen,O Kyc Screen,Simple,1.0,"elements=8, static/simple content",8,0,0,0,0,0,0,0,0,0
+layout/paused_in_debugger_view,UI Layout Screen,Paused In Debugger View,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/preference,UI Layout Screen,Preference Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/preference_category,UI Layout Screen,Preference Category Screen,Simple,1.0,"elements=1, static/simple content",1,0,0,0,0,0,0,0,0,0
+layout/preference_category_material,UI Layout Screen,Preference Category Material Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/preference_information,UI Layout Screen,Preference Information Screen,Simple,1.0,"elements=5, static/simple content",5,0,0,0,0,0,0,0,0,0
+layout/preference_information_material,UI Layout Screen,Preference Information Material Screen,Simple,1.0,"elements=7, static/simple content",7,0,0,0,0,0,0,0,0,0
+layout/preference_list_fragment,Fragment / Sub-screen,Preference List Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/preference_material,UI Layout Screen,Preference Material Screen,Simple,1.0,"elements=6, static/simple content",6,0,0,0,0,0,0,0,0,0
+layout/rationale_layout,UI Layout Screen,Rationale Screen,Simple,1.0,"elements=7, static/simple content",7,2,0,0,0,0,0,0,0,0
+layout/rd_service_installed_list_layout,UI Layout Screen,Rd Service Installed List Screen,Simple,1.0,"elements=3, static/simple content",3,0,0,0,0,0,0,0,0,0
+layout/toolbar,UI Layout Screen,Toolbar Screen,Simple,1.0,"elements=14, static/simple content",14,0,0,0,0,0,0,0,0,0
