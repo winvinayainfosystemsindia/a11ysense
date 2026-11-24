@@ -72,6 +72,12 @@ async def start_crawl_discovery(
     db: Session = Depends(get_db)
 ):
     """Starts async page discovery crawl for web page or web application."""
+    if not req.credential_config and req.credentials_id:
+        from backend.app.repository.credential_repo import credential_repo
+        req.credential_config = credential_repo.resolve_credential_config(
+            db, req.credentials_id, current_user.organization_id
+        )
+
     crawl_task_id = f"crawl-{uuid.uuid4().hex[:12]}"
     crawl_record = CrawlProgress(
         crawl_task_id=crawl_task_id,
@@ -136,6 +142,12 @@ async def start_audit(
     db: Session = Depends(get_db)
 ):
     """Starts WCAG 2.2 Level A+AA accessibility audit run with regression sequencing."""
+    if not req.credential_config and req.credentials_id:
+        from backend.app.repository.credential_repo import credential_repo
+        req.credential_config = credential_repo.resolve_credential_config(
+            db, req.credentials_id, current_user.organization_id
+        )
+
     task_id = f"task-{uuid.uuid4().hex[:12]}"
 
     eff_proj_id = project_id

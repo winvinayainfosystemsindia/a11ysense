@@ -5,36 +5,7 @@ from sqlalchemy.orm import Session
 from common.database.connection import get_db
 from common.database.models import User, PageCredential
 from common.auth.deps import get_current_user, require_role
-from pydantic import BaseModel, Field
-
-class CredentialCreate(BaseModel):
-    label: str
-    login_url: str
-    url_pattern: str
-    auth_type: str = Field(default="form", pattern="^(form|cookie|bearer_token)$")
-    username: Optional[str] = None
-    password: Optional[str] = None
-    username_field: Optional[str] = "[name=username]"
-    password_field: Optional[str] = "[name=password]"
-    submit_selector: Optional[str] = "button[type=submit]"
-    post_login_url_pattern: Optional[str] = None
-    project_id: Optional[UUID] = None
-
-class CredentialResponse(BaseModel):
-    id: UUID
-    project_id: UUID
-    organization_id: UUID
-    label: str
-    login_url: str
-    url_pattern: str
-    auth_type: str
-    username_field: Optional[str] = None
-    password_field: Optional[str] = None
-    submit_selector: Optional[str] = None
-    post_login_url_pattern: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+from backend.app.schemas.credentials import CredentialCreate, CredentialResponse
 
 router = APIRouter(tags=["Credentials"])
 

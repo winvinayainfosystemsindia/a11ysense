@@ -27,10 +27,19 @@ NON_HTML_EXTENSIONS = {
     '.css', '.js', '.json', '.xml', '.txt', '.woff', '.woff2', '.ttf', '.otf', '.eot'
 }
 
+def is_route_fragment(fragment: str) -> bool:
+    """Checks whether a URL fragment is a meaningful client-side SPA route (e.g. #mywork, #zp/reports) rather than an on-page jump anchor."""
+    if not fragment:
+        return False
+    frag = fragment.strip()
+    if frag.lower() in {"top", "main", "main-content", "content", "skip", "skip-link", "header", "footer", "nav", "navigation", ""}:
+        return False
+    return True
+
 def normalize_url(url: str) -> str:
     """
     Standardizes a URL to ensure reliable deduplication.
-    Lowercases the host, removes standard ports, strips fragments, 
+    Lowercases the host, removes standard ports, preserves SPA route fragments, 
     and sorts query parameters.
     """
     parsed = urllib.parse.urlparse(url)
@@ -57,8 +66,11 @@ def normalize_url(url: str) -> str:
         params.sort()
         query = urllib.parse.urlencode(params)
         
-    # Reassemble without fragments
-    return urllib.parse.urlunparse((scheme, netloc, path, parsed.params, query, ""))
+    fragment = ""
+    if parsed.fragment and is_route_fragment(parsed.fragment):
+        fragment = parsed.fragment
+
+    return urllib.parse.urlunparse((scheme, netloc, path, parsed.params, query, fragment))
 
 class RobotsParser:
     def __init__(self, sitemaps: List[str] = None, disallows: List[str] = None, crawl_delay: float = None):
@@ -182,8 +194,22 @@ class WebCrawler:
         
         # Parse domain details
         parsed_start = urllib.parse.urlparse(self.start_url)
+        self.allowed_domains: Set[str] = {parsed_start.netloc.lower()}
+        if parsed_start.netloc.lower().startswith("www."):
+            self.allowed_domains.add(parsed_start.netloc.lower()[4:])
         self.allowed_domain = parsed_start.netloc.lower()
         self.allowed_scheme = parsed_start.scheme.lower()
+        self.primary_domain: Optional[str] = None
+
+        if self.request.credential_config:
+            if self.request.credential_config.login_url:
+                p_login = urllib.parse.urlparse(self.request.credential_config.login_url)
+                if p_login.netloc:
+                    self.allowed_domains.add(p_login.netloc.lower())
+            if self.request.credential_config.post_login_url_pattern:
+                p_pattern = urllib.parse.urlparse(self.request.credential_config.post_login_url_pattern)
+                if p_pattern.netloc:
+                    self.allowed_domains.add(p_pattern.netloc.lower())
         
         # Crawl status sets
         self.visited_urls: Set[str] = set()
@@ -204,8 +230,12 @@ class WebCrawler:
     def is_same_domain(self, url: str) -> bool:
         parsed = urllib.parse.urlparse(url)
         netloc = parsed.netloc.lower()
-        # Same domain or subdomain
-        return netloc == self.allowed_domain or netloc.endswith("." + self.allowed_domain)
+        if not netloc:
+            return False
+        for allowed in self.allowed_domains:
+            if netloc == allowed or netloc.endswith("." + allowed) or allowed.endswith("." + netloc):
+                return True
+        return False
 
     def is_excluded(self, url: str) -> bool:
         parsed = urllib.parse.urlparse(url)
@@ -405,7 +435,7 @@ class WebCrawler:
                     if response.status_code in (401, 403) and self.request.credential_config and not self._relogged:
                         logger.warning(f"Received status {response.status_code} for {normalized_url}. Attempting dynamic re-login...")
                         self._relogged = True
-                        from app.services.login_service import login_service
+                        from backend.app.core.crawler.login_service import login_service
                         from app.repository.auth_repo import auth_repo
                         import hashlib
                         import json
@@ -476,7 +506,7 @@ class WebCrawler:
     async def crawl_with_playwright(self) -> CrawlResponse:
         start_time = time.time()
         from playwright.async_api import async_playwright
-        from app.services.login_service import login_service
+        from backend.app.core.crawler.login_service import login_service
         
         # Determine robots.txt restrictions first (using a standard httpx client helper)
         robots_parser = None
@@ -546,6 +576,16 @@ class WebCrawler:
                     raise Exception(f"Login failed: {error_detail}")
                 if landed:
                     landed_url = landed
+                    p_landed = urllib.parse.urlparse(landed_url)
+                    if p_landed.netloc:
+                        landed_netloc = p_landed.netloc.lower()
+                        self.allowed_domains.add(landed_netloc)
+                        if landed_netloc.startswith("www."):
+                            self.allowed_domains.add(landed_netloc[4:])
+                        start_netloc = urllib.parse.urlparse(self.start_url).netloc.lower()
+                        if landed_netloc != start_netloc:
+                            logger.info(f"Authenticated crawl landed on application domain: {landed_netloc}. Setting as primary domain.")
+                            self.primary_domain = landed_netloc
                 # Inject JWT/Bearer tokens extracted from localStorage into all subsequent page requests
                 if headers_ext:
                     self.auth_headers = headers_ext
@@ -680,14 +720,19 @@ class WebCrawler:
 
             queue = deque()
             
-            # Seed start URL
+            # Seed start and landed URLs
             normalized_start = normalize_url(self.start_url)
-            queue.append((normalized_start, 1))
-            
-            # Seed landed URL
-            if landed_url:
-                normalized_landed = normalize_url(landed_url)
-                if normalized_landed != normalized_start:
+            normalized_landed = normalize_url(landed_url) if landed_url else None
+
+            # For authenticated crawl, if landed URL is in an application (or different from start),
+            # prioritize and seed the landed application URL and skip crawling public marketing links from start URL
+            if config and normalized_landed and normalized_landed != normalized_start:
+                logger.info(f"Authenticated crawl: Seeding landed application URL: {normalized_landed}")
+                queue.append((normalized_landed, 1))
+                self.visited_urls.add(normalized_start)
+            else:
+                queue.append((normalized_start, 1))
+                if normalized_landed and normalized_landed != normalized_start:
                     logger.info(f"Seeding post-login landed URL: {normalized_landed}")
                     queue.append((normalized_landed, 1))
                     
@@ -788,18 +833,16 @@ class WebCrawler:
                         logger.info(f"[Playwright Crawl] Client-side navigation unavailable/failed. Falling back to page.goto for: {normalized_url}")
                         response = await page.goto(normalized_url, wait_until="domcontentloaded")
 
-                    # Wait for React SPA to render and load completely
-                    # Wait for any loaders or spinners to disappear
+                    # Wait for page content to settle
                     try:
-                        await page.wait_for_selector("[class*='loader'], [class*='spinner'], [id*='loader'], [id*='spinner'], :has-text('Loading')", state="hidden", timeout=15000)
+                        await page.wait_for_selector("[class*='loader'], [class*='spinner']", state="hidden", timeout=2000)
                     except Exception:
                         pass
-                    # Wait for key elements to be visible
                     try:
-                        await page.wait_for_selector("li, nav a, aside a, a, p, h1, h2, h3, main, #root", state="visible", timeout=5000)
-                        await page.wait_for_timeout(1000)
+                        await page.wait_for_selector("li, nav a, aside a, a, p, h1, h2, h3, main, #root", state="visible", timeout=2000)
                     except Exception:
-                        await page.wait_for_timeout(2000)
+                        pass
+                    await page.wait_for_timeout(500)
 
                     current_items = await get_menu_items()
                     if any(m["text"] not in self.clicked_sidebar_items for m in current_items):
@@ -847,18 +890,42 @@ class WebCrawler:
 
                     self.pages_discovered[normalized_current] = depth
                     
-                    # Extract all links via URL-depth discovery (anchor hrefs)
+                    # Extract all links via URL-depth discovery (anchor hrefs + SPA hash routes)
                     if depth < self.max_depth:
                         links = await page.evaluate("""() => {
-                            const anchors = Array.from(document.querySelectorAll('a[href]'));
-                            return anchors.map(a => a.href);
+                            const results = [];
+                            const seen = new Set();
+                            document.querySelectorAll('a[href]').forEach(a => {
+                                const raw = a.getAttribute('href');
+                                const abs = a.href;
+                                const text = (a.textContent || '').trim().replace(/\\s+/g, ' ');
+                                if (raw && !raw.startsWith('javascript:') && !raw.startsWith('mailto:') && !raw.startsWith('tel:')) {
+                                    if (!seen.has(abs)) {
+                                        seen.add(abs);
+                                        results.push({ href: abs, text: text });
+                                    }
+                                }
+                            });
+                            return results;
                         }""")
-                        for href in links:
-                            href = href.strip()
-                            if not href or href.startswith(("javascript:", "mailto:", "tel:", "#")):
+                        for item in links:
+                            href = item.get("href", "").strip()
+                            text = item.get("text", "")
+                            if not href:
                                 continue
-                            normalized_resolved = normalize_url(href)
-                            if normalized_resolved not in self.visited_urls:
+                            resolved_url = urllib.parse.urljoin(page.url, href)
+                            normalized_resolved = normalize_url(resolved_url)
+                            if not self.is_same_domain(normalized_resolved):
+                                continue
+                            if self.primary_domain:
+                                p_res = urllib.parse.urlparse(normalized_resolved)
+                                if p_res.netloc.lower() != self.primary_domain and not p_res.netloc.lower().endswith("." + self.primary_domain):
+                                    continue
+                            if self.is_excluded(normalized_resolved) or self.is_non_html(normalized_resolved):
+                                continue
+                            if text and normalized_resolved not in self.url_to_menu_text:
+                                self.url_to_menu_text[normalized_resolved] = text
+                            if normalized_resolved not in self.visited_urls and normalized_resolved not in self.pages_discovered:
                                 queue.append((normalized_resolved, depth + 1))
 
                     # Dynamic sidebar menu click route discovery (for SPAs)
@@ -877,9 +944,10 @@ class WebCrawler:
                                 const anchors = document.querySelectorAll(sel);
                                 const results = [];
                                 anchors.forEach(a => {
+                                    const raw = a.getAttribute('href');
                                     const href = a.href;
                                     const text = (a.textContent || '').replace(/\\s+/g, ' ').trim();
-                                    if (href && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('#')) {
+                                    if (raw && !raw.startsWith('javascript:') && !raw.startsWith('mailto:') && !raw.startsWith('tel:')) {
                                         results.push({ href: href, text: text });
                                     }
                                 });
@@ -892,6 +960,10 @@ class WebCrawler:
                                     continue
                                 norm_href = normalize_url(href)
                                 if self.is_same_domain(norm_href) and not self.is_excluded(norm_href) and not self.is_non_html(norm_href):
+                                    if self.primary_domain:
+                                        p_sidebar = urllib.parse.urlparse(norm_href)
+                                        if p_sidebar.netloc.lower() != self.primary_domain and not p_sidebar.netloc.lower().endswith("." + self.primary_domain):
+                                            continue
                                     if norm_href not in self.visited_urls and norm_href not in self.pages_discovered:
                                         logger.info(f"[Playwright Crawl] Pre-extracted sidebar href: {norm_href} ('{text}')")
                                         if text:

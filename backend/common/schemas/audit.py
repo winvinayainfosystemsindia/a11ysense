@@ -4,9 +4,9 @@ from datetime import datetime
 from uuid import UUID
 
 class PageCredentialConfig(BaseModel):
-    auth_type: str  # "form", "cookie", "bearer_token"
+    auth_type: str = "form"  # "form", "cookie", "bearer_token"
     login_url: str
-    url_pattern: str
+    url_pattern: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
     username_field: Optional[str] = "[name=username]"

@@ -78,11 +78,25 @@ class AuditOrchestrator:
         try:
             crawl_progress_repo.set_status(crawl_task_id, "crawling")
             
+            # Ensure credential_config is resolved from DB if credentials_id is provided
+            cred_config = getattr(request, "credential_config", None)
+            if not cred_config and getattr(request, "credentials_id", None) and org_id:
+                try:
+                    from common.database.connection import get_session_local
+                    from backend.app.repository.credential_repo import credential_repo
+                    from uuid import UUID
+                    with get_session_local()() as db_session:
+                        cred_config = credential_repo.resolve_credential_config(
+                            db_session, UUID(str(request.credentials_id)), UUID(str(org_id))
+                        )
+                except Exception as ce:
+                    logger.warning(f"Could not resolve credentials_id in discovery flow: {ce}")
+
             crawl_req = CrawlRequest(
                 url=request.url,
                 depth=3,
                 max_pages=50,
-                credential_config=getattr(request, "credential_config", None)
+                credential_config=cred_config
             )
             crawler = WebCrawler(crawl_req)
             result = await crawler.crawl()
@@ -177,6 +191,19 @@ class AuditOrchestrator:
 
         write_debug(f"ENTERED run_in_memory_audit_flow for URL: {request.url}, depth: {request.depth}")
         
+        # Ensure credential_config is resolved from DB if credentials_id is provided
+        if not getattr(request, "credential_config", None) and getattr(request, "credentials_id", None) and org_id:
+            try:
+                from common.database.connection import get_session_local
+                from backend.app.repository.credential_repo import credential_repo
+                from uuid import UUID
+                with get_session_local()() as db_session:
+                    request.credential_config = credential_repo.resolve_credential_config(
+                        db_session, UUID(str(request.credentials_id)), UUID(str(org_id))
+                    )
+            except Exception as ce:
+                logger.warning(f"Could not resolve credentials_id in audit flow: {ce}")
+
         discovered_urls = [str(request.url)]
         sitemaps_found = []
         crawl_error = None

@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import fnmatch
+import urllib.parse
 from typing import Optional, Dict, Tuple
 from common.schemas.audit import PageCredentialConfig
 from playwright.async_api import async_playwright
@@ -81,52 +82,111 @@ class LoginService:
         except Exception:
             pass
 
+        # If page is a landing page with a Sign In link/button instead of direct input fields, click it
+        try:
+            has_visible_input = await page.evaluate("""() => {
+                const inputs = Array.from(document.querySelectorAll('input:not([type=hidden])'));
+                return inputs.some(i => i.offsetParent !== null && !i.disabled);
+            }""")
+            if not has_visible_input:
+                logger.info("No visible input fields on initial page. Checking for Sign In / Login CTA...")
+                signin_selectors = [
+                    "a.zgh-login", "a.zws-login-cta",
+                    "a:has-text('Sign In')", "a:has-text('Sign in')", "a:has-text('Login')", "a:has-text('Log In')",
+                    "button:has-text('Sign In')", "button:has-text('Sign in')", "button:has-text('Login')", "button:has-text('Log In')"
+                ]
+                for s_sel in signin_selectors:
+                    try:
+                        s_btn = await page.wait_for_selector(s_sel, state="visible", timeout=2000)
+                        if s_btn:
+                            logger.info(f"Clicking Sign In CTA '{s_sel}' to reach login form...")
+                            await s_btn.click()
+                            try:
+                                await page.wait_for_load_state("networkidle", timeout=8000)
+                            except Exception:
+                                pass
+                            break
+                    except Exception:
+                        continue
+        except Exception as lpe:
+            logger.debug(f"Landing page check error: {lpe}")
+
         # Fill username
         username_sel = config.username_field or "[name=username]"
         logger.info(f"Filling username field '{username_sel}'")
         try:
-            await page.wait_for_selector(username_sel, state="visible", timeout=10000)
+            await page.wait_for_selector(username_sel, state="visible", timeout=5000)
         except Exception:
-            if username_sel == "[name=username]":
-                fallbacks = ["[name=email]", "input[type=email]", "#email", "#username", "input[autocomplete=email]", "input[autocomplete=username]"]
-                resolved = False
-                for fb in fallbacks:
-                    try:
-                        logger.info(f"Default username field not found. Trying fallback selector '{fb}'")
-                        await page.wait_for_selector(fb, state="visible", timeout=3000)
-                        username_sel = fb
-                        resolved = True
-                        break
-                    except Exception:
-                        continue
-                if not resolved:
-                    raise TimeoutError(f"Username selector '{username_sel}' and fallbacks not found.")
-            else:
-                raise
+            fallbacks = [
+                "#login_id", "[name=LOGIN_ID]", "input[name=LOGIN_ID]",
+                "[name=username]", "[name=email]", "input[type=email]", "#email", "#username",
+                "input[autocomplete=email]", "input[autocomplete=username]"
+            ]
+            resolved = False
+            for fb in fallbacks:
+                try:
+                    logger.info(f"Trying username fallback selector '{fb}'")
+                    await page.wait_for_selector(fb, state="visible", timeout=2000)
+                    username_sel = fb
+                    resolved = True
+                    break
+                except Exception:
+                    continue
+            if not resolved:
+                raise TimeoutError(f"Username selector '{username_sel}' and fallbacks not found.")
+
         await page.fill(username_sel, config.username or "")
 
-        # Fill password
+        # Multi-step login check (e.g. Zoho Accounts, Google, Microsoft):
+        # If there is a visible Next/Continue button, click it to transition to password step
+        next_selectors = [
+            "#nextbtn", "button#nextbtn", "button:has-text('Next')", "button:has-text('Continue')",
+            "input[type=button][value='Next']", "input[type=button][value='Continue']"
+        ]
+        next_clicked = False
+        for nsel in next_selectors:
+            try:
+                el = await page.query_selector(nsel)
+                if el and await el.is_visible():
+                    logger.info(f"Found visible multi-step next button '{nsel}'; clicking to advance to password step...")
+                    await el.click()
+                    next_clicked = True
+                    await page.wait_for_timeout(1500)
+                    break
+            except Exception:
+                continue
+
         password_sel = config.password_field or "[name=password]"
+        if not next_clicked:
+            try:
+                if not await page.is_visible(password_sel):
+                    logger.info("Password field not yet visible; pressing Enter in username field...")
+                    await page.keyboard.press("Enter")
+                    await page.wait_for_timeout(1500)
+            except Exception:
+                pass
+
+        # Locate password field (prioritizing #password and [name=PASSWORD] for multi-step providers like Zoho)
+        pwd_fallbacks = [
+            "#password", "[name=PASSWORD]", "input[name=PASSWORD]",
+            "input[type=password]", "[name=password]", "#pass", "input[autocomplete=current-password]"
+        ]
+        if password_sel and password_sel != "[name=password]":
+            pwd_fallbacks = [password_sel] + [f for f in pwd_fallbacks if f != password_sel]
+
+        resolved_pwd = False
+        for pfb in pwd_fallbacks:
+            try:
+                await page.wait_for_selector(pfb, state="visible", timeout=3000)
+                password_sel = pfb
+                resolved_pwd = True
+                break
+            except Exception:
+                continue
+        if not resolved_pwd:
+            raise TimeoutError(f"Password field could not be found with fallbacks: {pwd_fallbacks}")
+
         logger.info(f"Filling password field '{password_sel}'")
-        try:
-            await page.wait_for_selector(password_sel, state="visible", timeout=10000)
-        except Exception:
-            if password_sel == "[name=password]":
-                fallbacks = ["input[type=password]", "#password", "input[autocomplete=current-password]"]
-                resolved = False
-                for fb in fallbacks:
-                    try:
-                        logger.info(f"Default password field not found. Trying fallback selector '{fb}'")
-                        await page.wait_for_selector(fb, state="visible", timeout=3000)
-                        password_sel = fb
-                        resolved = True
-                        break
-                    except Exception:
-                        continue
-                if not resolved:
-                    raise TimeoutError(f"Password selector '{password_sel}' and fallbacks not found.")
-            else:
-                raise
         await page.fill(password_sel, config.password or "")
 
         # Fill extra fields if any
@@ -138,93 +198,132 @@ class LoginService:
                 except Exception as ef:
                     logger.warning(f"Could not fill extra field '{selector}': {ef}")
 
-        # Auto-check any checkboxes on the page (e.g., "I agree to terms", "Remember me") to satisfy form requirements
+        # Check for an active, visible CAPTCHA challenge
+        is_captcha_active = False
         try:
-            checkboxes = await page.query_selector_all("input[type=checkbox]")
-            for cb in checkboxes:
-                is_checked = await cb.is_checked()
-                if not is_checked:
-                    logger.info("Found unchecked checkbox, checking it to satisfy form requirements...")
-                    # 1. Try checking the input directly
-                    await cb.check(force=True)
-                    
-                    # 2. Check if the submit button has become enabled
-                    await asyncio.sleep(0.5)
-                    is_disabled = await page.evaluate("() => { const btn = document.querySelector('button[type=submit]'); return btn ? btn.disabled : false; }")
-                    if is_disabled:
-                        logger.info("Submit button still disabled after direct check. Attempting to click checkbox parent elements...")
-                        parent = await cb.evaluate_handle("el => el.parentElement")
-                        if parent:
-                            await parent.as_element().click(force=True)
-                            await asyncio.sleep(0.5)
-                        
-                        # Check again and try closest label
-                        is_disabled = await page.evaluate("() => { const btn = document.querySelector('button[type=submit]'); return btn ? btn.disabled : false; }")
-                        if is_disabled:
-                            label = await cb.evaluate_handle("el => el.closest('label')")
-                            if label:
-                                await label.as_element().click(force=True)
-                                await asyncio.sleep(0.5)
-        except Exception as cbe:
-            logger.warning(f"Failed to check checkbox: {cbe}")
+            is_captcha_active = await page.evaluate("""() => {
+                const selectors = [
+                    'iframe[src*="recaptcha"]', 'iframe[src*="hcaptcha"]', 'iframe[src*="turnstile"]',
+                    '#captcha', 'input[name="captcha"]', '.g-recaptcha', '.h-captcha', '#captcha-container'
+                ];
+                for (const sel of selectors) {
+                    const els = document.querySelectorAll(sel);
+                    for (const el of els) {
+                        const style = window.getComputedStyle(el);
+                        if (style && style.display !== 'none' && style.visibility !== 'hidden' && el.offsetWidth > 0 && el.offsetHeight > 0) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""")
+        except Exception:
+            is_captcha_active = False
 
-        # Check for CAPTCHA/MFA
-        content = await page.content()
-        if "captcha" in content.lower() or "recaptcha" in content.lower():
+        if is_captcha_active:
             return False, {}, {}, "CAPTCHA block detected on login page. Manual authentication or IP whitelisting required.", None
 
-        # Submit form
+        # Submit form: resolve submit selector with fallbacks (e.g. #nextbtn on Zoho Accounts)
         submit_sel = config.submit_selector or "button[type=submit]"
+        submit_fallbacks = [
+            "#nextbtn", "button#nextbtn", "button[type=submit]",
+            "button:has-text('Sign In')", "button:has-text('Sign in')", "button:has-text('Login')",
+            "button:has-text('Log In')", "button:has-text('Next')", "input[type=submit]"
+        ]
+        if submit_sel and submit_sel != "button[type=submit]":
+            submit_fallbacks = [submit_sel] + [f for f in submit_fallbacks if f != submit_sel]
+
+        resolved_submit = False
+        for sfb in submit_fallbacks:
+            try:
+                await page.wait_for_selector(sfb, state="visible", timeout=3000)
+                submit_sel = sfb
+                resolved_submit = True
+                break
+            except Exception:
+                continue
+        if not resolved_submit:
+            raise TimeoutError(f"Submit selector could not be found with fallbacks: {submit_fallbacks}")
+
         logger.info(f"Clicking submit button '{submit_sel}'")
-        try:
-            await page.wait_for_selector(submit_sel, state="visible", timeout=10000)
-        except Exception:
-            if submit_sel == "button[type=submit]":
-                fallbacks = ["button:has-text('Sign In')", "button:has-text('Login')", "button:has-text('Log In')", "input[type=submit]", "button", "a:has-text('Login')", "a:has-text('Sign In')"]
-                resolved = False
-                for fb in fallbacks:
-                    try:
-                        logger.info(f"Default submit selector not found. Trying fallback selector '{fb}'")
-                        await page.wait_for_selector(fb, state="visible", timeout=3000)
-                        submit_sel = fb
-                        resolved = True
-                        break
-                    except Exception:
-                        continue
-                if not resolved:
-                    raise TimeoutError(f"Submit selector '{submit_sel}' and fallbacks not found.")
-            else:
-                raise
         
-        # Wait for URL to change from the login URL, or wait for navigation/load state
         login_url_before = page.url
         await page.click(submit_sel)
         
+        # Wait up to 30 seconds for authentication to complete and transition to the target app
+        target_netloc = None
+        if config.post_login_url_pattern:
+            parsed_pat = urllib.parse.urlparse(config.post_login_url_pattern)
+            if parsed_pat.netloc:
+                target_netloc = parsed_pat.netloc.lower()
+
         try:
-            # Wait up to 8 seconds for the URL to change to something else
-            await page.wait_for_function(f"() => window.location.href !== '{login_url_before}'", timeout=8000)
+            if target_netloc:
+                logger.info(f"Waiting for navigation to target domain '{target_netloc}'...")
+                await page.wait_for_url(lambda u: target_netloc in u, timeout=30000)
+            else:
+                await page.wait_for_url(
+                    lambda u: ("login" not in u.lower() and "signin" not in u.lower()) or (u != login_url_before and "accounts." not in u.lower()),
+                    timeout=30000
+                )
+        except Exception as we:
+            logger.debug(f"wait_for_url error (proceeding to check current state): {we}")
+
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+            await page.wait_for_timeout(3000)
         except Exception:
-            # If it didn't change, wait for network idle to make sure any lazy loads finish
-            try:
-                await page.wait_for_load_state("networkidle", timeout=2000)
-            except Exception:
-                pass
+            pass
 
         # Post-login URL verification
         current_url = page.url
         logger.info(f"URL after form submit: {current_url}")
 
+        # If post_login_url_pattern is provided, navigate there if needed and target domain has loaded
+        if config.post_login_url_pattern and config.post_login_url_pattern.startswith("http"):
+            if current_url != config.post_login_url_pattern and ("login" not in current_url.lower() and "signin" not in current_url.lower()):
+                logger.info(f"Navigating to designated post-login target: {config.post_login_url_pattern}")
+                try:
+                    await page.goto(config.post_login_url_pattern, wait_until="domcontentloaded")
+                    await page.wait_for_timeout(3000)
+                    current_url = page.url
+                except Exception as ple:
+                    logger.warning(f"Could not navigate to post_login_url_pattern: {ple}")
+
         # Check for post-login failures/errors shown on the page
-        content_after = await page.content()
-        if "invalid credentials" in content_after.lower() or "incorrect password" in content_after.lower() or "login failed" in content_after.lower():
-            return False, {}, {}, "Authentication failed: Invalid credentials or login rejected by target application.", None
-
-        if "two-factor" in content_after.lower() or "mfa" in content_after.lower() or "otp" in content_after.lower():
-            return False, {}, {}, "Multi-factor authentication (MFA) challenge detected. MFA is not supported in automated audits.", None
-
+        # Only check failure indicators if we haven't successfully transitioned to the authenticated destination
+        is_on_app = False
         if config.post_login_url_pattern:
-            if not fnmatch.fnmatch(current_url, config.post_login_url_pattern) and config.post_login_url_pattern not in current_url:
-                return False, {}, {}, f"Login verification failed. Expected post-login URL to match '{config.post_login_url_pattern}', but landed on '{current_url}'.", None
+            if config.post_login_url_pattern in current_url or fnmatch.fnmatch(current_url, config.post_login_url_pattern):
+                is_on_app = True
+        if not is_on_app and "login" not in current_url.lower() and "signin" not in current_url.lower():
+            is_on_app = True
+
+        if not is_on_app:
+            content_after = await page.content()
+            content_lower = content_after.lower()
+            if "invalid credentials" in content_lower or "incorrect password" in content_lower or "login failed" in content_lower:
+                return False, {}, {}, "Authentication failed: Invalid credentials or login rejected by target application.", None
+
+            # Look for active MFA challenge inputs or specific phrases on visible page
+            has_mfa = False
+            try:
+                has_mfa = await page.evaluate("""() => {
+                    const text = (document.body ? document.body.innerText : '').toLowerCase();
+                    const phrases = ['two-factor authentication', 'enter verification code', 'enter the 6-digit code', 'enter otp', 'authenticator app'];
+                    if (phrases.some(p => text.includes(p))) return true;
+                    const mfaInput = document.querySelector('input[name*="otp" i], input[name*="totp" i], input[id*="totp" i], input[autocomplete="one-time-code"]');
+                    return !!(mfaInput && mfaInput.offsetParent !== null);
+                }""")
+            except Exception:
+                has_mfa = False
+
+            if has_mfa:
+                return False, {}, {}, "Multi-factor authentication (MFA) challenge detected. MFA is not supported in automated audits.", None
+
+            if config.post_login_url_pattern and not config.post_login_url_pattern.startswith("http"):
+                if not fnmatch.fnmatch(current_url, config.post_login_url_pattern) and config.post_login_url_pattern not in current_url:
+                    return False, {}, {}, f"Login verification failed. Expected post-login URL to match '{config.post_login_url_pattern}', but landed on '{current_url}'.", None
 
         # Extract cookies from browser context
         pw_cookies = await context.cookies()

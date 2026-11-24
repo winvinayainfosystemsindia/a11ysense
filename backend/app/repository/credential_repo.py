@@ -7,7 +7,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from cryptography.fernet import Fernet
 from common.database.models import PageCredential
-from app.schemas.credentials import CredentialCreate
+from common.schemas.audit import PageCredentialConfig
+from backend.app.schemas.credentials import CredentialCreate
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,9 @@ class CredentialRepository:
             return None
         try:
             return self.fernet.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
-        except Exception as e:
-            logger.error(f"Failed to decrypt credential field: {e}")
-            return None
+        except Exception:
+            # Fallback to returning the plain-text string if stored unencrypted
+            return ciphertext
 
     def list_credentials(self, db: Session, project_id: UUID, org_id: UUID) -> List[PageCredential]:
         return (
@@ -136,5 +137,26 @@ class CredentialRepository:
         except Exception as e:
             logger.error(f"Failed to parse decrypted extra fields: {e}")
             return None
+
+    def resolve_credential_config(self, db: Session, credential_id: UUID, org_id: UUID) -> Optional[PageCredentialConfig]:
+        """Resolves a PageCredential by ID and builds a PageCredentialConfig with decrypted values."""
+        cred = self.get_credential_by_id(db, credential_id, org_id)
+        if not cred:
+            return None
+        username = self.get_decrypted_username(cred)
+        password = self.get_decrypted_password(cred)
+        extra_fields = self.get_decrypted_extra_fields(cred)
+        return PageCredentialConfig(
+            auth_type=cred.auth_type or "form",
+            login_url=cred.login_url,
+            url_pattern=cred.url_pattern,
+            username=username,
+            password=password,
+            username_field=cred.username_field,
+            password_field=cred.password_field,
+            submit_selector=cred.submit_selector,
+            post_login_url_pattern=cred.post_login_url_pattern,
+            extra_fields=extra_fields,
+        )
 
 credential_repo = CredentialRepository()
